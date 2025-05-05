@@ -1,21 +1,47 @@
-## TemplateDevEnv
-_For Kotlin see [TemplateDevEnvKt](https://github.com/CleanroomMC/TemplateDevEnvKt)_
+![](https://imagizer.imageshack.com/v2/1024x768q70/922/NEXHP2.png)
 
-Template workspace for modding Minecraft 1.12.2. Licensed under MIT, it is made for public use.
 
-This template runs on Java 21! Currently utilizies **Gradle 8.12** + **[RetroFuturaGradle](https://github.com/GTNewHorizons/RetroFuturaGradle) 1.4.1** + **Forge 14.23.5.2847**.
+# Screenshots
+![](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNGI2cDVvaDFmZHNiMjBqZWM3ZGh5aGQ3MWgyZGhyYnJhYXY1OTltdCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ESMzjbFrHfjjZhZSYs/giphy.gif)
 
-With **coremod and mixin support** that is easy to configure.
+Pictures from a modded game ([journaled](https://www.minecraftforum.net/forums/minecraft-java-edition/survival-mode/3188970-zenos-improved-generation-journal) on Minecraft Forums) including Geographicraft, Underground Biomes, Serene Seasons, Better Creatures, and Harvestcraft.
+# Overview
 
-### Instructions:
+Realistic Terrain Generation Plus is a fork of RTG that adds extensive and immersive variety to forests, which vary in tree composition, height, and density. It adds on to RTG's extensive terrain variability, broad navigable rivers and lakes, soaring mountains, rolling hills, and sweeping plains. The current version of Geographicraft is strongly recommended for increased landscape variety, but RTG+ is still great with vanilla layout.
 
-1. Click `use this template` at the top.
-2. Clone the repository that you have created with this template to your local machine.
-3. Make sure IDEA is using Java 21 for Gradle before you sync the project. Verify this by going to IDEA's `Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JVM`.
-4. Open the project folder in IDEA. When prompted, click "Load Gradle Project" as it detects the `build.gradle`, if you weren't prompted, right-click the project's `build.gradle` in IDEA, select `Link Gradle Project`, after completion, hit `Refresh All` in the gradle tab on the right.
-5. Run gradle tasks such as `runClient` and `runServer` in the IDEA gradle tab, or use the auto-imported run configurations like `1. Run Client`.
+## Wiki
+Check out the **[Wiki](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki)** for an **[FAQ](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/FAQ)** and info on:
+* [Biome Support](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/Biome-Support)
+* [Mod Compatibility](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/Mod-Compatibility)
+* [Known Issues](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/Known-Issues)
+* [Installation](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/Installation)
+* [Configuration](https://github.com/Team-RTG/Realistic-Terrain-Generation/wiki/Configuration)
 
-### Notes:
-- Dependencies script in [gradle/scripts/dependencies.gradle](gradle/scripts/dependencies.gradle), explanations are commented in the file.
-- Publishing script in [gradle/scripts/publishing.gradle](gradle/scripts/publishing.gradle).
-- When writing Mixins on IntelliJ, it is advisable to use latest [MinecraftDev Fork for RetroFuturaGradle](https://github.com/eigenraven/MinecraftDev/releases).
+
+## Discord
+
+### Come talk with us in our [![Discord](https://img.shields.io/discord/168326116761665536.svg)](https://discord.gg/anKT7YX)
+
+
+## Development
+
+Want to contribute? Great! Please read our [contribution guidelines](https://github.com/Team-RTG/Realistic-Terrain-Generation/blob/1.10.2-master/.github/CONTRIBUTING.md) before getting started.
+
+This mod is probably nearing its final version, although that may change if new ideas meet new capacities.
+
+
+### Minecraft Forum Thread
+----
+[For more information, please visit the official RTG thread on the Minecraft Forum](http://www.minecraftforum.net/forums/mapping-and-modding/minecraft-mods/2524489-realistic-terrain-generation-rtg-realistic-biomes)
+
+### Credits
+----
+This mod is forked from RTG due mostly to access issues with the RTG mod page.
+
+RTG is brought to you by [Team RTG](https://github.com/Team-RTG) and contains a number of [contributions](https://github.com/Team-RTG/Realistic-Terrain-Generation/graphs/contributors) from various members of the Minecraft modding community. It also uses KdotJPG's [OpenSimplex Noise](https://gist.github.com/KdotJPG/b1270127455a94ac5d19) to generate its terrain.
+
+RTG, in turn, is a re-branded fork of the revolutionary [Realistic World Gen](http://www.minecraftforum.net/forums/mapping-and-modding/minecraft-mods/1281910-teds-world-gen-mods-realistic-world-gen-alpha-1-3) mod by ted80. It was created as a new project because it was expected to deviate from ted80's original vision for RWG, and the author of this mod didn't want to interfere with that vision.
+
+### License
+
+[GNU General Public License (version 3)](https://github.com/Team-RTG/Realistic-Terrain-Generation/blob/1.10.2-master/LICENSE.txt)

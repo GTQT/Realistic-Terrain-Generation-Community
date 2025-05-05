@@ -144,6 +144,11 @@ dependencies {
         testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
+
+    implementation rfg.deobf(files("libs/Traverse-1.12.2-1.6.0-69.jar"))
+    implementation rfg.deobf(files("libs/BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar"))
+    implementation rfg.deobf(files("libs/JustEnoughIDs-1.0.4-SNAPSHOT-thin.jar"))
+
 }
 
 apply from: 'gradle/scripts/dependencies.gradle'

@@ -42,7 +42,7 @@ public final class WorldTypeRTG extends WorldType {
             final DimensionType type = world.provider.getDimensionType();
             if (RTGAPI.isAllowedDimensionType(type)) {
                 Logger.debug("Allowed DimensionType detected (ID:{}, Type:{}, Suffix:{}).. returning BiomeProviderRTG", type.getId(), type, type.getSuffix());
-                return new BiomeProviderRTG(RTGWorld.getInstance(world));
+                return new BiomeProviderRTG(world);
             } else {
                 Logger.debug("DimensionType not in whitelist (ID:{}, Type:{}, Suffix:{}).. returning BiomeProvider", type.getId(), type, type.getSuffix());
             }

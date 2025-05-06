@@ -1,5 +1,6 @@
 package rtg.world;
-
+import net.minecraft.client.Minecraft;
+import rtg.RTG.ClientProxy;
 import net.minecraft.world.DimensionType;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldType;
@@ -68,7 +69,7 @@ public final class WorldTypeRTG extends WorldType {
 
     @Override
     public float getCloudHeight() {
-        return 256F;
+        return 384F;
     }
 
     @Override
@@ -83,6 +84,6 @@ public final class WorldTypeRTG extends WorldType {
 
     @Override // Client-only; we make a proxied call here (no going back to SideOnly) so the dedicated server doesn't flip out with ClassNotFoundException
     public void onCustomizeButton(net.minecraft.client.Minecraft mc, net.minecraft.client.gui.GuiCreateWorld guiCreateWorld) {
-        RTG.getProxy().displayCustomizeWorldScreen(guiCreateWorld);
+        Minecraft.getMinecraft().displayGuiScreen(new rtg.client.GuiCustomizeWorldScreenRTG(guiCreateWorld, guiCreateWorld.chunkProviderSettingsJson));
     }
 }

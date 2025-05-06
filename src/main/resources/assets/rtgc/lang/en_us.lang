@@ -9,7 +9,7 @@ warning.rtgStartup6=This message will only display once.
 #-----------------------------
 # GUI Customize World Screen
 #-----------------------------
-gui.createWorld.worldtypename=RTG - Realistic
+gui.createWorld.worldtypename=RTGC - New Realistic
 gui.createWorld.worldtype.line1=Realistic Terrain Generation uses a custom world type.
 gui.createWorld.worldtype.line2=If you want to use the RTG world type, select
 gui.createWorld.worldtype.line3=§9World Type: %s§r under §9More World Options§r.
@@ -29,6 +29,8 @@ gui.createWorld.customize.setting.fixedBiome.tooltip=Chooses the biome for a sin
 gui.createWorld.customize.setting.biomeSize=Biome Size
 gui.createWorld.customize.setting.biomeSize.tooltip=Changes the average size of the biomes
 
+gui.createWorld.customize.setting.seaLevel=海平面
+gui.createWorld.customize.setting.riverSizeMult=河流缩放尺寸
 gui.createWorld.customize.category.SURFACE=Surface Settings
 gui.createWorld.customize.setting.useBoulders=Enable Boulders
 gui.createWorld.customize.setting.useBoulders.tooltip=Enables the generation of boulders

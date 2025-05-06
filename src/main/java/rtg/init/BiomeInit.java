@@ -498,6 +498,7 @@ public final class BiomeInit {
     private BiomeInit() {
 
     }
+    //峭壁
 
     public static void init() {
 

@@ -4,6 +4,9 @@ import java.util.List;
 
 import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
+import rtg.api.util.noise.ISimplexData2D;
+import rtg.api.util.noise.SimplexData2D;
+import rtg.api.world.RTGWorld;
 
 
 /**

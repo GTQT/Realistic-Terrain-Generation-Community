@@ -2,12 +2,13 @@ package rtg.world.biome;
 
 import biomesoplenty.api.generation.Generators;
 import biomesoplenty.common.world.BOPWorldSettings;
-import biomesoplenty.common.world.BOPWorldSettings.LandMassScheme;
 import biomesoplenty.common.world.layer.*;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldType;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.gen.layer.*;
+
+import static rtg.RTGConfig.*;
 
 public class BiomeProviderRTG extends BiomeProvider {
     public BiomeProviderRTG(long seed, WorldType worldType, String chunkProviderSettings) {
@@ -26,8 +27,6 @@ public class BiomeProviderRTG extends BiomeProvider {
         agenlayer = getModdedBiomeGenerators(worldType, seed, agenlayer);
         this.genBiomes = Generators.biomeGenLayer = agenlayer[0];
         this.biomeIndexLayer = Generators.biomeIndexLayer = agenlayer[1];
-
-        maybeRemoveRivers();
     }
 
     public BiomeProviderRTG(World world) {
@@ -35,12 +34,11 @@ public class BiomeProviderRTG extends BiomeProvider {
     }
 
     // generate the regions of land and sea
-    public static GenLayer initialLandAndSeaLayer(LandMassScheme scheme) {
-        System.out.println("Setting up landmass " + scheme.name());
+    public static GenLayer initialLandAndSeaLayer() {
         GenLayer stack;
 
-        switch (scheme) {
-            case CONTINENTS:
+        switch (getLandScheme()) {
+            case 2:
                 stack = new GenLayerIslandBOP(1L, 4);
                 stack = new GenLayerFuzzyZoom(2000L, stack);
                 stack = new GenLayerZoom(2001L, stack);
@@ -49,11 +47,11 @@ public class BiomeProviderRTG extends BiomeProvider {
                 stack = new GenLayerRaggedEdges(4L, stack);
                 break;
 
-            case ARCHIPELAGO:
+            case 3:
                 stack = new GenLayerIslandBOP(1L, 5);
                 break;
 
-            case VANILLA:
+            case 1:
             default:
                 stack = new GenLayerIsland(1L);
                 stack = new GenLayerFuzzyZoom(2000L, stack);
@@ -74,40 +72,40 @@ public class BiomeProviderRTG extends BiomeProvider {
     }
 
     // superimpose hot and cold regions an a land and sea layer
-    public static GenLayerClimate climateLayer(BOPWorldSettings settings, long worldSeed) {
+    public static GenLayerClimate climateLayer(long worldSeed) {
         GenLayer temperature;
-        switch (settings.tempScheme) {
-            case LATITUDE:
+        switch (getTempScheme()) {
+            case 1:
             default:
                 temperature = new GenLayerTemperatureLatitude(2L, 16, worldSeed);
                 break;
-            case SMALL_ZONES:
+            case 2:
                 temperature = new GenLayerTemperatureNoise(3L, worldSeed, 0.14D);
                 break;
-            case MEDIUM_ZONES:
+            case 3:
                 temperature = new GenLayerTemperatureNoise(4L, worldSeed, 0.08D);
                 break;
-            case LARGE_ZONES:
+            case 4:
                 temperature = new GenLayerTemperatureNoise(5L, worldSeed, 0.04D);
                 break;
-            case RANDOM:
+            case 5:
                 temperature = new GenLayerTemperatureRandom(6L);
                 break;
         }
 
         GenLayer rainfall;
-        switch (settings.rainScheme) {
-            case SMALL_ZONES:
+        switch (getRainScheme()) {
+            case 1:
                 rainfall = new GenLayerRainfallNoise(7L, worldSeed, 0.14D);
                 break;
-            case MEDIUM_ZONES:
+            case 2:
             default:
                 rainfall = new GenLayerRainfallNoise(8L, worldSeed, 0.08D);
                 break;
-            case LARGE_ZONES:
+            case 3:
                 rainfall = new GenLayerRainfallNoise(9L, worldSeed, 0.04D);
                 break;
-            case RANDOM:
+            case 4:
                 rainfall = new GenLayerRainfallRandom(10L);
                 break;
         }
@@ -117,7 +115,7 @@ public class BiomeProviderRTG extends BiomeProvider {
         return climate;
     }
 
-    public static GenLayer allocateBiomes(long worldSeed, BOPWorldSettings settings, GenLayer mainBranch, GenLayer subBiomesInit, GenLayerClimate climateLayer) {
+    public static GenLayer allocateBiomes(BOPWorldSettings settings, GenLayer mainBranch, GenLayer subBiomesInit, GenLayerClimate climateLayer) {
         // allocate the basic biomes
         GenLayer biomesLayer = new GenLayerBiomeBOP(200L, mainBranch, climateLayer, settings);
 
@@ -127,14 +125,14 @@ public class BiomeProviderRTG extends BiomeProvider {
         GenLayer climateLayerZoomed = new GenLayerZoom(1000L, climateLayer);
 
         // add medium islands
-        switch (settings.landScheme) {
-            case ARCHIPELAGO:
+        switch (getLandScheme()) {
+            case 3:
                 biomesLayer = new GenLayerBiomeIslands(15L, biomesLayer, climateLayerZoomed, 4);
                 break;
-            case CONTINENTS:
+            case 2:
                 biomesLayer = new GenLayerBiomeIslands(15L, biomesLayer, climateLayerZoomed, 60);
                 break;
-            case VANILLA:
+            case 1:
             default:
                 break;
         }
@@ -151,14 +149,14 @@ public class BiomeProviderRTG extends BiomeProvider {
         biomesLayer = new GenLayerSubBiomesBOP(1000L, biomesLayer, subBiomesInit);
 
         // add tiny islands
-        switch (settings.landScheme) {
-            case ARCHIPELAGO:
+        switch (getIslandScheme()) {
+            case 3:
                 biomesLayer = new GenLayerBiomeIslands(15L, biomesLayer, climateLayerZoomed, 8);
                 break;
-            case CONTINENTS:
+            case 2:
                 biomesLayer = new GenLayerBiomeIslands(15L, biomesLayer, climateLayerZoomed, 60);
                 break;
-            case VANILLA:
+            case 1:
             default:
                 biomesLayer = new GenLayerBiomeIslands(15L, biomesLayer, climateLayerZoomed, 12);
                 break;
@@ -167,14 +165,13 @@ public class BiomeProviderRTG extends BiomeProvider {
         return biomesLayer;
     }
 
-
     public static GenLayer[] setupRTGGenLayers(long worldSeed, BOPWorldSettings settings) {
 
-        int biomeSize = settings.biomeSize.getValue();
-        int riverSize = 4;
+        int biomeSize = getBiomeSize();
+        int riverSize = getRiverSize();
 
         // first few layers just create areas of land and sea, continents and islands
-        GenLayer mainBranch = initialLandAndSeaLayer(settings.landScheme);
+        GenLayer mainBranch = initialLandAndSeaLayer();
 
         // add mushroom islands and deep oceans
         mainBranch = new GenLayerAddMushroomIsland(5L, mainBranch);
@@ -185,10 +182,10 @@ public class BiomeProviderRTG extends BiomeProvider {
         GenLayer riversAndSubBiomesInit = new GenLayerRiverInit(100L, mainBranch);
 
         // create climate layer
-        GenLayerClimate climateLayer = climateLayer(settings, worldSeed);
+        GenLayerClimate climateLayer = climateLayer(worldSeed);
 
         // allocate the biomes
-        mainBranch = allocateBiomes(worldSeed, settings, mainBranch, riversAndSubBiomesInit, climateLayer);
+        mainBranch = allocateBiomes(settings, mainBranch, riversAndSubBiomesInit, climateLayer);
 
         // do a bit more zooming, depending on biomeSize
         //mainBranch = new GenLayerRareBiome(1001L, mainBranch); - sunflower plains I think
@@ -219,11 +216,5 @@ public class BiomeProviderRTG extends BiomeProvider {
         biomesFinal.initWorldGenSeed(worldSeed);
         return new GenLayer[]{riverMixFinal, biomesFinal, riverMixFinal};
 
-    }
-
-    private void maybeRemoveRivers() {
-        if (genBiomes instanceof GenLayerRiverMix) {
-            ((GenLayerRiverMix) genBiomes).riverPatternGeneratorChain = ((GenLayerRiverMix) genBiomes).biomePatternGeneratorChain;
-        }
     }
 }

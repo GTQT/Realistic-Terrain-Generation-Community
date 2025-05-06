@@ -146,6 +146,24 @@ public final class RTGConfig {
         return (Boolean) Setting.worldTypeNotification.getCurVal();
     }
 
+    public static int getBiomeSize() {
+        return (Integer) Setting.biomeSize.getCurVal();
+    }
+    public static int getRiverSize() {
+        return (Integer) Setting.riverSize.getCurVal();
+    }
+    public static int getLandScheme() {
+        return (Integer) Setting.landScheme.getCurVal();
+    }
+    public static int getIslandScheme() {
+        return (Integer) Setting.islandScheme.getCurVal();
+    }
+    public static int getTempScheme() {
+        return (Integer) Setting.tempScheme.getCurVal();
+    }
+    public static int getRainScheme() {
+        return (Integer) Setting.rainScheme.getCurVal();
+    }
     public static boolean enableDebugging() {
         return (Boolean) Setting.enableDebugging.getCurVal();
     }
@@ -205,12 +223,12 @@ public final class RTGConfig {
     public static boolean barkCoveredLogs() {
         return (Boolean) Setting.barkCoveredLogs.getCurVal();
     }
-    
+
     public static float riverDepth() {
         float result = ((Double) Setting.riverDepth.getCurVal()).floatValue();
         return result;
     }
-    
+
     public static float waterFeatureWidthMultiplier() {
         float result = ((Double) Setting.waterFeatureWidthMultiplier.getCurVal()).floatValue();
         return result;
@@ -219,7 +237,7 @@ public final class RTGConfig {
     public static void toggleWorldTypeNotification() {
         getProperty(Setting.worldTypeNotification).setValue(false);
         sync();
-        
+
     }
 
     @SubscribeEvent
@@ -244,6 +262,7 @@ public final class RTGConfig {
 
         client(null),
         common(null),
+        geography(common),
         debug(common),
         surface(common),
         trees(common);
@@ -257,7 +276,7 @@ public final class RTGConfig {
         @Override
         public String toString() {
             if (parent != null) {
-                return parent.toString() + "." + name();
+                return parent + "." + name();
             } else return name();
         }
     }
@@ -267,6 +286,36 @@ public final class RTGConfig {
                 "When enabled, this will display an informational message about RTG when entering the Customize World screen.\n" +
                         "This will display once and automatically disable itself.",
                 true),
+
+        biomeSize(Type.INTEGER, Category.geography,
+                "群系缩放和细化的次数.\n"+
+                        "!较小的数值会导致生物群系会更小且更加碎片化，地形过渡更频繁!",
+                6,1,10),
+
+        riverSize(Type.INTEGER, Category.geography,
+                "河流分布密度和复杂度.\n"+
+                        "!较大的数值会导致河流更加密集和错综复杂!",
+                4,1,10),
+
+        landScheme(Type.INTEGER, Category.geography,
+                "全球陆海分布.\n"+
+                        "!1：原版分布（无明显偏好） 2：大洲 3：群岛!",
+                1,1,3),
+
+        islandScheme(Type.INTEGER, Category.geography,
+                "全球岛海分布.\n"+
+                        "!1：原版分布（无明显偏好） 2：大洲 3：群岛!",
+                1,1,3),
+
+        tempScheme(Type.INTEGER, Category.geography,
+                "温度分布.\n"+
+                        "!1：随纬度分布 2：小区域 3：中区域 4：大区域 5：随机!",
+                4,1,5),
+
+        rainScheme(Type.INTEGER, Category.geography,
+                "降水分布.\n"+
+                        "!1：小区域 2：中区域 3：大区域 4：随机!",
+                3,1,4),
 
         enableDebugging(Type.BOOLEAN, Category.debug,
                 "Enable extra debug logging.\n" +
@@ -340,11 +389,11 @@ public final class RTGConfig {
                 "Set this to FALSE to prevent the trunks of RTG trees from using the 'all-bark' texture model.\n" +
                         "For more information, visit https://minecraft.wiki/w/Java_Edition_data_values/Pre-flattening#Wood",
                 true),
-    	
+
         riverDepth(Type.DOUBLE, Category.surface,
                 "Average depth of rivers. ",
                 57.0, 53.0, 60.0),
-    	
+
         waterFeatureWidthMultiplier(Type.DOUBLE, Category.surface,
                 "Multiplier to average width of rivers and lakes. ",
                 1.0, 0.1, 10.0);

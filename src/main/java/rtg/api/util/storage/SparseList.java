@@ -71,4 +71,25 @@ public class SparseList<T> extends ArrayList<T> {
         }
         return false;
     }
+
+    /**
+     * 将键值对插入到稀疏列表中的指定位置。
+     * 如果索引超出当前列表长度，则自动扩展列表以容纳该位置，并在中间填充 null。
+     *
+     * @param key   要插入的位置（索引）
+     * @param value 要插入的值
+     */
+    public void put(int key, T value) {
+        if (key < 0) {
+            throw new IllegalArgumentException("Key must be non-negative");
+        }
+
+        // 如果 key 超出当前 size，则填充空间直到 key 位置
+        if (key >= size()) {
+            fillSpace(key);
+        }
+
+        // 设置指定位置的值
+        super.set(key, value);
+    }
 }

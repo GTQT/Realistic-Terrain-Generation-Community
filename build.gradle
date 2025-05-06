@@ -147,7 +147,7 @@ dependencies {
 
     implementation rfg.deobf(files("libs/Traverse-1.12.2-1.6.0-69.jar"))
     implementation rfg.deobf(files("libs/BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar"))
-    implementation rfg.deobf(files("libs/JustEnoughIDs-1.0.4-SNAPSHOT-thin.jar"))
+    implementation rfg.deobf(files("libs/RoughlyEnoughIDs-2.2.2.jar"))
 
 }
 

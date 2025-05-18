@@ -32,7 +32,6 @@ import rtg.api.util.LimitedArrayCacheMap;
 import rtg.api.util.Logger;
 import rtg.api.util.noise.ISimplexData2D;
 import rtg.api.util.noise.SimplexData2D;
-import rtg.api.util.storage.SparseList;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.RTGChunkGenSettings;
@@ -552,41 +551,27 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 float totalWeight = 0;
-                List<Float> weightedBiomes = new SparseList<Float>() {{
-                    for (int i = 0; i < 256; i++) {
-                        //set(i, 0F);
-                    }
-                }};
+                Map<Integer, Float> weightedBiomes = new HashMap<>();
                 for (int mapX = 0; mapX < sampleArraySize; mapX++) {
                     for (int mapZ = 0; mapZ < sampleArraySize; mapZ++) {
                         float weight = weightings[mapX * sampleArraySize + mapZ][x * 16 + z];
                         if (weight > 0) {
                             totalWeight += weight;
                             final int biomeId = biomeData[mapX * sampleArraySize + mapZ];
-                            Float existingWeight = weightedBiomes.get(biomeId);
-                            existingWeight = (existingWeight == null ? 0F : existingWeight) + weight;
-                            weightedBiomes.set(biomeId, existingWeight);
+                            weightedBiomes.put(biomeId, weightedBiomes.getOrDefault(biomeId, 0F) + weight);
                         }
                     }
                 }
 
                 // normalize biome weights
                 final float finalTotalWeight = totalWeight;
-                for (int i1 = 0; i1 < weightedBiomes.size(); i1++) {
-                    Float weight = weightedBiomes.get(i1);
-                    if (weight != null) {
-                        weightedBiomes.set(i1, weight / finalTotalWeight);
-                    }
-                }
+                weightedBiomes.replaceAll((k, v) -> v / finalTotalWeight);
 
                 // combine mesa biomes
                 float mesaPlateauWeight = 0f;
-                for (int i = 0; i < weightedBiomes.size(); i++) {
-                    if (isMesaPlateau(i)) {
-                        Float v = weightedBiomes.get(i);
-                        if (v != null) {
-                            mesaPlateauWeight += v;
-                        }
+                for (Map.Entry<Integer, Float> entry : weightedBiomes.entrySet()) {
+                    if (isMesaPlateau(entry.getKey())) {
+                        mesaPlateauWeight += entry.getValue();
                     }
                 }
                 //mesaCombiner.adjust(weightedBiomes);
@@ -596,18 +581,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 float river = TerrainBase.getRiverStrength(mpos.setPos(worldX + x, 0, worldZ + z), rtgWorld);
                 landscape.river[x * 16 + z] = -river;
 
-                for (int i = 0; i < weightedBiomes.size(); i++) {
-                    Float v = weightedBiomes.get(i);
-                    if (v != null) {
-                        if (v > 0F) {
-                            if (isMesaPlateau(i)) {
-                                landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(i).rNoise(this.rtgWorld, worldX + x, worldZ + z, mesaPlateauWeight, river + 1F) * v;
-                            } else {
-                                landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(i).rNoise(this.rtgWorld, worldX + x, worldZ + z, v, river + 1F) * v;
-                            }
-                            //v = 0F;
+                for (Map.Entry<Integer, Float> entry : weightedBiomes.entrySet()) {
+                    int biomeId = entry.getKey();
+                    float v = entry.getValue();
+                    if (v > 0F) {
+                        if (isMesaPlateau(biomeId)) {
+                            landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(biomeId).rNoise(this.rtgWorld, worldX + x, worldZ + z, mesaPlateauWeight, river + 1F) * v;
+                        } else {
+                            landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(biomeId).rNoise(this.rtgWorld, worldX + x, worldZ + z, v, river + 1F) * v;
                         }
-                        //weightedBiomes.set(i, v);
                     }
                 }
             }
@@ -621,6 +603,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
     }
+
 
     private void setMesaPlauteauBiomes() {
         mesaPlateauBiome = new boolean[256];

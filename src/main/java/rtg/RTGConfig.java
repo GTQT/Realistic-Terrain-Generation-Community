@@ -149,21 +149,27 @@ public final class RTGConfig {
     public static int getBiomeSize() {
         return (Integer) Setting.biomeSize.getCurVal();
     }
+
     public static int getRiverSize() {
         return (Integer) Setting.riverSize.getCurVal();
     }
+
     public static int getLandScheme() {
         return (Integer) Setting.landScheme.getCurVal();
     }
+
     public static int getIslandScheme() {
         return (Integer) Setting.islandScheme.getCurVal();
     }
+
     public static int getTempScheme() {
         return (Integer) Setting.tempScheme.getCurVal();
     }
+
     public static int getRainScheme() {
         return (Integer) Setting.rainScheme.getCurVal();
     }
+
     public static boolean enableDebugging() {
         return (Boolean) Setting.enableDebugging.getCurVal();
     }
@@ -288,34 +294,34 @@ public final class RTGConfig {
                 true),
 
         biomeSize(Type.INTEGER, Category.geography,
-                "群系缩放和细化的次数.\n"+
-                        "!较小的数值会导致生物群系会更小且更加碎片化，地形过渡更频繁!",
-                6,1,10),
+                "Number of times biomes are scaled and refined.\n" +
+                        "!Smaller values result in smaller, more fragmented biomes with more frequent terrain transitions!",
+                6, 1, 10),
 
         riverSize(Type.INTEGER, Category.geography,
-                "河流分布密度和复杂度.\n"+
-                        "!较大的数值会导致河流更加密集和错综复杂!",
-                4,1,10),
+                "Density and complexity of river distribution.\n" +
+                        "!Larger values lead to denser and more intricate river systems!",
+                4, 1, 10),
 
         landScheme(Type.INTEGER, Category.geography,
-                "全球陆海分布.\n"+
-                        "!1：原版分布（无明显偏好） 2：大洲 3：群岛!",
-                1,1,3),
+                "Global land and sea distribution.\n" +
+                        "!1: Vanilla distribution (no clear preference) 2: Continents 3: Archipelagos!",
+                1, 1, 3),
 
         islandScheme(Type.INTEGER, Category.geography,
-                "全球岛海分布.\n"+
-                        "!1：原版分布（无明显偏好） 2：大洲 3：群岛!",
-                1,1,3),
+                "Global island and ocean distribution.\n" +
+                        "!1: Vanilla distribution (no clear preference) 2: Continents 3: Archipelagos!",
+                1, 1, 3),
 
         tempScheme(Type.INTEGER, Category.geography,
-                "温度分布.\n"+
-                        "!1：随纬度分布 2：小区域 3：中区域 4：大区域 5：随机!",
-                4,1,5),
+                "Temperature distribution patterns.\n" +
+                        "!1: Latitude-based 2: Small areas 3: Medium areas 4: Large areas 5: Random!",
+                4, 1, 5),
 
         rainScheme(Type.INTEGER, Category.geography,
-                "降水分布.\n"+
-                        "!1：小区域 2：中区域 3：大区域 4：随机!",
-                3,1,4),
+                "Precipitation distribution patterns.\n" +
+                        "!1: Small areas 2: Medium areas 3: Large areas 4: Random!",
+                3, 1, 4),
 
         enableDebugging(Type.BOOLEAN, Category.debug,
                 "Enable extra debug logging.\n" +

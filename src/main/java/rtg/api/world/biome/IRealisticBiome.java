@@ -1,11 +1,14 @@
 package rtg.api.world.biome;
 
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockLeaves;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeDecorator;
 import net.minecraft.world.chunk.ChunkPrimer;
@@ -170,26 +173,70 @@ public interface IRealisticBiome {
     }
 
     default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage) {
-    	ChunkInfo info = new ChunkInfo(chunkPos,rtgWorld);
+        ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld);
+
+        //标准RTG装饰
         this.getDecos().stream()
                 .filter(deco -> deco.preGenerate(river))
                 .forEach(deco -> deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info));
 
+        //RWG特色河流装饰（当河流强度足够高时）
+        BlockPos blockPos = new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16);
+        if (river > 0.85f) {
+            World world = rtgWorld.world();
+            int seaLevel = rtgWorld.getGeneratorSettings().seaLevel;
+
+            // 河床粘土生成（RWG风格）
+            for (int i = 0; i < 5 + rand.nextInt(8); i++) { // 5-12次尝试
+                BlockPos clayPos = blockPos.add(
+                        rand.nextInt(16),
+                        seaLevel - 3 - rand.nextInt(4), // 河床底部
+                        rand.nextInt(16)
+                );
+
+                // 在河床位置生成粘土
+                if (world.getBlockState(clayPos).getBlock() == Blocks.SAND) {
+                    world.setBlockState(clayPos, Blocks.CLAY.getDefaultState());
+
+                    // 50%几率在上方生成沙砾层
+                    if (rand.nextBoolean()) {
+                        BlockPos gravelPos = clayPos.up();
+                        if (world.getBlockState(gravelPos).getMaterial() == Material.WATER) {
+                            world.setBlockState(gravelPos, Blocks.GRAVEL.getDefaultState());
+                        }
+                    }
+                }
+            }
+
+            //河岸沙砾生成
+            for (int i = 0; i < 7 + rand.nextInt(5); i++) { // 7-12次尝试
+                BlockPos gravelPos = blockPos.add(
+                        rand.nextInt(16),
+                        seaLevel + rand.nextInt(3), // 河岸位置
+                        rand.nextInt(16)
+                );
+
+                //只在泥土/草地上生成沙砾
+                Block currentBlock = world.getBlockState(gravelPos).getBlock();
+                if (currentBlock == Blocks.GRASS || currentBlock == Blocks.DIRT) {
+                    world.setBlockState(gravelPos, Blocks.GRAVEL.getDefaultState());
+                }
+            }
+        }
+
         if (overridesHardcoded()) {
-            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
+            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), blockPos);
         } else {
-        	if (this.allowVanillaTrees()) {
-                this.baseBiome().decorate(rtgWorld.world(), rand, new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
-        	} else {
-        		// have to shut off tree decorations but not the rest
-        		BiomeDecorator decorator = this.baseBiome().decorator;
-        		decorator.extraTreeChance = 0f;
-        		decorator.treesPerChunk = 0;
-                this.baseBiome().decorate(rtgWorld.world(), rand, new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
-        	}
+            if (this.allowVanillaTrees()) {
+                this.baseBiome().decorate(rtgWorld.world(), rand, blockPos);
+            } else {
+                BiomeDecorator decorator = this.baseBiome().decorator;
+                decorator.extraTreeChance = 0f;
+                decorator.treesPerChunk = 0;
+                this.baseBiome().decorate(rtgWorld.world(), rand, blockPos);
+            }
         }
     }
-
     /**
      * Some biomes have hard-coded decorations.
      * If true, RTG will call the biome decorator's decorate() method instead of the biome's decorate() method.

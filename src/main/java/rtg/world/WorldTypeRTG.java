@@ -1,6 +1,5 @@
 package rtg.world;
 import net.minecraft.client.Minecraft;
-import rtg.RTG.ClientProxy;
 import net.minecraft.world.DimensionType;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldType;
@@ -9,6 +8,8 @@ import net.minecraft.world.gen.ChunkGeneratorOverworld;
 import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraft.world.storage.WorldInfo;
 
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 import rtg.RTG;
 import rtg.api.RTGAPI;
 import rtg.api.util.Logger;
@@ -83,6 +84,7 @@ public final class WorldTypeRTG extends WorldType {
     }
 
     @Override // Client-only; we make a proxied call here (no going back to SideOnly) so the dedicated server doesn't flip out with ClassNotFoundException
+    @SideOnly(Side.CLIENT)
     public void onCustomizeButton(net.minecraft.client.Minecraft mc, net.minecraft.client.gui.GuiCreateWorld guiCreateWorld) {
         Minecraft.getMinecraft().displayGuiScreen(new rtg.client.GuiCustomizeWorldScreenRTG(guiCreateWorld, guiCreateWorld.chunkProviderSettingsJson));
     }

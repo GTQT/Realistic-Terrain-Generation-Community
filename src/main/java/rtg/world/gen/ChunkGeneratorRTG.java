@@ -1,5 +1,6 @@
 package rtg.world.gen;
 
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockFalling;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EnumCreatureType;
@@ -8,6 +9,7 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldEntitySpawner;
 import net.minecraft.world.biome.Biome;
@@ -43,7 +45,6 @@ import rtg.world.gen.structure.WoodlandMansionRTG;
 import javax.annotation.Nullable;
 import java.util.*;
 
-
 public class ChunkGeneratorRTG implements IChunkGenerator {
 
     public final RTGWorld rtgWorld;
@@ -68,7 +69,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final boolean mapFeaturesEnabled;
     private final Random rand;
     private final Biome[] baseBiomesList;
+    // 添加RWG噪声参数
+    private final int parabolicSize;
+    private final int parabolicArraySize;
+    private final float[] parabolicField;
     private boolean[] mesaPlateauBiome;
+    private float parabolicFieldTotal;
+    private final float[] testHeight = new float[256];
+    private final float[] mapGenBiomes = new float[258];
+    private final float[] borderNoise = new float[256];
 
     public ChunkGeneratorRTG(RTGWorld rtgWorld) {
 
@@ -97,6 +106,19 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         setWeightings();// landscape generator init
         setMesaPlauteauBiomes();//mark plateau biomes to combine mesas
+
+        // 初始化RWG抛物线场
+        parabolicSize = sampleSize;
+        parabolicArraySize = parabolicSize * 2 + 1;
+        parabolicField = new float[parabolicArraySize * parabolicArraySize];
+        parabolicFieldTotal = 0;
+        for (int j = -parabolicSize; j <= parabolicSize; ++j) {
+            for (int k = -parabolicSize; k <= parabolicSize; ++k) {
+                float f = 0.445f / (float) Math.sqrt(j * j + k * k + 0.3F);
+                parabolicField[(j + parabolicSize) + (k + parabolicSize) * parabolicArraySize] = f;
+                parabolicFieldTotal += f;
+            }
+        }
 
         Logger.debug("FINISHED instantiating CPRTG.");
     }
@@ -335,18 +357,21 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         float river = -TerrainBase.getRiverStrength(blockPos.add(16, 0, 16), rtgWorld);
-
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
-            if (river > 0.9f) {
+            if (river > 0.8f) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
             } else {
                 biome.baseBiome().decorate(this.world, this.rand, blockPos);
             }
         } else {
-            if (river > 0.9f) {
+            if (river > 0.8f) {
                 biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
             } else {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
+            }
+            // 在populate方法中添加
+            if (river > 0.5f) {
+                generateRiverVegetation(world, rand, offsetpos, 65, river);
             }
         }
 
@@ -390,6 +415,42 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
 
         BlockFalling.fallInstantly = false;
+    }
+
+
+    // 河岸植被生成方法
+    private void generateRiverVegetation(World world, Random rand, BlockPos pos, int seaLevel, float riverStrength) {
+        int plants = 15 + (int)(riverStrength * 30); // 基于河流强度决定植被密度
+
+        for (int i = 0; i < plants; i++) {
+            BlockPos plantPos = pos.add(
+                    rand.nextInt(16),
+                    seaLevel + 1,
+                    rand.nextInt(16)
+            );
+
+            // 睡莲（水面）
+            if (rand.nextFloat() < 0.3f && world.getBlockState(plantPos).getBlock() == Blocks.WATER) {
+                world.setBlockState(plantPos.up(), Blocks.WATERLILY.getDefaultState());
+            }
+            // 芦苇（浅水区）
+            else if (world.getBlockState(plantPos.down()).getMaterial() == Material.WATER) {
+                int height = 1 + rand.nextInt(2 + (int)(riverStrength * 3));
+                for (int h = 0; h < height; h++) {
+                    world.setBlockState(plantPos.up(h), Blocks.REEDS.getDefaultState());
+                }
+            }
+            // 河岸草丛
+            else if (world.getBlockState(plantPos.down()).isOpaqueCube()) {
+                if (rand.nextFloat() < 0.7f) {
+                    world.setBlockState(plantPos, Blocks.TALLGRASS.getStateFromMeta(1));
+                } else {
+                    // 河岸花朵
+                    Block flower = rand.nextBoolean() ? Blocks.RED_FLOWER : Blocks.YELLOW_FLOWER;
+                    world.setBlockState(plantPos, flower.getDefaultState());
+                }
+            }
+        }
     }
 
     @Override
@@ -538,70 +599,213 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     private synchronized void getNewerNoise(final BiomeProvider biomeProvider, final int worldX, final int worldZ, ChunkLandscape landscape) {
-        // get area biome map
-        for (int x = -sampleSize; x < sampleSize + 5; x++) {
-            for (int z = -sampleSize; z < sampleSize + 5; z++) {
-                biomeData[(x + sampleSize) * sampleArraySize + (z + sampleSize)] =
-                        Biome.getIdForBiome(biomeProvider.getBiome(new BlockPos(worldX + ((x * 8)), 0, worldZ + ((z * 8)))));
+        // 步骤1: 采样生物群系数据
+        for (int i = -sampleSize; i < sampleSize + 5; i++) {
+            for (int j = -sampleSize; j < sampleSize + 5; j++) {
+                biomeData[(i + sampleSize) * sampleArraySize + (j + sampleSize)] =
+                        Biome.getIdForBiome(biomeProvider.getBiome(new BlockPos(
+                                worldX + ((i * 8) - 8),
+                                0,
+                                worldZ + ((j * 8) - 8)
+                        )));
             }
         }
 
-        // fill the old smallRender
-        MutableBlockPos mpos = new MutableBlockPos(worldX, 0, worldZ);
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                float totalWeight = 0;
-                Map<Integer, Float> weightedBiomes = new HashMap<>();
-                for (int mapX = 0; mapX < sampleArraySize; mapX++) {
-                    for (int mapZ = 0; mapZ < sampleArraySize; mapZ++) {
-                        float weight = weightings[mapX * sampleArraySize + mapZ][x * 16 + z];
-                        if (weight > 0) {
-                            totalWeight += weight;
-                            final int biomeId = biomeData[mapX * sampleArraySize + mapZ];
-                            weightedBiomes.put(biomeId, weightedBiomes.getOrDefault(biomeId, 0F) + weight);
-                        }
-                    }
-                }
-
-                // normalize biome weights
-                final float finalTotalWeight = totalWeight;
-                weightedBiomes.replaceAll((k, v) -> v / finalTotalWeight);
-
-                // combine mesa biomes
-                float mesaPlateauWeight = 0f;
-                for (Map.Entry<Integer, Float> entry : weightedBiomes.entrySet()) {
-                    if (isMesaPlateau(entry.getKey())) {
-                        mesaPlateauWeight += entry.getValue();
-                    }
-                }
-                //mesaCombiner.adjust(weightedBiomes);
-
-                landscape.noise[x * 16 + z] = 0f;
-
-                float river = TerrainBase.getRiverStrength(mpos.setPos(worldX + x, 0, worldZ + z), rtgWorld);
-                landscape.river[x * 16 + z] = -river;
-
-                for (Map.Entry<Integer, Float> entry : weightedBiomes.entrySet()) {
-                    int biomeId = entry.getKey();
-                    float v = entry.getValue();
-                    if (v > 0F) {
-                        if (isMesaPlateau(biomeId)) {
-                            landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(biomeId).rNoise(this.rtgWorld, worldX + x, worldZ + z, mesaPlateauWeight, river + 1F) * v;
-                        } else {
-                            landscape.noise[x * 16 + z] += RTGAPI.getRTGBiome(biomeId).rNoise(this.rtgWorld, worldX + x, worldZ + z, v, river + 1F) * v;
-                        }
+        // 步骤2: 创建HUGE渲染层 (9x9网格)
+        float[][] hugeRender = new float[81][256];
+        for (int i = -1; i < 4; i++) {
+            for (int j = -1; j < 4; j++) {
+                int index = (i * 2 + 2) * 9 + (j * 2 + 2);
+                hugeRender[index] = new float[256];
+                for (int k = -parabolicSize; k <= parabolicSize; k++) {
+                    for (int l = -parabolicSize; l <= parabolicSize; l++) {
+                        int biomeId = biomeData[(i + k + sampleSize + 1) * sampleArraySize + (j + l + sampleSize + 1)];
+                        float weight = parabolicField[(k + parabolicSize) + (l + parabolicSize) * parabolicArraySize] / parabolicFieldTotal;
+                        hugeRender[index][biomeId] += weight;
                     }
                 }
             }
         }
 
-        //fill biomes array with biomeData
+        // 步骤3: HUGE层混合
+        // HUGE 1: 混合4个角点
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                int index = (i * 2 + 1) * 9 + (j * 2 + 1);
+                hugeRender[index] = mix4(new float[][]{
+                        hugeRender[(i * 2) * 9 + (j * 2)],
+                        hugeRender[(i * 2 + 2) * 9 + (j * 2)],
+                        hugeRender[(i * 2) * 9 + (j * 2 + 2)],
+                        hugeRender[(i * 2 + 2) * 9 + (j * 2 + 2)]
+                });
+            }
+        }
+
+        // 步骤4: 创建SMALL渲染层 (25x25网格)
+        float[][] smallRender = new float[625][256];
+
+        // 初始化SMALL层的关键点
+        for (int i = 0; i < 7; i++) {
+            for (int j = 0; j < 7; j++) {
+                int smallIndex = (i * 4) * 25 + (j * 4);
+                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
+                    smallRender[smallIndex] = mix4(new float[][]{
+                            hugeRender[(i) * 9 + (j + 1)],
+                            hugeRender[(i + 1) * 9 + (j)],
+                            hugeRender[(i + 1) * 9 + (j + 2)],
+                            hugeRender[(i + 2) * 9 + (j + 1)]
+                    });
+                } else {
+                    smallRender[smallIndex] = hugeRender[(i + 1) * 9 + (j + 1)];
+                }
+            }
+        }
+
+        // 步骤5: SMALL层混合
+        // SMALL 1: 混合4个角点
+        for (int i = 0; i < 6; i++) {
+            for (int j = 0; j < 6; j++) {
+                int index = (i * 4 + 2) * 25 + (j * 4 + 2);
+                smallRender[index] = mix4(new float[][]{
+                        smallRender[(i * 4) * 25 + (j * 4)],
+                        smallRender[(i * 4 + 4) * 25 + (j * 4)],
+                        smallRender[(i * 4) * 25 + (j * 4 + 4)],
+                        smallRender[(i * 4 + 4) * 25 + (j * 4 + 4)]
+                });
+            }
+        }
+
+        // SMALL 2: 混合交叉点
+        for (int i = 0; i < 11; i++) {
+            for (int j = 0; j < 11; j++) {
+                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
+                    int index = (i * 2 + 2) * 25 + (j * 2 + 2);
+                    smallRender[index] = mix4(new float[][]{
+                            smallRender[(i * 2) * 25 + (j * 2 + 2)],
+                            smallRender[(i * 2 + 2) * 25 + (j * 2)],
+                            smallRender[(i * 2 + 2) * 25 + (j * 2 + 4)],
+                            smallRender[(i * 2 + 4) * 25 + (j * 2 + 2)]
+                    });
+                }
+            }
+        }
+
+        // SMALL 3: 混合中间点
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                int index = (i * 2 + 3) * 25 + (j * 2 + 3);
+                smallRender[index] = mix4(new float[][]{
+                        smallRender[(i * 2 + 2) * 25 + (j * 2 + 2)],
+                        smallRender[(i * 2 + 4) * 25 + (j * 2 + 2)],
+                        smallRender[(i * 2 + 2) * 25 + (j * 2 + 4)],
+                        smallRender[(i * 2 + 4) * 25 + (j * 2 + 4)]
+                });
+            }
+        }
+
+        // SMALL 4: 填充剩余点
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int index = (i + 4) * 25 + (j + 4);
+                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
+                    smallRender[index] = mix4(new float[][]{
+                            smallRender[(i + 3) * 25 + (j + 4)],
+                            smallRender[(i + 4) * 25 + (j + 3)],
+                            smallRender[(i + 4) * 25 + (j + 5)],
+                            smallRender[(i + 5) * 25 + (j + 4)]
+                    });
+                }
+            }
+        }
+
+        // 步骤6: 计算高度
+        MutableBlockPos mpos = new MutableBlockPos();
+        float[] riverValues = new float[16 * 16]; // 存储每个点的河流强度
+
+        // 第一步：预先计算所有点的河流强度
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                mpos.setPos(worldX + i, 0, worldZ + j);
+                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(mpos, rtgWorld);
+            }
+        }
+
+        // 第二步：计算地形高度，应用平滑的河流过渡
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int l = (i + 4) * 25 + (j + 4);
+                float river = riverValues[i * 16 + j];
+
+                // 计算基础地形高度
+                float baseHeight = 0f;
+                for (int biomeId = 0; biomeId < 256; biomeId++) {
+                    float weight = smallRender[l][biomeId];
+                    if (weight > 0f) {
+                        IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
+                        if (biome != null) {
+                            baseHeight += biome.rNoise(
+                                    rtgWorld,
+                                    worldX + i,
+                                    worldZ + j,
+                                    weight,
+                                    river + 1f
+                            ) * weight;
+                        }
+                    }
+                }
+
+                // 应用河流侵蚀效果（平滑过渡）
+                if (river > 0.5f) {
+                    // 1. 计算侵蚀深度（0-8格）
+                    float erosionDepth = (river - 0.5f) * 16f;
+                    erosionDepth = Math.min(erosionDepth, 8f);
+
+                    // 2. 应用平滑侵蚀曲线
+                    float riverHeight = baseHeight - erosionDepth;
+
+                    // 3. 混合周围地形高度（避免陡峭悬崖）
+                    if (i > 0 && j > 0 && i < 15 && j < 15) {
+                        float avgHeight = (
+                                landscape.noise[(i-1)*16+j] +
+                                        landscape.noise[(i+1)*16+j] +
+                                        landscape.noise[i*16+(j-1)] +
+                                        landscape.noise[i*16+(j+1)]
+                        ) * 0.25f;
+
+                        // 混合比例取决于河流强度
+                        float blendFactor = MathHelper.clamp(river * 2f, 0f, 1f);
+                        landscape.noise[i * 16 + j] = avgHeight * (1f - blendFactor) + riverHeight * blendFactor;
+                    } else {
+                        landscape.noise[i * 16 + j] = riverHeight;
+                    }
+                } else {
+                    landscape.noise[i * 16 + j] = baseHeight;
+                }
+
+                landscape.river[i * 16 + j] = river;
+            }
+        }
+
+        // 填充生物群系数据
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 BlockPos pos = new BlockPos(worldX + (x - 7) * 8 + 4, 0, worldZ + (z - 7) * 8 + 4);
                 landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(biomeProvider.getBiome(pos));
             }
         }
+    }
+
+    // RWG混合函数
+    private float[] mix4(float[][] ingredients) {
+        float[] result = new float[256];
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 4; j++) {
+                if (ingredients[j][i] > 0f) {
+                    result[i] += ingredients[j][i] / 4f;
+                }
+            }
+        }
+        return result;
     }
 
 

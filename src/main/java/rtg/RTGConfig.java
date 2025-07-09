@@ -296,7 +296,7 @@ public final class RTGConfig {
         biomeSize(Type.INTEGER, Category.geography,
                 "Number of times biomes are scaled and refined.\n" +
                         "!Smaller values result in smaller, more fragmented biomes with more frequent terrain transitions!",
-                6, 1, 10),
+                5, 1, 10),
 
         riverSize(Type.INTEGER, Category.geography,
                 "Density and complexity of river distribution.\n" +
@@ -316,7 +316,7 @@ public final class RTGConfig {
         tempScheme(Type.INTEGER, Category.geography,
                 "Temperature distribution patterns.\n" +
                         "!1: Latitude-based 2: Small areas 3: Medium areas 4: Large areas 5: Random!",
-                4, 1, 5),
+                3, 1, 5),
 
         rainScheme(Type.INTEGER, Category.geography,
                 "Precipitation distribution patterns.\n" +

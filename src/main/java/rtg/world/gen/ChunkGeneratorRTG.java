@@ -1,10 +1,8 @@
 package rtg.world.gen;
 
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockFalling;
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.EnumCreatureType;
-import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
@@ -44,6 +42,7 @@ import rtg.world.gen.structure.WoodlandMansionRTG;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.stream.IntStream;
 
 public class ChunkGeneratorRTG implements IChunkGenerator {
 
@@ -62,8 +61,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int sampleSize = 8;
     private final int sampleArraySize = sampleSize * 2 + 5;
     private final int[] biomeData = new int[sampleArraySize * sampleArraySize];
-    private final float[][] weightings = new float[sampleArraySize * sampleArraySize][256];
-    private final MesaBiomeCombiner mesaCombiner = new MesaBiomeCombiner();
     private final BiomeAnalyzer analyzer = new BiomeAnalyzer();
     private final int[] xyinverted = analyzer.xyinverted();
     private final boolean mapFeaturesEnabled;
@@ -73,11 +70,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int parabolicSize;
     private final int parabolicArraySize;
     private final float[] parabolicField;
-    private boolean[] mesaPlateauBiome;
     private float parabolicFieldTotal;
-    private final float[] testHeight = new float[256];
-    private final float[] mapGenBiomes = new float[258];
-    private final float[] borderNoise = new float[256];
 
     public ChunkGeneratorRTG(RTGWorld rtgWorld) {
 
@@ -103,9 +96,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         this.oceanMonumentGenerator = (StructureOceanMonument) TerrainGen.getModdedMapGen(new StructureOceanMonument(StructureType.MONUMENT.getSettings(this.settings)), EventType.OCEAN_MONUMENT);
 
         this.baseBiomesList = new Biome[256];
-
-        setWeightings();// landscape generator init
-        setMesaPlauteauBiomes();//mark plateau biomes to combine mesas
 
         // 初始化RWG抛物线场
         parabolicSize = sampleSize;
@@ -369,10 +359,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             } else {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
             }
-            // 在populate方法中添加
-            if (river > 0.5f) {
-                generateRiverVegetation(world, rand, offsetpos, 65, river);
-            }
         }
 
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage, PopulateChunkEvent.Populate.EventType.ANIMALS)) {
@@ -415,42 +401,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
 
         BlockFalling.fallInstantly = false;
-    }
-
-
-    // 河岸植被生成方法
-    private void generateRiverVegetation(World world, Random rand, BlockPos pos, int seaLevel, float riverStrength) {
-        int plants = 15 + (int)(riverStrength * 30); // 基于河流强度决定植被密度
-
-        for (int i = 0; i < plants; i++) {
-            BlockPos plantPos = pos.add(
-                    rand.nextInt(16),
-                    seaLevel + 1,
-                    rand.nextInt(16)
-            );
-
-            // 睡莲（水面）
-            if (rand.nextFloat() < 0.3f && world.getBlockState(plantPos).getBlock() == Blocks.WATER) {
-                world.setBlockState(plantPos.up(), Blocks.WATERLILY.getDefaultState());
-            }
-            // 芦苇（浅水区）
-            else if (world.getBlockState(plantPos.down()).getMaterial() == Material.WATER) {
-                int height = 1 + rand.nextInt(2 + (int)(riverStrength * 3));
-                for (int h = 0; h < height; h++) {
-                    world.setBlockState(plantPos.up(h), Blocks.REEDS.getDefaultState());
-                }
-            }
-            // 河岸草丛
-            else if (world.getBlockState(plantPos.down()).isOpaqueCube()) {
-                if (rand.nextFloat() < 0.7f) {
-                    world.setBlockState(plantPos, Blocks.TALLGRASS.getStateFromMeta(1));
-                } else {
-                    // 河岸花朵
-                    Block flower = rand.nextBoolean() ? Blocks.RED_FLOWER : Blocks.YELLOW_FLOWER;
-                    world.setBlockState(plantPos, flower.getDefaultState());
-                }
-            }
-        }
     }
 
     @Override
@@ -551,30 +501,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         return ("Temple".equals(structureName) && this.scatteredFeatureGenerator != null) && this.scatteredFeatureGenerator.isInsideStructure(pos);
     }
 
-
-    /* Landscape Geneator */
-
-    private void setWeightings() {
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                float limit = (float) Math.pow((56f * 56f), 0.7D);
-                for (int mapX = 0; mapX < sampleArraySize; mapX++) {
-                    for (int mapZ = 0; mapZ < sampleArraySize; mapZ++) {
-                        float xDist = (x - (mapX - sampleSize) * 8);
-                        float zDist = (z - (mapZ - sampleSize) * 8);
-                        float distanceSquared = xDist * xDist + zDist * zDist;
-                        float distance = (float) Math.pow(distanceSquared, 0.7D);
-                        float weight = 1f - distance / limit;
-                        if (weight < 0) {
-                            weight = 0;
-                        }
-                        weightings[mapX * sampleArraySize + mapZ][x * 16 + z] = weight;
-                    }
-                }
-            }
-        }
-    }
-
     public ChunkLandscape getLandscape(final BiomeProvider biomeProvider, final ChunkPos chunkPos) {
         final BlockPos blockPos = new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16);
         ChunkLandscape landscape = landscapeCache.get(chunkPos);
@@ -599,17 +525,20 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     private synchronized void getNewerNoise(final BiomeProvider biomeProvider, final int worldX, final int worldZ, ChunkLandscape landscape) {
-        // 步骤1: 采样生物群系数据
+        // 步骤1: 采样生物群系数据（无需优化）
+        final int baseOffsetX = worldX - 8;
+        final int baseOffsetZ = worldZ - 8;
         for (int i = -sampleSize; i < sampleSize + 5; i++) {
+            final int xOffset = (i * 8) - 8;
+            final int dataRow = (i + sampleSize) * sampleArraySize;
+
             for (int j = -sampleSize; j < sampleSize + 5; j++) {
-                biomeData[(i + sampleSize) * sampleArraySize + (j + sampleSize)] =
-                        Biome.getIdForBiome(biomeProvider.getBiome(new BlockPos(
-                                worldX + ((i * 8) - 8),
-                                0,
-                                worldZ + ((j * 8) - 8)
-                        )));
+                final int zOffset = (j * 8) - 8;
+                BlockPos pos = new BlockPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
+                biomeData[dataRow + (j + sampleSize)] = Biome.getIdForBiome(biomeProvider.getBiome(pos));
             }
         }
+
 
         // 步骤2: 创建HUGE渲染层 (9x9网格)
         float[][] hugeRender = new float[81][256];
@@ -628,201 +557,271 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         // 步骤3: HUGE层混合
-        // HUGE 1: 混合4个角点
+        final int hugeWidth = 9; // HUGE层网格宽度
+
+        // HUGE 1: 混合4个角点 (4x4)
         for (int i = 0; i < 4; i++) {
+            int i2 = i * 2;
+            int i2p2 = i2 + 2;
+            int rowCenter = i2 + 1;
+
             for (int j = 0; j < 4; j++) {
-                int index = (i * 2 + 1) * 9 + (j * 2 + 1);
-                hugeRender[index] = mix4(new float[][]{
-                        hugeRender[(i * 2) * 9 + (j * 2)],
-                        hugeRender[(i * 2 + 2) * 9 + (j * 2)],
-                        hugeRender[(i * 2) * 9 + (j * 2 + 2)],
-                        hugeRender[(i * 2 + 2) * 9 + (j * 2 + 2)]
-                });
+                int j2 = j * 2;
+                int j2p2 = j2 + 2;
+                int colCenter = j2 + 1;
+
+                int index = rowCenter * hugeWidth + colCenter;
+                hugeRender[index] = mix4(
+                        hugeRender[i2 * hugeWidth + j2],
+                        hugeRender[i2p2 * hugeWidth + j2],
+                        hugeRender[i2 * hugeWidth + j2p2],
+                        hugeRender[i2p2 * hugeWidth + j2p2]
+                );
             }
         }
 
-        // 步骤4: 创建SMALL渲染层 (25x25网格)
+        // 步骤4: 创建SMALL渲染层 (25x25网格) (优化版)
+        final int smallWidth = 25; // SMALL层网格宽度
         float[][] smallRender = new float[625][256];
 
-        // 初始化SMALL层的关键点
+        // 初始化SMALL层的关键点 (7x7)
         for (int i = 0; i < 7; i++) {
+            int i1 = i + 1;
+            int i2 = i + 2;
+            int i4 = i * 4;
+
             for (int j = 0; j < 7; j++) {
-                int smallIndex = (i * 4) * 25 + (j * 4);
-                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
-                    smallRender[smallIndex] = mix4(new float[][]{
-                            hugeRender[(i) * 9 + (j + 1)],
-                            hugeRender[(i + 1) * 9 + (j)],
-                            hugeRender[(i + 1) * 9 + (j + 2)],
-                            hugeRender[(i + 2) * 9 + (j + 1)]
-                    });
+                int j1 = j + 1;
+                int j2 = j + 2;
+                int j4 = j * 4;
+
+                int smallIndex = i4 * smallWidth + j4;
+
+                // 使用位运算优化奇偶判断 (i和j奇偶性不同)
+                if (((i ^ j) & 1) != 0) {
+                    smallRender[smallIndex] = mix4(
+                            hugeRender[i * hugeWidth + j1],
+                            hugeRender[i1 * hugeWidth + j],
+                            hugeRender[i1 * hugeWidth + j2],
+                            hugeRender[i2 * hugeWidth + j1]
+                    );
                 } else {
-                    smallRender[smallIndex] = hugeRender[(i + 1) * 9 + (j + 1)];
+                    smallRender[smallIndex] = hugeRender[i1 * hugeWidth + j1];
                 }
             }
         }
 
         // 步骤5: SMALL层混合
-        // SMALL 1: 混合4个角点
+        // 优化1: 预先计算常用值
+        final int width = 25; // 网格宽度
+
+        // SMALL 1: 混合4个角点 (6x6)
         for (int i = 0; i < 6; i++) {
+            int i4 = i * 4;
+            int i4p4 = i4 + 4;
+            int rowCenter = i4 + 2;
+
             for (int j = 0; j < 6; j++) {
-                int index = (i * 4 + 2) * 25 + (j * 4 + 2);
-                smallRender[index] = mix4(new float[][]{
-                        smallRender[(i * 4) * 25 + (j * 4)],
-                        smallRender[(i * 4 + 4) * 25 + (j * 4)],
-                        smallRender[(i * 4) * 25 + (j * 4 + 4)],
-                        smallRender[(i * 4 + 4) * 25 + (j * 4 + 4)]
-                });
+                int j4 = j * 4;
+                int j4p4 = j4 + 4;
+                int colCenter = j4 + 2;
+
+                int index = rowCenter * width + colCenter;
+                smallRender[index] = mix4(
+                        smallRender[i4 * width + j4],
+                        smallRender[i4p4 * width + j4],
+                        smallRender[i4 * width + j4p4],
+                        smallRender[i4p4 * width + j4p4]
+                );
             }
         }
 
         // SMALL 2: 混合交叉点
         for (int i = 0; i < 11; i++) {
-            for (int j = 0; j < 11; j++) {
-                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
-                    int index = (i * 2 + 2) * 25 + (j * 2 + 2);
-                    smallRender[index] = mix4(new float[][]{
-                            smallRender[(i * 2) * 25 + (j * 2 + 2)],
-                            smallRender[(i * 2 + 2) * 25 + (j * 2)],
-                            smallRender[(i * 2 + 2) * 25 + (j * 2 + 4)],
-                            smallRender[(i * 2 + 4) * 25 + (j * 2 + 2)]
-                    });
-                }
+            int i2 = i * 2;
+            int i2p2 = i2 + 2;
+            int i2p4 = i2 + 4;
+
+            for (int j = (i & 1) ^ 1; j < 11; j += 2) {  // 优化分支预测
+                int j2 = j * 2;
+                int j2p2 = j2 + 2;
+                int j2p4 = j2 + 4;
+
+                int index = i2p2 * width + j2p2;
+                smallRender[index] = mix4(
+                        smallRender[i2 * width + j2p2],
+                        smallRender[i2p2 * width + j2],
+                        smallRender[i2p2 * width + j2p4],
+                        smallRender[i2p4 * width + j2p2]
+                );
             }
         }
 
-        // SMALL 3: 混合中间点
+        // SMALL 3: 混合中间点 (9x9)
         for (int i = 0; i < 9; i++) {
+            int i2 = i * 2;
+            int i2p2 = i2 + 2;
+            int i2p4 = i2 + 4;
+            int rowCenter = i2 + 3;
+
             for (int j = 0; j < 9; j++) {
-                int index = (i * 2 + 3) * 25 + (j * 2 + 3);
-                smallRender[index] = mix4(new float[][]{
-                        smallRender[(i * 2 + 2) * 25 + (j * 2 + 2)],
-                        smallRender[(i * 2 + 4) * 25 + (j * 2 + 2)],
-                        smallRender[(i * 2 + 2) * 25 + (j * 2 + 4)],
-                        smallRender[(i * 2 + 4) * 25 + (j * 2 + 4)]
-                });
+                int j2 = j * 2;
+                int j2p2 = j2 + 2;
+                int j2p4 = j2 + 4;
+                int colCenter = j2 + 3;
+
+                int index = rowCenter * width + colCenter;
+                smallRender[index] = mix4(
+                        smallRender[i2p2 * width + j2p2],
+                        smallRender[i2p4 * width + j2p2],
+                        smallRender[i2p2 * width + j2p4],
+                        smallRender[i2p4 * width + j2p4]
+                );
             }
         }
 
         // SMALL 4: 填充剩余点
         for (int i = 0; i < 16; i++) {
-            for (int j = 0; j < 16; j++) {
-                int index = (i + 4) * 25 + (j + 4);
-                if (!(i % 2 == 0 && j % 2 == 0) && !(i % 2 != 0 && j % 2 != 0)) {
-                    smallRender[index] = mix4(new float[][]{
-                            smallRender[(i + 3) * 25 + (j + 4)],
-                            smallRender[(i + 4) * 25 + (j + 3)],
-                            smallRender[(i + 4) * 25 + (j + 5)],
-                            smallRender[(i + 5) * 25 + (j + 4)]
-                    });
-                }
+            int i3 = i + 3;
+            int i4 = i + 4;
+            int i5 = i + 5;
+
+            for (int j = (i & 1) ^ 1; j < 16; j += 2) {  // 优化分支预测
+                int j4 = j + 4;
+
+                int index = i4 * width + j4;
+                smallRender[index] = mix4(
+                        smallRender[i3 * width + j4],
+                        smallRender[i4 * width + (j4 - 1)],
+                        smallRender[i4 * width + (j4 + 1)],
+                        smallRender[i5 * width + j4]
+                );
             }
         }
 
-        // 步骤6: 计算高度
+
+// 步骤6: 计算高度 - 兼容版优化
+        float[] riverValues = new float[256]; // 16x16
+
+        // 1. 并行计算河流强度 (使用简单位置计算)
         MutableBlockPos mpos = new MutableBlockPos();
-        float[] riverValues = new float[16 * 16]; // 存储每个点的河流强度
+        IntStream.range(0, 256).parallel().forEach(k -> {
+            int x = worldX + (k / 16);
+            int z = worldZ + (k % 16);
+            mpos.setPos(x, 0, z);
+            riverValues[k] = TerrainBase.getRiverStrength(mpos, rtgWorld);
+        });
 
-        // 第一步：预先计算所有点的河流强度
-        for (int i = 0; i < 16; i++) {
-            for (int j = 0; j < 16; j++) {
-                mpos.setPos(worldX + i, 0, worldZ + j);
-                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(mpos, rtgWorld);
-            }
-        }
-
-        // 第二步：计算地形高度，应用平滑的河流过渡
+        // 2. 预计算非零权重生物群系索引
+        List<int[]> nonZeroBiomes = new ArrayList<>(1024); // [l, biomeId, k]
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 int l = (i + 4) * 25 + (j + 4);
-                float river = riverValues[i * 16 + j];
-
-                // 计算基础地形高度
-                float baseHeight = 0f;
+                int k = i * 16 + j;
                 for (int biomeId = 0; biomeId < 256; biomeId++) {
-                    float weight = smallRender[l][biomeId];
-                    if (weight > 0f) {
-                        IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
-                        if (biome != null) {
-                            baseHeight += biome.rNoise(
-                                    rtgWorld,
-                                    worldX + i,
-                                    worldZ + j,
-                                    weight,
-                                    river + 1f
-                            ) * weight;
-                        }
+                    if (smallRender[l][biomeId] > 0) {
+                        nonZeroBiomes.add(new int[]{l, biomeId, k});
                     }
                 }
-
-                // 应用河流侵蚀效果（平滑过渡）
-                if (river > 0.5f) {
-                    // 1. 计算侵蚀深度（0-8格）
-                    float erosionDepth = (river - 0.5f) * 16f;
-                    erosionDepth = Math.min(erosionDepth, 8f);
-
-                    // 2. 应用平滑侵蚀曲线
-                    float riverHeight = baseHeight - erosionDepth;
-
-                    // 3. 混合周围地形高度（避免陡峭悬崖）
-                    if (i > 0 && j > 0 && i < 15 && j < 15) {
-                        float avgHeight = (
-                                landscape.noise[(i-1)*16+j] +
-                                        landscape.noise[(i+1)*16+j] +
-                                        landscape.noise[i*16+(j-1)] +
-                                        landscape.noise[i*16+(j+1)]
-                        ) * 0.25f;
-
-                        // 混合比例取决于河流强度
-                        float blendFactor = MathHelper.clamp(river * 2f, 0f, 1f);
-                        landscape.noise[i * 16 + j] = avgHeight * (1f - blendFactor) + riverHeight * blendFactor;
-                    } else {
-                        landscape.noise[i * 16 + j] = riverHeight;
-                    }
-                } else {
-                    landscape.noise[i * 16 + j] = baseHeight;
-                }
-
-                landscape.river[i * 16 + j] = river;
             }
         }
 
+        // 3. 计算基础高度
+        float[] baseHeights = new float[256];
+        for (int[] entry : nonZeroBiomes) {
+            int l = entry[0];
+            int biomeId = entry[1];
+            int k = entry[2];
+            float weight = smallRender[l][biomeId];
+
+            int i = k / 16;
+            int j = k % 16;
+            int x = worldX + i;
+            int z = worldZ + j;
+
+            IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
+            if (biome != null) {
+                baseHeights[k] += biome.rNoise(
+                        rtgWorld,
+                        x,
+                        z,
+                        weight,
+                        riverValues[k] + 1f
+                ) * weight;
+            }
+        }
+
+        // 4. 应用河流侵蚀和平滑
+        for (int k = 0; k < 256; k++) {
+            float river = riverValues[k];
+            int i = k / 16;
+            int j = k % 16;
+
+            if (river > 0.5f) {
+                // 优化侵蚀计算
+                float erosion = 8f * Math.min(1f, Math.max(0f, (river - 0.5f) * 2f));
+                float riverHeight = baseHeights[k] - erosion;
+
+                // 边界安全检测
+                boolean canSmooth = (i > 0) && (i < 15) && (j > 0) && (j < 15);
+
+                if (canSmooth) {
+                    // 使用周围4点平均值
+                    float avg = 0.25f * (
+                            baseHeights[k - 16] + // north (i-1,j)
+                                    baseHeights[k + 16] + // south (i+1,j)
+                                    baseHeights[k - 1]  + // west (i,j-1)
+                                    baseHeights[k + 1]    // east (i,j+1)
+                    );
+
+                    // 优化混合曲线
+                    float blend = river * 2f - 1f; // 映射[0.5,1]到[0,1]
+                    blend = blend * blend * (3 - 2 * blend); // smoothstep
+
+                    landscape.noise[k] = avg * (1 - blend) + riverHeight * blend;
+                } else {
+                    landscape.noise[k] = riverHeight;
+                }
+            } else {
+                landscape.noise[k] = baseHeights[k];
+            }
+
+            landscape.river[k] = river;
+        }
+
         // 填充生物群系数据
+        MutableBlockPos biomePos = new MutableBlockPos();
         for (int x = 0; x < 16; x++) {
+            int wx = worldX + (x - 7) * 8 + 4;
             for (int z = 0; z < 16; z++) {
-                BlockPos pos = new BlockPos(worldX + (x - 7) * 8 + 4, 0, worldZ + (z - 7) * 8 + 4);
-                landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(biomeProvider.getBiome(pos));
+                biomePos.setPos(wx, 0, worldZ + (z - 7) * 8 + 4);
+                landscape.biome[x*16+z] = RTGAPI.getRTGBiome(biomeProvider.getBiome(biomePos));
             }
         }
     }
 
     // RWG混合函数
-    private float[] mix4(float[][] ingredients) {
+    private float[] mix4(float[] a, float[] b, float[] c, float[] d) {
         float[] result = new float[256];
-        for (int i = 0; i < 256; i++) {
-            for (int j = 0; j < 4; j++) {
-                if (ingredients[j][i] > 0f) {
-                    result[i] += ingredients[j][i] / 4f;
-                }
-            }
+        // 使用局部变量减少数组访问开销
+        float aVal, bVal, cVal, dVal;
+
+        for (int i = 0; i < 256; ) {
+            // 手动循环展开4次
+            aVal = a[i]; bVal = b[i]; cVal = c[i]; dVal = d[i];
+            result[i++] = (aVal + bVal + cVal + dVal) * 0.25f;
+
+            aVal = a[i]; bVal = b[i]; cVal = c[i]; dVal = d[i];
+            result[i++] = (aVal + bVal + cVal + dVal) * 0.25f;
+
+            aVal = a[i]; bVal = b[i]; cVal = c[i]; dVal = d[i];
+            result[i++] = (aVal + bVal + cVal + dVal) * 0.25f;
+
+            aVal = a[i]; bVal = b[i]; cVal = c[i]; dVal = d[i];
+            result[i++] = (aVal + bVal + cVal + dVal) * 0.25f;
         }
         return result;
     }
-
-
-    private void setMesaPlauteauBiomes() {
-        mesaPlateauBiome = new boolean[256];
-        mesaPlateauBiome[Biome.getIdForBiome(Biomes.MESA_CLEAR_ROCK)] = true;
-        mesaPlateauBiome[Biome.getIdForBiome(Biomes.MESA_ROCK)] = true;
-        mesaPlateauBiome[Biome.getIdForBiome(Biomes.MUTATED_MESA)] = true;
-        mesaPlateauBiome[Biome.getIdForBiome(Biomes.MUTATED_MESA_CLEAR_ROCK)] = true;
-        mesaPlateauBiome[Biome.getIdForBiome(Biomes.MUTATED_MESA_ROCK)] = true;
-    }
-
-    private boolean isMesaPlateau(int Id) {
-        if ((Id > 255) | (Id < 0)) return false;
-        return (mesaPlateauBiome[Id]);
-    }
-
     // A helper class to generate settings maps to configure the vanilla structure classes
     private enum StructureType {
 

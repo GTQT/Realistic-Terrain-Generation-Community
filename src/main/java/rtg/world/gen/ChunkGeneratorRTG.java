@@ -525,7 +525,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     private synchronized void getNewerNoise(final BiomeProvider biomeProvider, final int worldX, final int worldZ, ChunkLandscape landscape) {
-        // 步骤1: 采样生物群系数据（无需优化）
+        // 步骤1: 采样生物群系数据
         final int baseOffsetX = worldX - 8;
         final int baseOffsetZ = worldZ - 8;
         for (int i = -sampleSize; i < sampleSize + 5; i++) {

@@ -7,7 +7,6 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldEntitySpawner;
 import net.minecraft.world.biome.Biome;
@@ -700,7 +699,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
 
-// 步骤6: 计算高度 - 兼容版优化
+        // 步骤6: 计算高度 - 兼容版优化
         float[] riverValues = new float[256]; // 16x16
 
         // 1. 并行计算河流强度 (使用简单位置计算)

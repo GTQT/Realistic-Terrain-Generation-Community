@@ -148,7 +148,7 @@ public abstract class TerrainBase {
 
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
         float sn = simplex.noise2f(x / 2f, y / 2f) * 0.5f + 0.5f;
-        sn += simplex.noise2f(x, y) * 0.2 + 0.2;
+        sn += (float) (simplex.noise2f(x, y) * 0.2 + 0.2);
         sn += simplex.noise2f(x / 4f, y / 4f) * 4f + 4f;
         sn += simplex.noise2f(x / 8f, y / 8f) * 2f + 2f;
         float n = height / sn * 2;
@@ -164,14 +164,14 @@ public abstract class TerrainBase {
         //river = river > 1f ? 1f : river;
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
         float r = simplex.noise2f(x / 100f, y / 100f) * 50f * river;
-        r = r < -7.4f ? -7.4f : r > 7.4f ? 7.4f : r;
+        r = r < -7.4f ? -7.4f : Math.min(r, 7.4f);
         float b = (17f + r) * river;
 
         float hn = simplex.noise2f(x / 12f, y / 12f) * 0.5f;
         float sb = 0f;
         if (b > 0f) {
             sb = b;
-            sb = sb > 7f ? 7f : sb;
+            sb = Math.min(sb, 7f);
             sb = hn * sb * river;
         }
         b += sb;
@@ -245,7 +245,7 @@ public abstract class TerrainBase {
         m *= m / mPitch;
 
         float sm = blendedHillHeight(simplex.noise2f(x / 30f, y / 30f)) * 8f;
-        sm *= m / 20f > 3.75f ? 3.75f : m / 20f;
+        sm *= Math.min(m / 20f, 3.75f);
         m += sm;
 
         return riverized(baseHeight + h + m, river);
@@ -253,19 +253,21 @@ public abstract class TerrainBase {
 
     public static float terrainGrasslandHills(int x, int y, RTGWorld rtgWorld, float river, float vWidth, float vHeight, float hWidth, float hHeight, float bHeight) {
 
+        // 增加基础丘陵高度
         float h = rtgWorld.simplexInstance(0).noise2f(x / vWidth, y / vWidth);
-        h = blendedHillHeight(h, 0.3f);
+        h = blendedHillHeight(h, 0.35f); // 增加起伏强度(原0.3f)
 
         float m = rtgWorld.simplexInstance(1).noise2f(x / hWidth, y / hWidth);
-        m = blendedHillHeight(m, 0.3f) * h;
-        m *= m;
+        m = blendedHillHeight(m, 0.35f) * h; // 增加起伏强度
+        m *= m * 1.1f; // 增加山峰尖锐度(原无系数)
 
-        h *= vHeight * river;
-        m *= hHeight * river;
+        // 增加垂直比例
+        h *= vHeight * 1.25f * river; // 增加25%
+        m *= hHeight * 1.35f * river; // 增加35%
 
-        h += TerrainBase.groundNoise(x, y, 4f, rtgWorld);
+        h += TerrainBase.groundNoise(x, y, 4.5f, rtgWorld); // 增加细节噪声
 
-        return riverized(bHeight + h, river) + m;
+        return riverized(bHeight + h * 1.1f, river) + m; // 轻微增加基础高度
     }
 
     public static float terrainGrasslandMountains(int x, int y, RTGWorld rtgWorld, float river, float hFactor, float mFactor, float baseHeight) {
@@ -281,7 +283,7 @@ public abstract class TerrainBase {
         float c = rtgWorld.simplexInstance(4).noise3f(x / 30f, y / 30f, 1f) * (m * 0.30f);
 
         float sm = simplex0.noise2f(x / 30f, y / 30f) * 8f + simplex0.noise2f(x / 8f, y / 8f);
-        sm *= m / 20f > 2.5f ? 2.5f : m / 20f;
+        sm *= Math.min(m / 20f, 2.5f);
         m += sm;
 
         m += c;
@@ -298,14 +300,14 @@ public abstract class TerrainBase {
             h = 0;//0 to 140
         }
         if (h > 0f) {
-            float st = h * 1.5f > 15f ? 15f : h * 1.5f;// 0 to 15
+            float st = Math.min(h * 1.5f, 15f);// 0 to 15
             h += rtgWorld.simplexInstance(4).noise3f(x / 70f, y / 70f, 1f) * st;// 0 to 155
             h = h * river;
         }
 
         h += blendedHillHeight(rtgWorld.simplexInstance(0).noise2f(x / 20f, y / 20f), 0f) * 4f;
         h += blendedHillHeight(rtgWorld.simplexInstance(0).noise2f(x / 12f, y / 12f), 0f) * 2f;
-        h += blendedHillHeight(rtgWorld.simplexInstance(0).noise2f(x / 5f, y / 5f), 0f) * 1f;
+        h += blendedHillHeight(rtgWorld.simplexInstance(0).noise2f(x / 5f, y / 5f), 0f);
 
         if (h < 0) {
             h = h / 2f;
@@ -329,11 +331,11 @@ public abstract class TerrainBase {
         m = m > 70f ? 70f + (m - 70f) / 2.5f : m;
 
         float st = m * 0.7f;
-        st = st > 20f ? 20f : st;
+        st = Math.min(st, 20f);
         float c = rtgWorld.simplexInstance(4).noise3f(x / 30f, y / 30f, 1f) * (5f + st);
 
         float sm = simplex0.noise2f(x / 30f, y / 30f) * 8f + simplex0.noise2f(x / 8f, y / 8f);
-        sm *= (m + 10f) / 20f > 2.5f ? 2.5f : (m + 10f) / 20f;
+        sm *= Math.min((m + 10f) / 20f, 2.5f);
         m += sm;
 
         m += c;
@@ -346,7 +348,7 @@ public abstract class TerrainBase {
                 m = 110f + (m - 110f) * .75f;
             }
         }
-        return riverized(terrainHeight + h + m, river);
+        return riverized(terrainHeight * 1.08f + h + m, river); // 增加基础高度
     }
 
     public static float terrainMarsh(int x, int y, RTGWorld rtgWorld, float baseHeight, float river) {
@@ -373,10 +375,10 @@ public abstract class TerrainBase {
         float h = simplex.noise2f(x / 300f, y / 300f) * 8f * river;
         //h = h > 3f ? 3f : h;
         h += simplex.noise2f(x / 50f, y / 50f) * 2f;
-        h += simplex.noise2f(x / 15f, y / 15f) * 1f;
+        h += simplex.noise2f(x / 15f, y / 15f);
 
         float floNoise = averageFloor + h;
-        floNoise = floNoise < minimumOceanFloor ? minimumOceanFloor : floNoise;
+        floNoise = Math.max(floNoise, minimumOceanFloor);
 
         return floNoise;
     }
@@ -386,16 +388,16 @@ public abstract class TerrainBase {
         //b *= b / cStrength;
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
         river *= 1.3f;
-        river = river > 1f ? 1f : river;
+        river = Math.min(river, 1f);
         float r = simplex.noise2f(x / 100f, y / 100f) * 50f;
-        r = r < -7.4f ? -7.4f : r > 7.4f ? 7.4f : r;
+        r = r < -7.4f ? -7.4f : Math.min(r, 7.4f);
         float b = (17f + r) * river;
 
         float hn = simplex.noise2f(x / 12f, y / 12f) * 0.5f;
         float sb = 0f;
         if (b > 0f) {
             sb = b;
-            sb = sb > 7f ? 7f : sb;
+            sb = Math.min(sb, 7f);
             sb = hn * sb;
         }
         b += sb;
@@ -429,7 +431,7 @@ public abstract class TerrainBase {
         b += cTotal - bn;
 
         float floNoise = 30f + b;
-        floNoise = floNoise < minimumOceanFloor ? minimumOceanFloor : floNoise;
+        floNoise = Math.max(floNoise, minimumOceanFloor);
 
         return floNoise;
     }
@@ -439,7 +441,7 @@ public abstract class TerrainBase {
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
         float floNoise;
         float st = (simplex.noise2f(x / stPitch, y / stPitch) + 0.38f) * stFactor * river;
-        st = st < 0.2f ? 0.2f : st;
+        st = Math.max(st, 0.2f);
 
         float h = simplex.noise2f(x / hPitch, y / hPitch) * st * 2f;
         h = h > 0f ? -h : h;
@@ -454,9 +456,9 @@ public abstract class TerrainBase {
     public static float terrainPlateau(float x, float y, RTGWorld rtgWorld, float river, float[] height, float border, float strength, int heightLength, float selectorWaveLength, boolean isM) {
 
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
-        river = river > 1f ? 1f : river;
+        river = Math.min(river, 1f);
         float border2 = border * 4 - 2.5f;
-        border2 = border2 > 1f ? 1f : (border2 < 0f) ? 0f : border2;
+        border2 = border2 > 1f ? 1f : Math.max(border2, 0f);
         float b = simplex.noise2f(x / 40f, y / 40f) * 1.5f;
 
         float sn = simplex.noise2f(x / selectorWaveLength, y / selectorWaveLength) * 0.5f + 0.5f;
@@ -468,7 +470,7 @@ public abstract class TerrainBase {
         for (int i = 0; i < heightLength; i += 2) {
             n = (sn - height[i + 1]) / (1 - height[i + 1]);
             n = n * strength;
-            n = (n < 0f) ? 0f : (n > 1f) ? 1f : n;
+            n = (n < 0f) ? 0f : Math.min(n, 1f);
             hn = height[i] * 0.5f * ((sn * 2f) - 0.4f);
             hn = (hn < 0) ? 0f : hn;
             stepUp = 0f;
@@ -500,7 +502,7 @@ public abstract class TerrainBase {
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
         float floNoise;
         float st = (simplex.noise2f(x / stPitch, y / stPitch) + 0.38f) * stFactor * river;
-        st = st < 0.1f ? 0.1f : st;
+        st = Math.max(st, 0.1f);
 
         float h = simplex.noise2f(x / hPitch, y / hPitch) * st * 2f;
         h = h > 0f ? -h : h;
@@ -535,13 +537,13 @@ public abstract class TerrainBase {
 
         float st = 15f - (float) (cellularNoise.eval2D(x / 500d, y / 500d).getShortestDistance() * 42d) + (simplex.noise2f(x / 30f, y / 30f) * 2f);
 
-        float h = st < 0f ? 0f : st;
-        h = h < 0f ? 0f : h;
+        float h = Math.max(st, 0f);
+        h = Math.max(h, 0f);
         h += (h * 0.4f) * ((h * 0.4f) * 2f);
 
         if (h > 10f) {
-            float d2 = (h - 10f) / 1.5f > 30f ? 30f : (h - 10f) / 1.5f;
-            h += cellularNoise.eval2D(x / 25D, y / 25D).getShortestDistance() * d2;
+            float d2 = Math.min((h - 10f) / 1.5f, 30f);
+            h += (float) (cellularNoise.eval2D(x / 25D, y / 25D).getShortestDistance() * d2);
         }
 
         h += simplex.noise2f(x / 18f, y / 18f) * 3;

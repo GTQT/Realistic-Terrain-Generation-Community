@@ -241,16 +241,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 int depth = -1;
                 biomes[x * 16 + z].rReplace(primer, mpos, x, z, depth, rtgWorld, noise, river, base);
 
-                // sparse bedrock layers above y=0
-                if (this.settings.bedrockLayers > 1) {
-                    for (int bl = 9; bl >= 0; --bl) {
-                        if (bl <= this.rand.nextInt(this.settings.bedrockLayers)) {
-                            primer.setBlockState(x, bl, z, Blocks.BEDROCK.getDefaultState());
-                        }
-                    }
-                } else {
-                    primer.setBlockState(x, 0, z, Blocks.BEDROCK.getDefaultState());
-                }
+                primer.setBlockState(x, 0, z, Blocks.BEDROCK.getDefaultState());
             }
         }
     }
@@ -698,18 +689,16 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-
-        // 步骤6: 计算高度 - 兼容版优化
-        float[] riverValues = new float[256]; // 16x16
-
-        // 1. 并行计算河流强度 (使用简单位置计算)
+        // 1. 计算河流强度
         MutableBlockPos mpos = new MutableBlockPos();
-        IntStream.range(0, 256).parallel().forEach(k -> {
-            int x = worldX + (k / 16);
-            int z = worldZ + (k % 16);
-            mpos.setPos(x, 0, z);
-            riverValues[k] = TerrainBase.getRiverStrength(mpos, rtgWorld);
-        });
+        float[] riverValues = new float[16 * 16]; // 存储每个点的河流强度
+
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                mpos.setPos(worldX + i, 0, worldZ + j);
+                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(mpos, rtgWorld);
+            }
+        }
 
         // 2. 预计算非零权重生物群系索引
         List<int[]> nonZeroBiomes = new ArrayList<>(1024); // [l, biomeId, k]

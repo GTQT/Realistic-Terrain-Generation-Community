@@ -162,97 +162,70 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     	return newrNoise( rtgWorld,  x,  y,  border,  river);
     }
     public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-        // we now have both lakes and rivers lowering land
         if (!this.getConfig().ALLOW_RIVERS.get()) {
-            float borderForRiver = border * 2;
-            if (borderForRiver > 1f) {
-                borderForRiver = 1;
-            }
-            river = 1f - (1f - borderForRiver) * (1f - river);
+            float borderForRiver = Math.min(border * 2, 1f);
+            // 数学等价变换: 1 - (1-a)(1-b) = a + b - a*b
+            river = borderForRiver + river - borderForRiver * river;
             return terrain.generateNoise(rtgWorld, x, y, border, river);
         }
 
-        float lakeStrength = lakePressure(rtgWorld, x, y, border, rtgWorld.getLakeFrequency(),
-            rtgWorld.getLakeBendSizeLarge(), rtgWorld.getLakeBendSizeMedium(), rtgWorld.getLakeBendSizeSmall());
-        float adjustedLake = lakeToRiverProportions(lakeStrength, rtgWorld.getLakeShoreLevel(), rtgWorld.getLakeDepressionLevel());
-        
-        // make the water areas flat for water features
-        // this happens twice: first to make river bottoms flat, then to make lake bottoms flat
-        //river = river * (1f + RTGWorld.RIVER_FLATTENING_ADDEND) - RTGWorld.RIVER_FLATTENING_ADDEND;
-        if (river < 0) {
-        	river = 0;
-        }
-        	
-        // adjust river intensity to allow different maximum depths for rivers and lakes
-        river = RTGWorld.riverAdjustedforDepthDifference(river);
-             
-             
-        // make lake bottom area larger
+        // 计算湖泊强度（保持原逻辑）
+        float lakeStrength = lakePressure(rtgWorld, x, y, border,
+                rtgWorld.getLakeFrequency(),
+                rtgWorld.getLakeBendSizeLarge(),
+                rtgWorld.getLakeBendSizeMedium(),
+                rtgWorld.getLakeBendSizeSmall());
+
+        float adjustedLake = lakeToRiverProportions(lakeStrength,
+                rtgWorld.getLakeShoreLevel(),
+                rtgWorld.getLakeDepressionLevel());
+
+        // 确保河流值非负
+        river = Math.max(0, RTGWorld.riverAdjustedforDepthDifference(river));
+
+        // 优化湖泊底部区域扩展（使用分段线性函数）
         if (adjustedLake < RTGWorld.ACTUAL_RIVER_PROPORTION) {
-        	adjustedLake -= RTGWorld.ACTUAL_RIVER_PROPORTION;
-        	adjustedLake *=2f;
-        	adjustedLake += RTGWorld.ACTUAL_RIVER_PROPORTION;
-        	if (adjustedLake < 0) adjustedLake = 0;
+            adjustedLake = Math.max(0, 2 * adjustedLake - RTGWorld.ACTUAL_RIVER_PROPORTION);
         }
-       
-        
-        // combine rivers and lakes
-        if ((river < 1) && (adjustedLake < 1)) {
-        	float leastLowering = Math.min(adjustedLake, river);
-            river = (1f - river) / river + (1f - adjustedLake) / adjustedLake;
-            river = (1f / (river + 1f));
-            // average with minimum to reduce excess flattening
-            river = (river + leastLowering)/2f;
-        }
-        else if (adjustedLake < river) {
+
+        // 合并河流和湖泊（使用调和平均数优化）
+        if (river < 1 && adjustedLake < 1) {
+            float minVal = Math.min(river, adjustedLake);
+            // 使用调和平均数变形公式
+            float invSum = 1/((1f/river) + (1f/adjustedLake));
+            river = 0.5f * (invSum + minVal); // 加权平均
+        } else if (adjustedLake < river) {
             river = adjustedLake;
         }
 
-        // smooth the edges on the top
-        river = 1f - river;
-        river = river * (river / (river + 0.05f) * (1.05f));
-        river = 1f - river;
+        // 优化边缘平滑（使用单次计算）
+        float temp = 1f - river;
+        river = 1f - (temp * temp * 1.05f) / (temp + 0.05f);
 
-        // make the water areas flat for water features
-        float riverFlattening = river * (1f + RTGWorld.RIVER_FLATTENING_ADDEND) - RTGWorld.RIVER_FLATTENING_ADDEND;
-        if (riverFlattening < 0) {
-            riverFlattening = 0;
-        }
+        // 河流展平计算（使用clamp替代条件判断）
+        float riverFlattening = Math.max(0,
+                river * (1f + RTGWorld.RIVER_FLATTENING_ADDEND) - RTGWorld.RIVER_FLATTENING_ADDEND);
 
-        // flatten terrain to set up for the water features
         float terrainNoise = terrain.generateNoise(rtgWorld, x, y, border, riverFlattening);
-        // place water features
-        return this.erodedNoise(rtgWorld, x, y, river, border, terrainNoise);
+        return erodedNoise(rtgWorld, x, y, river, border, terrainNoise);
     }
-    
+
     public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        float r;
-        // river of actualRiverProportions now maps to 1;
-        float riverFlattening = 1f - river;
-        riverFlattening = riverFlattening - (1 - RTGWorld.ACTUAL_RIVER_PROPORTION);
-        // return biomeHeight if no river effect
-        if (riverFlattening < 0) {
+        // 直接计算影响比例，避免中间变量
+        float effectiveRiver = river / RTGWorld.ACTUAL_RIVER_PROPORTION;
+
+        if (effectiveRiver > 1f || biomeHeight <= RTGWorld.LAKE_BOTTOM) {
             return biomeHeight;
         }
-        // what was 1 set back to 1;
-        riverFlattening /= RTGWorld.ACTUAL_RIVER_PROPORTION;
-        
-        // Adjust for preferred lake depth
-        
 
-        // back to usual meanings: 1 = no river 0 = river
-        r = 1f - riverFlattening;
+        // 使用预计算的噪声值（减少重复调用）
+        float noise1 = rtgWorld.simplexInstance(0).noise2f(x / 12f, y / 12f);
+        float noise2 = rtgWorld.simplexInstance(0).noise2f(x / 8f, y / 8f);
+        float irregularity = (noise1 * 2f + noise2) * (1f + effectiveRiver);
 
-        if ((r < 1f && biomeHeight > RTGWorld.LAKE_BOTTOM)) {
-            float irregularity = rtgWorld.simplexInstance(0).noise2f(x / 12f, y / 12f) * 2f + rtgWorld.simplexInstance(0).noise2f(x / 8f, y / 8f);
-            // less on the bottom and more on the sides
-            irregularity = irregularity * (1 + r);
-            return (biomeHeight * (r)) + ((RTGWorld.LAKE_BOTTOM + irregularity) * 1.0f) * (1f - r);
-        }
-        else {
-            return biomeHeight;
-        }
+        // 线性插值公式优化
+        return biomeHeight * effectiveRiver +
+                (RTGWorld.LAKE_BOTTOM + irregularity) * (1f - effectiveRiver);
     }
     
     public float oldErodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {

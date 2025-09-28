@@ -14,8 +14,12 @@ import rtg.RTG;
 import rtg.api.RTGAPI;
 import rtg.api.util.Logger;
 import rtg.api.world.RTGWorld;
+import rtg.compat.ModCompat;
+import rtg.world.biome.BiomeProviderBOP;
 import rtg.world.biome.BiomeProviderRTG;
 import rtg.world.gen.ChunkGeneratorRTG;
+
+import static net.minecraftforge.fml.common.Loader.isModLoaded;
 
 
 public final class WorldTypeRTG extends WorldType {
@@ -43,8 +47,9 @@ public final class WorldTypeRTG extends WorldType {
         if (!world.isRemote) {
             final DimensionType type = world.provider.getDimensionType();
             if (RTGAPI.isAllowedDimensionType(type)) {
-                Logger.debug("Allowed DimensionType detected (ID:{}, Type:{}, Suffix:{}).. returning BiomeProviderRTG", type.getId(), type, type.getSuffix());
-                return new BiomeProviderRTG(world);
+                Logger.debug("Allowed DimensionType detected (ID:{}, Type:{}, Suffix:{}).. returning BiomeProviderBOP", type.getId(), type, type.getSuffix());
+                if (ModCompat.Mods.biomesoplenty.isLoaded())return new BiomeProviderBOP(world);
+                else return new BiomeProviderRTG(RTGWorld.getInstance(world));
             } else {
                 Logger.debug("DimensionType not in whitelist (ID:{}, Type:{}, Suffix:{}).. returning BiomeProvider", type.getId(), type, type.getSuffix());
             }

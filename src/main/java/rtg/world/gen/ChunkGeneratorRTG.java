@@ -41,7 +41,6 @@ import rtg.world.gen.structure.WoodlandMansionRTG;
 
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.stream.IntStream;
 
 public class ChunkGeneratorRTG implements IChunkGenerator {
 

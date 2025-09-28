@@ -10,6 +10,7 @@ warning.rtgStartup6=此消息将只显示一次。
 # GUI Customize World Screen
 #-----------------------------
 gui.createWorld.worldtypename=RTGC - 全新一代真实世界生成
+gui.createWorld.worldtypename=RTGC - 全新一代真实世界生成
 gui.createWorld.worldtype.line1=使用真实世界生成的自定义世界类型。
 gui.createWorld.worldtype.line2=如果你想使用RTG世界类型，请选择
 gui.createWorld.worldtype.line3=§9世界类型: %s§r 为 §更多的世界选项§r.

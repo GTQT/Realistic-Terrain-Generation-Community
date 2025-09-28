@@ -6,19 +6,16 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.DimensionType;
-import net.minecraft.world.WorldType;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.gen.layer.GenLayer;
 import net.minecraft.world.gen.layer.GenLayerRiverMix;
 import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.fml.common.Loader;
 import org.apache.logging.log4j.Level;
-import rtg.RTG;
 import rtg.api.util.Logger;
 import rtg.api.util.UtilityClass;
 import rtg.api.util.storage.SparseList;
 import rtg.api.world.biome.IRealisticBiome;
-import rtg.world.WorldTypeRTG;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -61,10 +58,6 @@ public final class RTGAPI {
         return biomeConfigPath;
     }
 
-    public static boolean checkWorldType(WorldType worldType) {
-        return WorldTypeRTG.getInstance().equals(worldType);
-    }
-
     public static void addAllowedDimensionType(DimensionType dimType) {
         ALLOWED_DIMENSION_TYPES.add(dimType);
     }
@@ -105,7 +98,7 @@ public final class RTGAPI {
                 RTG_BIOMES.set(Biome.getIdForBiome(baseBiome), new AbstractMap.SimpleEntry<>(baseBiome, biome));
             }
         }
-    }   
+    }
 
     public static void initPatchBiome(Biome biome) {
         IRealisticBiome rtgBiome = getRTGBiome(biome);

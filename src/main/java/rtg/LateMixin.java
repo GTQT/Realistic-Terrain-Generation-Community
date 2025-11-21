@@ -1,5 +1,6 @@
 package rtg;
 
+import net.minecraftforge.fml.common.Loader;
 import rtg.compat.ModCompat;
 import zone.rong.mixinbooter.ILateMixinLoader;
 
@@ -15,7 +16,7 @@ public class LateMixin implements ILateMixinLoader {
     @Override
     public boolean shouldMixinConfigQueue(String mixinConfig) {
         if ("mixins.rtg_late.json".equals(mixinConfig)) {
-            return ModCompat.Mods.biomesoplenty.isLoaded();
+            return Loader.isModLoaded("biomesoplenty");
         }
         return true;
     }

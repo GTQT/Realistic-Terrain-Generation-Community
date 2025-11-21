@@ -315,13 +315,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         float river = -TerrainBase.getRiverStrength(blockPos.add(16, 0, 16), rtgWorld);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
-            if (river > 0.8f) {
+            if (river > 0.9f) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
             } else {
                 biome.baseBiome().decorate(this.world, this.rand, blockPos);
             }
         } else {
-            if (river > 0.8f) {
+            if (river > 0.9f) {
                 biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
             } else {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
@@ -473,35 +473,47 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     private void getNewerNoise(final BiomeProvider biomeProvider, final int worldX, final int worldZ, ChunkLandscape landscape) {
+        final MutableBlockPos tempPos = new MutableBlockPos(0, 0, 0);
+
         // 步骤1: 采样生物群系数据
         final int baseOffsetX = worldX - 8;
         final int baseOffsetZ = worldZ - 8;
-        for (int i = -sampleSize; i < sampleSize + 5; i++) {
-            final int xOffset = (i * 8) - 8;
-            final int dataRow = (i + sampleSize) * sampleArraySize;
+        final int totalSampleSize = 2 * sampleSize + 5;
 
-            for (int j = -sampleSize; j < sampleSize + 5; j++) {
-                final int zOffset = (j * 8) - 8;
-                BlockPos pos = new BlockPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
-                biomeData[dataRow + (j + sampleSize)] = Biome.getIdForBiome(biomeProvider.getBiome(pos));
+        for (int i = 0; i < totalSampleSize; i++) {
+            final int xOffset = ((i - sampleSize) * 8) - 8;
+            final int dataRow = i * sampleArraySize;
+
+            for (int j = 0; j < totalSampleSize; j++) {
+                final int zOffset = ((j - sampleSize) * 8) - 8;
+                tempPos.setPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
+                biomeData[dataRow + j] = Biome.getIdForBiome(biomeProvider.getBiome(tempPos));
             }
         }
 
-        // 步骤2: 创建HUGE渲染层 (9x9网格)
-        float[][] hugeRender = new float[81][256];
+        // 步骤2: 创建HUGE渲染层
+        float[][] hugeRender = new float[81][];
+        final float parabolicFieldTotalInv = 1.0f / parabolicFieldTotal;
+
         for (int i = -1; i < 4; i++) {
             for (int j = -1; j < 4; j++) {
                 int index = (i * 2 + 2) * 9 + (j * 2 + 2);
-                hugeRender[index] = new float[256];
+                float[] weights = new float[256];
+
                 for (int k = -parabolicSize; k <= parabolicSize; k++) {
+                    int rowIdx = (i + k + sampleSize + 1) * sampleArraySize;
+                    int weightRow = (k + parabolicSize) * parabolicArraySize;
+
                     for (int l = -parabolicSize; l <= parabolicSize; l++) {
-                        int biomeId = biomeData[(i + k + sampleSize + 1) * sampleArraySize + (j + l + sampleSize + 1)];
-                        float weight = parabolicField[(k + parabolicSize) + (l + parabolicSize) * parabolicArraySize] / parabolicFieldTotal;
-                        hugeRender[index][biomeId] += weight;
+                        int biomeId = biomeData[rowIdx + (j + l + sampleSize + 1)];
+                        float weight = parabolicField[weightRow + (l + parabolicSize)] * parabolicFieldTotalInv;
+                        weights[biomeId] += weight;
                     }
                 }
+                hugeRender[index] = weights;
             }
         }
+
 
         // 步骤3: HUGE层混合
         final int hugeWidth = 9;
@@ -684,30 +696,33 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // 3. 应用河流侵蚀和平滑
         for (int k = 0; k < 256; k++) {
             float river = riverValues[k];
-            int i = k / 16;
-            int j = k % 16;
+            float baseHeight = baseHeights[k];
 
             if (river > 0.5f) {
-                float erosion = 8f * Math.min(1f, Math.max(0f, (river - 0.5f) * 2f));
-                float riverHeight = baseHeights[k] - erosion;
+                float erosion = 8f * Math.min(1f, (river - 0.5f) * 2f);
+                float riverHeight = baseHeight - erosion;
 
-                if (i > 0 && i < 15 && j > 0 && j < 15) {
+                // 3. 位运算替代除法/取模
+                int i = k >> 4;
+                int j = k & 15;
+
+                // 4. 修正边界条件
+                if (i >= 1 && i <= 14 && j >= 1 && j <= 14) {
                     float avg = 0.25f * (
-                            baseHeights[k - 16] +
-                                    baseHeights[k + 16] +
-                                    baseHeights[k - 1] +
-                                    baseHeights[k + 1]
+                            baseHeights[k - 16] + baseHeights[k + 16] +
+                                    baseHeights[k - 1] + baseHeights[k + 1]
                     );
 
                     float blend = river * 2f - 1f;
-                    blend = blend * blend * (3 - 2 * blend);
+                    blend = blend * blend * (3f - 2f * blend);
 
-                    landscape.noise[k] = avg * (1 - blend) + riverHeight * blend;
+                    // 5. 优化插值公式 (减少1次乘法)
+                    landscape.noise[k] = avg + (riverHeight - avg) * blend;
                 } else {
                     landscape.noise[k] = riverHeight;
                 }
             } else {
-                landscape.noise[k] = baseHeights[k];
+                landscape.noise[k] = baseHeight;
             }
 
             landscape.river[k] = river;

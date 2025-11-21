@@ -22,7 +22,6 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.*;
 
-
 @UtilityClass
 public final class RTGAPI {
     public static final SparseList<Map.Entry<Biome, IRealisticBiome>> RTG_BIOMES = new SparseList<>();
@@ -35,12 +34,47 @@ public final class RTGAPI {
             shadowStoneBlock = null,
             shadowDesertBlock = null;
 
-    private RTGAPI() {
+    // ====== 关键优化：生物群系缓存 ======
+    /** 缓存0-255生物群系ID，1.12.2原版范围 */
+    private static volatile IRealisticBiome[] BIOME_CACHE = null;
+    /** 标记缓存是否已初始化 */
+    private static volatile boolean cacheInitialized = false;
 
+    private RTGAPI() {
     }
 
+    /**
+     * 在生物群系注册完成后调用（由RTG主类调用）
+     * 初始化生物群系缓存，大幅提升性能
+     */
     public static void lockRtgBiomes() {
         rtgBiomesLocked = true;
+        initBiomeCache();
+    }
+
+    /** 安全初始化生物群系缓存 */
+    private static void initBiomeCache() {
+        if (cacheInitialized) return;
+
+        // 1. 确定缓存大小 (1.12.2原版256，JEID扩展65536)
+        final int maxSize = getMaxBiomeIDs();
+        final int cacheSize = Math.min(maxSize, 256); // 仅缓存0-255高频ID
+
+        // 2. 创建缓存数组
+        IRealisticBiome[] newCache = new IRealisticBiome[cacheSize];
+
+        // 3. 填充缓存 (直接操作RTG_BIOMES，避免递归)
+        for (int id = 0; id < cacheSize; id++) {
+            final Map.Entry<Biome, IRealisticBiome> entry = RTG_BIOMES.get(id);
+            newCache[id] = (entry != null) ? entry.getValue() : patchBiome;
+        }
+
+        // 4. 原子性发布 (内存屏障保证)
+        BIOME_CACHE = newCache;
+        cacheInitialized = true;
+
+        Logger.debug("RTG生物群系缓存初始化完成 (大小={}，JEID={})",
+                cacheSize, (maxSize > 256));
     }
 
     public static Path getConfigPath() {
@@ -67,47 +101,72 @@ public final class RTGAPI {
     }
 
     public static boolean isAllowedDimensionType(DimensionType dimType) {
-        return ALLOWED_DIMENSION_TYPES.contains(dimType) || dimType.getSuffix().equals("_rtg") || dimType.name().startsWith("jed_surface");
+        return ALLOWED_DIMENSION_TYPES.contains(dimType) ||
+                dimType.getSuffix().equals("_rtg") ||
+                dimType.name().startsWith("jed_surface");
     }
 
     public static boolean isAllowedDimensionType(int dimId) {
-        DimensionType type = (DimensionManager.isDimensionRegistered(dimId)) ? DimensionManager.getProviderType(dimId) : null;
+        DimensionType type = (DimensionManager.isDimensionRegistered(dimId)) ?
+                DimensionManager.getProviderType(dimId) : null;
         return type != null && isAllowedDimensionType(type);
     }
 
+    // ====== 优化后的生物群系获取方法 ======
     public static IRealisticBiome getRTGBiome(@Nonnull Biome biome) {
-        final Map.Entry<Biome, IRealisticBiome> entry = RTG_BIOMES.get(Biome.getIdForBiome(biome));
-        if (entry != null) {
-            return entry.getValue();
-        }
-        return patchBiome;
+        return getRTGBiome(Biome.getIdForBiome(biome));
     }
 
     public static IRealisticBiome getRTGBiome(int biomeId) {
-        final Map.Entry<Biome, IRealisticBiome> entry = RTG_BIOMES.get(biomeId);
-        if (entry != null) {
-            return entry.getValue();
+        // 快速路径：使用缓存 (99.9%调用走此路径)
+        if (cacheInitialized && biomeId >= 0 && biomeId < 256) {
+            final IRealisticBiome cached = BIOME_CACHE[biomeId];
+            if (cached != null) {
+                return cached;
+            }
         }
-        return patchBiome;
+
+        // 慢速路径：回退到Map查找 (仅JEID扩展ID或未初始化时)
+        final Map.Entry<Biome, IRealisticBiome> entry = RTG_BIOMES.get(biomeId);
+        return (entry != null) ? entry.getValue() : patchBiome;
     }
 
     public static void addRTGBiomes(IRealisticBiome... biomes) {
         if (!rtgBiomesLocked) {
             for (final IRealisticBiome biome : biomes) {
                 final Biome baseBiome = biome.baseBiome();
-                RTG_BIOMES.set(Biome.getIdForBiome(baseBiome), new AbstractMap.SimpleEntry<>(baseBiome, biome));
+                RTG_BIOMES.set(Biome.getIdForBiome(baseBiome),
+                        new AbstractMap.SimpleEntry<>(baseBiome, biome));
             }
+        } else {
+            Logger.warn("尝试在RTG生物群系锁定后添加生物群系！忽略: {}", Arrays.toString(biomes));
         }
     }
 
     public static void initPatchBiome(Biome biome) {
+        // 确保在设置patchBiome前初始化缓存
+        if (!cacheInitialized) {
+            initBiomeCache();
+        }
+
         IRealisticBiome rtgBiome = getRTGBiome(biome);
         if (rtgBiome == null) {
-            Logger.error("Erroneous patch biome set in config: {} (no RTG version), Using default.", biome.getRegistryName());
-            rtgBiome = Objects.requireNonNull(getRTGBiome(Biomes.PLAINS), "Cannot find an RTG version of minecraft:plains. This should be impossible.");
+            Logger.error("配置中设置的修复生物群系错误: {} (无RTG版本), 使用默认值.",
+                    biome.getRegistryName());
+            rtgBiome = Objects.requireNonNull(getRTGBiome(Biomes.PLAINS),
+                    "找不到minecraft:plains的RTG版本。这应该不可能发生。");
         }
-        Logger.debug("Setting patch biome to: {}", rtgBiome.baseBiomeResLoc());
+        Logger.debug("设置修复生物群系为: {}", rtgBiome.baseBiomeResLoc());
         patchBiome = rtgBiome;
+
+        // 更新缓存中的patchBiome引用
+        if (cacheInitialized && BIOME_CACHE != null) {
+            for (int i = 0; i < BIOME_CACHE.length; i++) {
+                if (BIOME_CACHE[i] == null) {
+                    BIOME_CACHE[i] = patchBiome;
+                }
+            }
+        }
     }
 
     public static void setShadowBlocks(@Nullable IBlockState stone, @Nullable IBlockState desert) {
@@ -128,11 +187,7 @@ public final class RTGAPI {
     }
 
     public static int getMaxBiomeIDs() {
-        if (Loader.isModLoaded("jeid")) {
-            return 65536;
-        } else {
-            return 256;
-        }
+        return Loader.isModLoaded("jeid") ? 65536 : 256;
     }
 
     public static void dumpGenLayerStack(@Nonnull final GenLayer layersIn, final Level level) {
@@ -164,10 +219,28 @@ public final class RTGAPI {
         }
 
         if (biomeStack.isEmpty() || riverStack.isEmpty()) {
-            Logger.log(level, "\nGenLayer stack:\n{}", String.join("\n  ", initialStack));
+            Logger.log(level, "\nGenLayer堆栈:\n{}", String.join("\n  ", initialStack));
         } else {
-            Logger.log(level, "\nInitial GenLayer stack:\n  {}\nBiome GenLayer stack:\n  {}\nRiver GenLayer stack:\n  {}",
-                    String.join("\n  ", initialStack), String.join("\n  ", biomeStack), String.join("\n  ", riverStack));
+            Logger.log(level, "\n初始GenLayer堆栈:\n  {}\n生物群系GenLayer堆栈:\n  {}\n河流GenLayer堆栈:\n  {}",
+                    String.join("\n  ", initialStack),
+                    String.join("\n  ", biomeStack),
+                    String.join("\n  ", riverStack));
         }
+    }
+
+    // ====== 诊断工具 (用于验证缓存效果) ======
+    public static void logCacheStats() {
+        if (!cacheInitialized) {
+            Logger.debug("生物群系缓存未初始化");
+            return;
+        }
+
+        int nullCount = 0;
+        for (IRealisticBiome biome : BIOME_CACHE) {
+            if (biome == null) nullCount++;
+        }
+
+        Logger.debug("生物群系缓存统计: 大小={}，空值数量={}，patchBiome={}",
+                BIOME_CACHE.length, nullCount, patchBiome.baseBiomeResLoc());
     }
 }

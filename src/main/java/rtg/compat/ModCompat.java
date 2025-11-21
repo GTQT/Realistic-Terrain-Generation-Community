@@ -239,7 +239,7 @@ public class ModCompat {
         abyssalcraft,
         auxbiomes,
         betteragriculture,
-        biomesoplenty,
+        biomesoplenty("biomesoplenty"),
         byg("biomesyougo"),
         bionisation3,
         buildcraftenergy,

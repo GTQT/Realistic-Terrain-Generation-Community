@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static net.minecraft.util.math.MathHelper.getInt;
+
 @SuppressWarnings("WeakerAccess")
 @Mod.EventBusSubscriber(modid = RTG.MODID)
 public final class RTGConfig {
@@ -502,6 +504,10 @@ public final class RTGConfig {
                     .map(cat -> new ConfigElement(RTGConfig.config.getCategory(cat)))
                     .collect(Collectors.toList());
         }
+    }
+
+    public static int landscapeCacheSize() {
+        return getInt("PERFORMANCE.landscape_cache_size", 128);
     }
 
     @SuppressWarnings("unused")

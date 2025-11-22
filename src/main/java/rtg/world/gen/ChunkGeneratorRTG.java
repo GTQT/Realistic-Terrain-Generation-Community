@@ -676,18 +676,16 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
                 for (int biomeId = 0; biomeId < 256; biomeId++) {
                     float weight = smallRender[l][biomeId];
-                    if (weight > 0) {
-                        IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
-                        if (biome != null) {
-                            totalHeight += biome.rNoise(
-                                    rtgWorld,
-                                    x,
-                                    z,
-                                    weight,
-                                    riverValues[k] + 1f
-                            ) * weight;
-                        }
-                    }
+                    if (weight <= 0) continue;
+                    IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
+                    if (biome == null) continue;
+                    totalHeight += biome.rNoise(
+                            rtgWorld,
+                            x,
+                            z,
+                            weight,
+                            riverValues[k] + 1f
+                    ) * weight;
                 }
                 baseHeights[k] = totalHeight;
             }

@@ -105,7 +105,7 @@ public class TreeRTGBetulaNigra extends TreeRTG {
         // make the crown trunk
         for (int crownLocation = 0 ; crownLocation < crownSize;crownLocation++) {
         	if (!this.placeTrunkBlock(world, pos.up(crownLocation+trunkSize), this.generateFlag,lightTracker)) {
-        		Logger.info("aborting Tree at {}" , pos);
+        		//Logger.info("aborting Tree at {}" , pos);
         		return false;
         	};
         }

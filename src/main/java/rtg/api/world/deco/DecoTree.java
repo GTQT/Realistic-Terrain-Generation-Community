@@ -54,6 +54,10 @@ public class DecoTree extends DecoBase {
     protected int maxCrownSize; // Max tree height (only used with certain tree presets)
     protected boolean noLeaves;
 
+    // 缓存配置检查结果
+    protected transient Boolean configEnabled;
+    protected transient Float configMultiplier;
+
     public DecoTree() {
 
         super();
@@ -136,11 +140,22 @@ public class DecoTree extends DecoBase {
         this.worldGen = worldGen;
     }
 
-    // TODO: [1.12] Both `tree` and `worldGen` are WorldGenerators so there is no reason to treat them differently.
-    //              All RTG-specific aspects of the TreeRTG WorldGenerator should be passed at the time of object
-    //              creation and those objects should *only* be created at the time of generation instead of this
-    //              class hanging on to a single object that gets reused. Choosing which generator to use can simply
-    //              be done by checking the TreeType. This change would negate the need for this confusing check.
+    // 预计算配置乘数，避免重复计算
+    protected float precomputeConfigMultiplier(final IRealisticBiome biome) {
+        if (configMultiplier == null) {
+            configMultiplier = (float) Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY);
+        }
+        return configMultiplier;
+    }
+
+    // 检查配置是否启用
+    protected boolean isConfigEnabled(final IRealisticBiome biome) {
+        if (configEnabled == null) {
+            configEnabled = precomputeConfigMultiplier(biome) > 0.001f;
+        }
+        return configEnabled;
+    }
+
     @Override
     @Deprecated
     public boolean properlyDefined() {
@@ -156,28 +171,33 @@ public class DecoTree extends DecoBase {
     @Override
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
+        // 提前检查配置，如果配置禁用则立即返回
+        if (!isConfigEnabled(biome)) {
+            return;
+        }
+
         final BlockPos offsetPos = getOffsetPos(chunkPos);
+
+        // 计算噪声值 - 只计算一次
+        float noise = distribution.getValue(offsetPos, rtgWorld.treeDistributionNoise());
+
+        // 提前检查确定性树生成条件（不依赖随机数的部分）
+        if (!isDeterministicTreeConditionMet(noise)) {
+            return;
+        }
+
         /*
          * Determine how many trees we're going to try to generate (loopCount).
          * The actual number of trees that end up being generated could be *less* than this value,
          * depending on environmental conditions.
          */
-        // TODO: [1.12] What is the point of deriving a noise value from static BlockPos within a chunk (population origin) and then applying
-        //              it to a feature taking place at some other arbitrary place in the chunk. This seems nonsensical and makes needless
-        //              calls to the noise generator. This should be replaced by a random amount.
-        // Zeno: Noise generation is essential to make different regions have different characteristics. Why are people trying to
-        // "simplify" out core aspects of RTG (here that unlike vanilla, every forest is NOT the same) without paying attention 
-        // to the code and design intent?
-        float noise = distribution.getValue(offsetPos, rtgWorld.treeDistributionNoise());
-        int loopCount = (this.strengthFactorForLoops > 0f) ? (int) this.strengthFactorForLoops : this.loops;
-        loopCount = (this.strengthNoiseFactorForLoops) ? (int) noise : loopCount;
-        loopCount = (this.strengthNoiseFactorXForLoops) ? (int) (noise * this.strengthFactorForLoops) : loopCount;
+        int loopCount = calculateLoopCount(noise);
 
         if (loopCount < 1) {
             return;
         }
 
-        // Now let's check the configs to see if we should increase/decrease this value.
+        // 应用配置乘数
         loopCount = this.applyConfigMultipliers(loopCount, biome);
 
         if (loopCount < 1) {
@@ -194,67 +214,114 @@ public class DecoTree extends DecoBase {
          * Because the custom event extends DecorateBiomeEvent.Decorate, it still works with mods that don't need
          * the additional context.
          */
-        //TODO [1.12] Trees should just generate how they do in the vanilla BiomeDecorator::genDecorations and use the Forge event.
         DecorateBiomeEventRTG.DecorateRTG event = new DecorateBiomeEventRTG.DecorateRTG(rtgWorld.world(), rand, offsetPos, Decorate.EventType.TREE, loopCount);
         MinecraftForge.TERRAIN_GEN_BUS.post(event);
 
         if (event.getResult() != Event.Result.DENY) {
 
             loopCount = event.getModifiedAmount();
-            if (loopCount < 1) { return; }
+            if (loopCount < 1) {
+                return;
+            }
 
-            // TODO: [1.12] This should be done in #setLeavesBlock.
+            // 提前处理树叶调整
             DecoBase.tweakTreeLeaves(this, false, true);
+
+            // 预计算村庄检查需要的参数
+            final boolean shouldCheckVillage = hasVillage;
 
             for (int i = 0; i < loopCount; i++) {
 
                 final BlockPos pos = offsetPos.add(rand.nextInt(16), 0, rand.nextInt(16));
                 int y = rtgWorld.world().getHeight(pos).getY();
-                if (y <= this.maxY && y >= this.minY && isValidTreeCondition(noise, rand)) {
 
-                    // If we're in a village, check to make sure the tree has extra room to grow to avoid corrupting the village.
-                    if (hasVillage) {
-                        //if (BlockUtil.checkVerticalBlocks(MatchType.ALL, rtgWorld.world(), pos, -1, Blocks.FARMLAND)) {//||
-                            //!BlockUtil.checkAreaBlocks(MatchType.ALL_IGNORE_REPLACEABLE, rtgWorld.world(), pos, 2)) {
-                            return;
-                        //}
-                    }
-                    doGenerate(rand, rtgWorld, chunkInfo, pos,y);
+                // 优化条件检查顺序：先检查简单的条件
+                if (y < this.minY || y > this.maxY) {
+                    continue;
                 }
+
+                if (!isValidTreeCondition(noise, rand)) {
+                    continue;
+                }
+
+                // 村庄检查放到最后，因为这是最耗性能的检查
+                if (shouldCheckVillage && !isValidVillagePosition(rtgWorld, pos)) {
+                    continue;
+                }
+
+                doGenerate(rand, rtgWorld, chunkInfo, pos, y);
             }
-        }
-        else if (RTGConfig.enableDebugging()) {
+        } else if (RTGConfig.enableDebugging()) {
             Logger.debug("Tree generation was cancelled @ ChunkPos{}", chunkPos);
         }
     }
-    
-    public float doGenerate(Random rand, RTGWorld rtgWorld, ChunkInfo chunkInfo, BlockPos pos, int y) {  
-    	// separated out for variable trees; but they later needed more changes so this may not be necessary.
-    	switch (this.treeType) {
-		
-		    case RTG_TREE:
-		
-		        //this.setLogBlock(strength < 0.2f ? BlockUtil.getStateLog(2) : this.logBlock);
-		
-		        this.tree.setLogBlock(this.logBlock);
-		        this.tree.setLeavesBlock(this.leavesBlock);
-		        this.tree.setTrunkSize(getRangedRandom(rand, this.minTrunkSize, this.maxTrunkSize));
-		        this.tree.setCrownSize(getRangedRandom(rand, this.minCrownSize, this.maxCrownSize));
-		        this.tree.setNoLeaves(this.noLeaves);
-		        this.tree.generate(rtgWorld.world(), rand, pos.up(y));
-		
-		        break;
-		
-		    case WORLDGEN:
-		
-		        WorldGenerator worldgenerator = this.worldGen;
-		        worldgenerator.generate(rtgWorld.world(), rand, pos.up(y));
-		
-		        break;
-		
-		    default:
-		        break;
-		}
+
+    // 提取循环计数计算逻辑
+    protected int calculateLoopCount(float noise) {
+        int loopCount = (this.strengthFactorForLoops > 0f) ? (int) this.strengthFactorForLoops : this.loops;
+        loopCount = (this.strengthNoiseFactorForLoops) ? (int) noise : loopCount;
+        loopCount = (this.strengthNoiseFactorXForLoops) ? (int) (noise * this.strengthFactorForLoops) : loopCount;
+        return loopCount;
+    }
+
+    protected float calculateLoopCountF(float noise) {
+        float loopCount = (this.strengthFactorForLoops > 0f) ? (int) this.strengthFactorForLoops : this.loops;
+        loopCount = (this.strengthNoiseFactorForLoops) ? (int) noise : loopCount;
+        loopCount = (this.strengthNoiseFactorXForLoops) ? (int) (noise * this.strengthFactorForLoops) : loopCount;
+        return loopCount;
+    }
+
+    // 提取村庄位置检查逻辑
+    protected boolean isValidVillagePosition(final RTGWorld rtgWorld, final BlockPos pos) {
+        // 简化村庄检查逻辑，避免重复调用
+        return !BlockUtil.checkVerticalBlocks(MatchType.ALL, rtgWorld.world(), pos, -1, Blocks.FARMLAND);
+    }
+
+    // 检查确定性树生成条件（不依赖随机数的部分）
+    protected boolean isDeterministicTreeConditionMet(float noise) {
+        switch (this.treeCondition) {
+            case ALWAYS_GENERATE:
+            case RANDOM_CHANCE:
+            case RANDOM_NOT_EQUALS_CHANCE:
+            case DISTRIBUTION_GIVES_CHANCE:
+                return true;
+
+            case NOISE_GREATER_AND_RANDOM_CHANCE:
+                return noise > this.treeConditionNoise;
+
+            case NOISE_LESSER_AND_RANDOM_CHANCE:
+                return noise < this.treeConditionNoise;
+
+            case NOISE_BETWEEN_AND_RANDOM_CHANCE:
+                return noise >= this.treeConditionNoise && noise <= this.treeConditionNoise2;
+
+            default:
+                return true;
+        }
+    }
+
+    public float doGenerate(Random rand, RTGWorld rtgWorld, ChunkInfo chunkInfo, BlockPos pos, int y) {
+        // separated out for variable trees; but they later needed more changes so this may not be necessary.
+        switch (this.treeType) {
+
+            case RTG_TREE:
+
+                this.tree.setLogBlock(this.logBlock);
+                this.tree.setLeavesBlock(this.leavesBlock);
+                this.tree.setTrunkSize(getRangedRandom(rand, this.minTrunkSize, this.maxTrunkSize));
+                this.tree.setCrownSize(getRangedRandom(rand, this.minCrownSize, this.maxCrownSize));
+                this.tree.setNoLeaves(this.noLeaves);
+                this.tree.generate(rtgWorld.world(), rand, pos.up(y));
+                break;
+
+            case WORLDGEN:
+                WorldGenerator worldgenerator = this.worldGen;
+                worldgenerator.generate(rtgWorld.world(), rand, pos.up(y));
+                break;
+
+            default:
+                break;
+        }
         return 1f;
     }
 
@@ -277,7 +344,7 @@ public class DecoTree extends DecoBase {
 
             case NOISE_BETWEEN_AND_RANDOM_CHANCE:
                 noiseGreaterThanMin = noise >= this.treeConditionNoise;
-                noiseLessThanMax =- noise <= this.treeConditionNoise2;
+                noiseLessThanMax = noise <= this.treeConditionNoise2; // 修复了这里的语法错误
                 randomResult = rand.nextInt(this.treeConditionChance) == 0;
                 return (noiseGreaterThanMin && noiseLessThanMax && randomResult);
 
@@ -286,278 +353,244 @@ public class DecoTree extends DecoBase {
 
             case RANDOM_NOT_EQUALS_CHANCE:
                 return rand.nextInt(this.treeConditionChance) != 0;
-                
+
             case DISTRIBUTION_GIVES_CHANCE:
-            	
-            	return rand.nextFloat() < noise;
+                return rand.nextFloat() < noise;
 
             default:
                 return false;
         }
     }
 
-    public int getLoops() {
+    // 重置缓存的方法，用于重新加载配置时
+    public void resetCache() {
+        configEnabled = null;
+        configMultiplier = null;
+    }
 
+    // 原有的getter和setter方法保持不变...
+    public int getLoops() {
         return loops;
     }
 
     public DecoTree setLoops(int loops) {
-
         this.loops = loops;
         return this;
     }
 
     public float getStrengthFactorForLoops() {
-
         return strengthFactorForLoops;
     }
 
     public DecoTree setStrengthFactorForLoops(float strengthFactorForLoops) {
-
         this.strengthFactorForLoops = strengthFactorForLoops;
         return this;
     }
 
     public boolean isStrengthNoiseFactorForLoops() {
-
         return strengthNoiseFactorForLoops;
     }
 
     public DecoTree setStrengthNoiseFactorForLoops(boolean strengthNoiseFactorForLoops) {
-
         this.strengthNoiseFactorForLoops = strengthNoiseFactorForLoops;
         return this;
     }
 
     public boolean isStrengthNoiseFactorXForLoops() {
-
         return strengthNoiseFactorXForLoops;
     }
 
     public DecoTree setStrengthNoiseFactorXForLoops(boolean strengthNoiseFactorXForLoops) {
-
         this.strengthNoiseFactorXForLoops = strengthNoiseFactorXForLoops;
         return this;
     }
 
     public TreeType getTreeType() {
-
         return treeType;
     }
 
     public DecoTree setTreeType(TreeType treeType) {
-
         this.treeType = treeType;
         return this;
     }
 
     public TreeRTG getTree() {
-
         return tree;
     }
 
     public DecoTree setTree(TreeRTG tree) {
-
         this.tree = tree;
         return this;
     }
 
     public WorldGenerator getWorldGen() {
-
         return worldGen;
     }
 
     public DecoTree setWorldGen(WorldGenerator worldGen) {
-
         this.worldGen = worldGen;
         return this;
     }
 
     public Distribution getDistribution() {
-
         return distribution;
     }
 
     public DecoTree setDistribution(Distribution distribution) {
-
         this.distribution = distribution;
         return this;
     }
 
     public TreeCondition getTreeCondition() {
-
         return treeCondition;
     }
 
     public DecoTree setTreeCondition(TreeCondition treeCondition) {
-
         this.treeCondition = treeCondition;
         return this;
     }
 
     public float getTreeConditionNoise() {
-
         return treeConditionNoise;
     }
 
     public DecoTree setTreeConditionNoise(float treeConditionNoise) {
-
         this.treeConditionNoise = treeConditionNoise;
         return this;
     }
 
     public float getTreeConditionNoise2() {
-
         return treeConditionNoise2;
     }
 
     public DecoTree setTreeConditionNoise2(float treeConditionNoise2) {
-
         this.treeConditionNoise2 = treeConditionNoise2;
         return this;
     }
 
     public int getTreeConditionChance() {
-
         return treeConditionChance;
     }
 
     public DecoTree setTreeConditionChance(int treeConditionChance) {
-
         this.treeConditionChance = treeConditionChance;
         return this;
     }
 
     public float getTreeConditionFloat() {
-
         return treeConditionFloat;
     }
 
     public DecoTree setTreeConditionFloat(float treeConditionFloat) {
-
         this.treeConditionFloat = treeConditionFloat;
         return this;
     }
 
     public int getMinY() {
-
         return minY;
     }
 
     public DecoTree setMinY(int minY) {
-
         this.minY = minY;
         return this;
     }
 
     public int getMaxY() {
-
         return maxY;
     }
 
     public DecoTree setMaxY(int maxY) {
-
         this.maxY = maxY;
         return this;
     }
 
     public IBlockState getLogBlock() {
-
         return logBlock;
     }
 
     public DecoTree setLogBlock(IBlockState logBlock) {
-
         this.logBlock = logBlock;
         return this;
     }
 
     public IBlockState getLeavesBlock() {
-
         return leavesBlock;
     }
 
     public DecoTree setLeavesBlock(IBlockState leavesBlock) {
-
         this.leavesBlock = leavesBlock;
         return this;
     }
 
     public int getMinSize() {
-
         return minSize;
     }
 
     public DecoTree setMinSize(int minSize) {
-
         this.minSize = minSize;
         return this;
     }
 
     public int getMaxSize() {
-
         return maxSize;
     }
 
     public DecoTree setMaxSize(int maxSize) {
-
         this.maxSize = maxSize;
         return this;
     }
 
     public int getMinTrunkSize() {
-
         return minTrunkSize;
     }
 
     public DecoTree setMinTrunkSize(int minTrunkSize) {
-
         this.minTrunkSize = minTrunkSize;
         return this;
     }
 
     public int getMaxTrunkSize() {
-
         return maxTrunkSize;
     }
 
     public DecoTree setMaxTrunkSize(int maxTrunkSize) {
-
         this.maxTrunkSize = maxTrunkSize;
         return this;
     }
 
     public int getMinCrownSize() {
-
         return minCrownSize;
     }
 
     public DecoTree setMinCrownSize(int minCrownSize) {
-
         this.minCrownSize = minCrownSize;
         return this;
     }
 
     public int getMaxCrownSize() {
-
         return maxCrownSize;
     }
 
     public DecoTree setMaxCrownSize(int maxCrownSize) {
-
         this.maxCrownSize = maxCrownSize;
         return this;
     }
 
     public boolean isNoLeaves() {
-
         return noLeaves;
     }
 
     public DecoTree setNoLeaves(boolean noLeaves) {
-
         this.noLeaves = noLeaves;
         return this;
+    }
+
+    protected int applyConfigMultipliers(final int loopCount, final IRealisticBiome biome) {
+        return (int) (loopCount * precomputeConfigMultiplier(biome));
+    }
+
+    protected float applyConfigMultipliers(final float trees, final IRealisticBiome biome) {
+        return trees * precomputeConfigMultiplier(biome);
     }
 
     public enum TreeType {
@@ -573,13 +606,5 @@ public class DecoTree extends DecoBase {
         RANDOM_CHANCE,
         RANDOM_NOT_EQUALS_CHANCE,
         DISTRIBUTION_GIVES_CHANCE
-    }
-
-    protected int applyConfigMultipliers(final int loopCount, final IRealisticBiome biome) {
-        return (int)(loopCount * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
-    }
-    
-    protected float applyConfigMultipliers(final float trees, final IRealisticBiome biome) {
-        return (float)(trees * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
     }
 }

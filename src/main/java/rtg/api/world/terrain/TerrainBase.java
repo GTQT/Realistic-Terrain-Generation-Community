@@ -158,11 +158,10 @@ public abstract class TerrainBase {
 
     public static float mountainCap(float m) {
         // heights can "blow through the ceiling" so pull more extreme values down a bit
-
-        if (m > 160) {
-            m = 160 + (m - 160) * .75f;
-            if (m > 180) {
-                m = 180 + (m - 180f) * .75f;
+        if (m > 180) {
+            m = 180 + (m - 180f) * 0.9f;
+            if (m > 220) {
+                m = 220 + (m - 220f) * .75f;
             }
         }
         return m;
@@ -310,7 +309,7 @@ public abstract class TerrainBase {
 
         float m = simplex0.noise2f(x * INV_230, y * INV_230) * mFactor * river;
         m *= m * 0.028571429f; // /35
-        m = m > 70f ? 70f + (m - 70f) * 0.4f : m; // /2.5
+        m = m > 90f ? 90f + (m - 90f) * 0.6f : m;
 
         float c = rtgWorld.simplexInstance(4).noise3f(x * INV_30, y * INV_30, 1f) * (m * 0.30f);
 
@@ -378,10 +377,10 @@ public abstract class TerrainBase {
 
         // the parameters can "blow through the ceiling" so pull more extreme values down a bit
         // this should allow a height parameter up to about 120
-        if (m > 90) {
-            m = 90f + (m - 90f) * .75f;
-            if (m > 110) {
-                m = 110f + (m - 110f) * .75f;
+        if (m > 120) {
+            m = 120f + (m - 120f) * 0.85f;
+            if (m > 160) {
+                m = 160f + (m - 160f) * 0.85f;
             }
         }
         return riverized(terrainHeight + h + m, river);

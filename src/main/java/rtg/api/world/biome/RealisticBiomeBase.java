@@ -12,6 +12,7 @@ import rtg.api.RTGAPI;
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.noise.ISimplexData2D;
 import rtg.api.util.noise.SimplexData2D;
+import rtg.api.util.noise.SimplexNoise;
 import rtg.api.util.noise.VoronoiResult;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.DecoBase;
@@ -30,6 +31,11 @@ import java.util.Objects;
 
 public abstract class RealisticBiomeBase implements IRealisticBiome {
 
+    private static final float INV_12 = 1f / 12f;
+    private static final float INV_8 = 1f / 8f;
+    private static final double INV_240 = 1.0 / 240.0;
+    private static final double INV_80 = 1.0 / 80.0;
+    private static final double INV_30 = 1.0 / 30.0;
     private final Biome baseBiome;
     private final ResourceLocation baseBiomeResLoc;
     private final int baseBiomeId;
@@ -39,12 +45,10 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     private final TerrainBase terrain;
     private final SurfaceBase surface;
     private final SurfaceBase surfaceRiver;
-
-    private Collection<DecoBase> decos;
+    private final Collection<DecoBase> decos;
     // TODO: [1.12] To be removed. All trees need to be a Deco and be added through #addDeco.
     @Deprecated
-    private Collection<TreeRTG> rtgTrees;
-
+    private final Collection<TreeRTG> rtgTrees;
 
     public RealisticBiomeBase(@Nonnull final Biome baseBiome) {
         this(baseBiome, RiverType.NORMAL, BeachType.NORMAL);
@@ -63,7 +67,7 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         ResourceLocation resloc = baseBiome.getRegistryName();
         if (resloc == null) {
             throw new IllegalStateException(String.format("Biome with ID: %s, of class: %s, does not have a registry name set.",
-                Biome.getIdForBiome(baseBiome), baseBiome.getClass().getName()));
+                    Biome.getIdForBiome(baseBiome), baseBiome.getClass().getName()));
         }
 
         this.baseBiome = baseBiome;
@@ -71,11 +75,11 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         this.baseBiomeId = Biome.getIdForBiome(baseBiome);
         this.riverType = riverType;
         this.beachType = beachType;
-        
+
         this.config = new BiomeConfig(getConfigFile());
-        initConfig(); 
-    	this.config.loadConfig();// Must be done before anything using configs.
-    	
+        initConfig();
+        this.config.loadConfig();// Must be done before anything using configs.
+
         this.terrain = initTerrain();
         this.surface = initSurface();
         this.surfaceRiver = new SurfaceRiverOasis(config);
@@ -126,12 +130,12 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         }
         return rbb;
     }
-    
+
     @Override
     public boolean allowVanillaTrees() {
         return true;
     }
-    
+
     @Override
     public void overrideDecorations() {
         //baseBiome().decorator.grassPerChunk = -999;
@@ -159,17 +163,22 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
 
     @Override
     public float rNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-    	return newrNoise( rtgWorld,  x,  y,  border,  river);
+        return newrNoise(rtgWorld, x, y, border, river);
     }
+
     public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        if (!this.getConfig().ALLOW_RIVERS.get()) {
-            float borderForRiver = Math.min(border * 2, 1f);
-            // 数学等价变换: 1 - (1-a)(1-b) = a + b - a*b
-            river = borderForRiver + river - borderForRiver * river;
+        // 预计算常用常量
+        final boolean allowRivers = this.getConfig().ALLOW_RIVERS.get();
+        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
+        final float riverFlatteningAddend = RTGWorld.RIVER_FLATTENING_ADDEND;
+
+        if (!allowRivers) {
+            float borderForRiver = Math.min(border * 2f, 1f);
+            river = 1f - (1f - borderForRiver) * (1f - river);
             return terrain.generateNoise(rtgWorld, x, y, border, river);
         }
 
-        // 计算湖泊强度（保持原逻辑）
+        // 预计算湖泊参数
         float lakeStrength = lakePressure(rtgWorld, x, y, border,
                 rtgWorld.getLakeFrequency(),
                 rtgWorld.getLakeBendSizeLarge(),
@@ -180,54 +189,70 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
                 rtgWorld.getLakeShoreLevel(),
                 rtgWorld.getLakeDepressionLevel());
 
-        // 确保河流值非负
-        river = Math.max(0, RTGWorld.riverAdjustedforDepthDifference(river));
+        // 河流调整 - 使用更简洁的数学
+        river = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(river));
 
-        // 优化湖泊底部区域扩展（使用分段线性函数）
-        if (adjustedLake < RTGWorld.ACTUAL_RIVER_PROPORTION) {
-            adjustedLake = Math.max(0, 2 * adjustedLake - RTGWorld.ACTUAL_RIVER_PROPORTION);
+        // 湖泊底部区域扩展 - 简化条件判断
+        if (adjustedLake < actualRiverProportion) {
+            adjustedLake = Math.max(0f, (adjustedLake - actualRiverProportion) * 2f + actualRiverProportion);
         }
 
-        // 合并河流和湖泊（使用调和平均数优化）
-        if (river < 1 && adjustedLake < 1) {
-            float minVal = Math.min(river, adjustedLake);
-            // 使用调和平均数变形公式
-            float invSum = 1/((1f/river) + (1f/adjustedLake));
-            river = 0.5f * (invSum + minVal); // 加权平均
-        } else if (adjustedLake < river) {
-            river = adjustedLake;
+        // 合并河流和湖泊 - 优化数学运算
+        float combinedRiver;
+        if (river < 1f && adjustedLake < 1f) {
+            float leastLowering = Math.min(adjustedLake, river);
+            float denominator = (1f - river) / river + (1f - adjustedLake) / adjustedLake;
+            combinedRiver = 1f / (denominator + 1f);
+            combinedRiver = (combinedRiver + leastLowering) * 0.5f; // 用乘法代替除法
+        } else {
+            combinedRiver = Math.min(adjustedLake, river);
         }
 
-        // 优化边缘平滑（使用单次计算）
-        float temp = 1f - river;
-        river = 1f - (temp * temp * 1.05f) / (temp + 0.05f);
+        // 平滑顶部边缘 - 减少重复计算
+        float invertedRiver = 1f - combinedRiver;
+        invertedRiver = invertedRiver * (invertedRiver / (invertedRiver + 0.05f) * 1.05f);
+        combinedRiver = 1f - invertedRiver;
 
-        // 河流展平计算（使用clamp替代条件判断）
-        float riverFlattening = Math.max(0,
-                river * (1f + RTGWorld.RIVER_FLATTENING_ADDEND) - RTGWorld.RIVER_FLATTENING_ADDEND);
+        // 水域平坦化
+        float riverFlattening = Math.max(0f, combinedRiver * (1f + riverFlatteningAddend) - riverFlatteningAddend);
 
+        // 生成地形噪声并应用侵蚀
         float terrainNoise = terrain.generateNoise(rtgWorld, x, y, border, riverFlattening);
-        return erodedNoise(rtgWorld, x, y, river, border, terrainNoise);
+        return erodedNoise(rtgWorld, x, y, combinedRiver, border, terrainNoise);
     }
 
     public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        // 直接计算影响比例，避免中间变量
-        float effectiveRiver = river / RTGWorld.ACTUAL_RIVER_PROPORTION;
+        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
+        final float lakeBottom = RTGWorld.LAKE_BOTTOM;
 
-        if (effectiveRiver > 1f || biomeHeight <= RTGWorld.LAKE_BOTTOM) {
+        // 早期返回检查
+        float riverFlattening = 1f - river;
+        riverFlattening -= (1f - actualRiverProportion);
+
+        if (riverFlattening < 0f || biomeHeight <= lakeBottom) {
             return biomeHeight;
         }
 
-        // 使用预计算的噪声值（减少重复调用）
-        float noise1 = rtgWorld.simplexInstance(0).noise2f(x / 12f, y / 12f);
-        float noise2 = rtgWorld.simplexInstance(0).noise2f(x / 8f, y / 8f);
-        float irregularity = (noise1 * 2f + noise2) * (1f + effectiveRiver);
+        // 标准化河流平坦化值
+        riverFlattening /= actualRiverProportion;
+        float r = 1f - riverFlattening;
 
-        // 线性插值公式优化
-        return biomeHeight * effectiveRiver +
-                (RTGWorld.LAKE_BOTTOM + irregularity) * (1f - effectiveRiver);
+        if (r < 1f) {
+            // 预计算噪声参数
+            SimplexNoise simplex = rtgWorld.simplexInstance(0);
+            float irregularity = simplex.noise2f(x * 0.083333f, y * 0.083333f) * 2f + // 1/12
+                    simplex.noise2f(x * 0.125f, y * 0.125f); // 1/8
+
+            // 优化插值计算
+            irregularity *= (1f + r);
+            float lakeBottomWithIrregularity = lakeBottom + irregularity;
+
+            return biomeHeight * r + lakeBottomWithIrregularity * (1f - r);
+        }
+
+        return biomeHeight;
     }
-    
+
     public float oldErodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
         float r;
         // river of actualRiverProportions now maps to 1;
@@ -244,56 +269,62 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         r = 1f - riverFlattening;
 
         if ((r < 1f && biomeHeight > 55f)) {
-            float irregularity = rtgWorld.simplexInstance(0).noise2f(x / 12f, y / 12f) * 2f + rtgWorld.simplexInstance(0).noise2f(x / 8f, y / 8f);
+            float irregularity = rtgWorld.simplexInstance(0).noise2f(x * INV_12, y * INV_12) * 2f + rtgWorld.simplexInstance(0).noise2f(x * INV_8, y * INV_8);
             // less on the bottom and more on the sides
             irregularity = irregularity * (1 + r);
-            return (biomeHeight * (r)) + ((55f + irregularity) * 1.0f) * (1f - r);
-        }
-        else {
+            return (biomeHeight * (r)) + ((55f + irregularity)) * (1f - r);
+        } else {
             return biomeHeight;
         }
     }
 
     @Override
-    public float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval, float largeBendSize, float mediumBendSize, float smallBendSize) {
+    public float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval,
+                              float largeBendSize, float mediumBendSize, float smallBendSize) {
 
         if (!this.getConfig().ALLOW_SCENIC_LAKES.get()) {
             return 1f;
         }
 
+        final double invLakeInterval = 1.0 / lakeInterval;
+
         double pX = x;
         double pY = y;
         ISimplexData2D jitterData = SimplexData2D.newDisk();
 
-        rtgWorld.simplexInstance(1).multiEval2D(x / 240.0d, y / 240.0d, jitterData);
+        // 使用预计算的倒数
+        rtgWorld.simplexInstance(1).multiEval2D(x * INV_240, y * INV_240, jitterData);
         pX += jitterData.getDeltaX() * largeBendSize;
         pY += jitterData.getDeltaY() * largeBendSize;
 
-        rtgWorld.simplexInstance(0).multiEval2D(x / 80.0d, y / 80.0d, jitterData);
+        rtgWorld.simplexInstance(0).multiEval2D(x * INV_80, y * INV_80, jitterData);
         pX += jitterData.getDeltaX() * mediumBendSize;
         pY += jitterData.getDeltaY() * mediumBendSize;
 
-        rtgWorld.simplexInstance(4).multiEval2D(x / 30.0d, y / 30.0d, jitterData);
+        rtgWorld.simplexInstance(4).multiEval2D(x * INV_30, y * INV_30, jitterData);
         pX += jitterData.getDeltaX() * smallBendSize;
         pY += jitterData.getDeltaY() * smallBendSize;
 
-        VoronoiResult lakeResults = rtgWorld.cellularInstance(0).eval2D(pX / lakeInterval, pY / lakeInterval);
-        return (float)(1.0d - lakeResults.interiorValue());
+        VoronoiResult lakeResults = rtgWorld.cellularInstance(0).eval2D(pX * invLakeInterval, pY * invLakeInterval);
+        return (float) (1.0d - lakeResults.interiorValue());
     }
 
     public float lakeToRiverProportions(float pressure, float shoreLevel, float topLevel) {
-        // adjusts the lake pressure to the river numbers. The lake shoreLevel is mapped
-        // to become equivalent to actualRiverProportion
+        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
+
         if (pressure > topLevel) {
-            return 1;
+            return 1f;
         }
+
         if (pressure < shoreLevel) {
-            return (pressure / shoreLevel) * RTGWorld.ACTUAL_RIVER_PROPORTION;
+            return (pressure / shoreLevel) * actualRiverProportion;
         }
-        // proportion between top and shore becomes proportion between 1 and actual river
-        float proportion = (pressure - shoreLevel) / (topLevel - shoreLevel);
-        return RTGWorld.ACTUAL_RIVER_PROPORTION + proportion * (1f - RTGWorld.ACTUAL_RIVER_PROPORTION);
-        //return (float)Math.pow((pressure-shoreLevel)/(topLevel-shoreLevel),1.0);
+
+        // 预计算分母倒数，用乘法代替除法
+        float invRange = 1f / (topLevel - shoreLevel);
+        float proportion = (pressure - shoreLevel) * invRange;
+
+        return actualRiverProportion + proportion * (1f - actualRiverProportion);
     }
 
     @Override
@@ -303,13 +334,17 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
 
     @Override
     public void rReplace(ChunkPrimer primer, int i, int j, int x, int y, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-        if (RTG.surfacesDisabled() || this.getConfig().DISABLE_RTG_SURFACES.get()) { return; }
+        if (RTG.surfacesDisabled() || this.getConfig().DISABLE_RTG_SURFACES.get()) {
+            return;
+        }
         float riverRegion = !this.getConfig().ALLOW_RIVERS.get() ? 0f : river;
         this.surface.paintTerrain(primer, i, j, x, y, depth, rtgWorld, noise, riverRegion, base);
     }
 
     protected void rReplaceWithRiver(ChunkPrimer primer, int i, int j, int x, int y, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-        if (RTG.surfacesDisabled() || this.getConfig().DISABLE_RTG_SURFACES.get()) { return; }
+        if (RTG.surfacesDisabled() || this.getConfig().DISABLE_RTG_SURFACES.get()) {
+            return;
+        }
         float riverRegion = !this.getConfig().ALLOW_RIVERS.get() ? 0f : river;
         this.surface.paintTerrain(primer, i, j, x, y, depth, rtgWorld, noise, riverRegion, base);
         if (RTGConfig.lushRiverbanksInDesert()) {
@@ -340,13 +375,14 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     private File getConfigFile() {
         final Mods mod = Objects.requireNonNull(Mods.get(baseBiomeResLoc().getNamespace()), "ModCompat.Mods does not have a value for the mod that added this biome.");
         return RTGAPI.getBiomeConfigPath()
-            .resolve(mod.getPrettyName())
-            .resolve(baseBiomeResLoc().getPath() + ".cfg")
-            .toFile();
+                .resolve(mod.getPrettyName())
+                .resolve(baseBiomeResLoc().getPath() + ".cfg")
+                .toFile();
     }
 
-    public void initConfig() {} // for any biome-specific tweaking of config defaults
-    
+    public void initConfig() {
+    } // for any biome-specific tweaking of config defaults
+
     protected BeachType determineBeachType() {
 
         if (baseBiome().getDefaultTemperature() <= 0.05f || BiomeDictionary.hasType(baseBiome(), BiomeDictionary.Type.SNOWY)) {
@@ -363,8 +399,8 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
 
     private boolean isTaigaBiome(Biome biome) {
         return BiomeDictionary.hasType(biome, BiomeDictionary.Type.COLD)
-            && BiomeDictionary.hasType(biome, BiomeDictionary.Type.CONIFEROUS)
-            && BiomeDictionary.hasType(biome, BiomeDictionary.Type.FOREST);
+                && BiomeDictionary.hasType(biome, BiomeDictionary.Type.CONIFEROUS)
+                && BiomeDictionary.hasType(biome, BiomeDictionary.Type.FOREST);
     }
 
     public enum BeachType {

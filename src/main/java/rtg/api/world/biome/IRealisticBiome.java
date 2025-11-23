@@ -1,14 +1,11 @@
 package rtg.api.world.biome;
 
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockLeaves;
-import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeDecorator;
 import net.minecraft.world.chunk.ChunkPrimer;
@@ -67,7 +64,7 @@ public interface IRealisticBiome {
     float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval, float largeBendSize, float mediumBendSize, float smallBendSize);
 
     void initDecos();
-    
+
     public boolean allowVanillaTrees();
 
     Collection<DecoBase> getDecos();
@@ -192,6 +189,7 @@ public interface IRealisticBiome {
             }
         }
     }
+
     /**
      * Some biomes have hard-coded decorations.
      * If true, RTG will call the biome decorator's decorate() method instead of the biome's decorate() method.

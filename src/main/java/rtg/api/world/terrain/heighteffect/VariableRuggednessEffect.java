@@ -12,6 +12,7 @@ import rtg.api.world.RTGWorld;
 public class VariableRuggednessEffect extends HeightEffect {
 
     public static float STANDARD_RUGGEDNESS_WAVELENGTH = 200f;
+    public static float INV_STANDARD_RUGGEDNESS_WAVELENGTH = 1f / STANDARD_RUGGEDNESS_WAVELENGTH;
     public static int STANDARD_RUGGEDNESS_OCTAVE = 1;
     // not going to bother to set up a creator shell to make sure everything is set
     // set defaults to absurd values to crash if they're not set

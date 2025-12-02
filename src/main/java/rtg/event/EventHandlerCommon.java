@@ -1,10 +1,7 @@
 package rtg.event;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 import net.minecraft.block.BlockSapling;
 import net.minecraft.block.BlockPlanks.EnumType;
@@ -24,13 +21,10 @@ import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 import rtg.RTGConfig;
-import rtg.api.RTGAPI;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.Direction;
 import rtg.api.util.Logger;
 import rtg.api.util.UtilityClass;
-import rtg.api.world.biome.IRealisticBiome;
-import rtg.api.world.deco.DecoBase;
 import rtg.api.world.deco.DecoVariableTree;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGCeibaPentandra;
@@ -38,6 +32,7 @@ import rtg.api.world.gen.feature.tree.rtg.TreeRTGRhizophoraMucronata;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGSalixMyrtilloides;
 import rtg.api.world.gen.feature.tree.rtg.RTGSaplingManager;
 import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
+import rtg.world.biome.BiomeProviderBOP;
 import rtg.world.biome.BiomeProviderRTG;
 
 
@@ -55,7 +50,7 @@ public final class EventHandlerCommon
     public static void onDecorateBiome(final DecorateBiomeEvent.Decorate event) {
 
         final World world = event.getWorld();
-        if (world.getBiomeProvider() instanceof BiomeProviderRTG) {
+        if (world.getBiomeProvider() instanceof BiomeProviderBOP || world.getBiomeProvider() instanceof BiomeProviderRTG) {
             final Decorate.EventType eventType = event.getType();
             if (eventType == Decorate.EventType.LAKE_WATER || eventType == Decorate.EventType.LAKE_LAVA) {
                 event.setResult(Event.Result.DENY);
@@ -93,8 +88,10 @@ public final class EventHandlerCommon
         
         //Logger.info("trying RTG trees", "");
 
-        // skip if RTG saplings are disabled or this world does not use BiomeProviderRTG
-        if (!RTGConfig.rtgTreesFromSaplings() || !(world.getBiomeProvider() instanceof BiomeProviderRTG)) {
+        // skip if RTG saplings are disabled or this world does not use BiomeProviderBOP/RTG
+        if (!RTGConfig.rtgTreesFromSaplings() ||
+            (!(world.getBiomeProvider() instanceof BiomeProviderBOP) &&
+             !(world.getBiomeProvider() instanceof BiomeProviderRTG))) {
             Logger.debug("[SaplingGrowTreeEvent] Aborting: RTG trees are disabled, or not an RTG dimension");
             return;
         }

@@ -36,7 +36,7 @@ public class RealisticBiomeVanillaDesertHills extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainVanillaDesertHills(10f, 80f, 68f, 200f);
+        return new TerrainVanillaDesertHills(15f, 150f, 68f, 250f);
     }
 
     @Override

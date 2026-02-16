@@ -46,7 +46,7 @@ public class RealisticBiomeBOPChaparral extends RealisticBiomeBase {
         private float peakyHillWavelength = 40f;
         private float peakyHillStrength = 40f;
         private float smoothHillWavelength = 60f;
-        private float smoothHillStrength = 30f;
+        private float smoothHillStrength = 40f;
         private float wavelength = 10f;// of jitter
         private float amplitude = 2f;// of jitter
 

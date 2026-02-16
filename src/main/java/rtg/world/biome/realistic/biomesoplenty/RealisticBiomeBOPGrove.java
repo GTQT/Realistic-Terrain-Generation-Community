@@ -89,7 +89,7 @@ public class RealisticBiomeBOPGrove extends RealisticBiomeBase {
 
         private float baseHeight = 64f;
         private float peakyHillWavelength = 40f;
-        private float peakyHillStrength = 5f;
+        private float peakyHillStrength = 10f;
         private float smoothHillWavelength = 20f;
         private float smoothHillStrength = 10f;
 

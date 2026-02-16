@@ -13,6 +13,7 @@ public class LateMixin implements ILateMixinLoader {
     public List<String> getMixinConfigs() {
         return Collections.singletonList("mixins.rtg_late.json");
     }
+
     @Override
     public boolean shouldMixinConfigQueue(String mixinConfig) {
         if ("mixins.rtg_late.json".equals(mixinConfig)) {

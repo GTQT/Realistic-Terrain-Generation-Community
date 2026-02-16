@@ -58,7 +58,7 @@ public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainBOPWoodland(10f, 25f, 72f, 120f);
+        return new TerrainBOPWoodland(10f, 65f, 72f, 120f);
     }
 
     @Override

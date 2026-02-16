@@ -167,7 +167,6 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     }
 
     public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        // 预计算常用常量
         final boolean allowRivers = this.getConfig().ALLOW_RIVERS.get();
         final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
         final float riverFlatteningAddend = RTGWorld.RIVER_FLATTENING_ADDEND;
@@ -178,7 +177,6 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
             return terrain.generateNoise(rtgWorld, x, y, border, river);
         }
 
-        // 预计算湖泊参数
         float lakeStrength = lakePressure(rtgWorld, x, y, border,
                 rtgWorld.getLakeFrequency(),
                 rtgWorld.getLakeBendSizeLarge(),
@@ -189,34 +187,28 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
                 rtgWorld.getLakeShoreLevel(),
                 rtgWorld.getLakeDepressionLevel());
 
-        // 河流调整 - 使用更简洁的数学
         river = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(river));
 
-        // 湖泊底部区域扩展 - 简化条件判断
         if (adjustedLake < actualRiverProportion) {
             adjustedLake = Math.max(0f, (adjustedLake - actualRiverProportion) * 2f + actualRiverProportion);
         }
 
-        // 合并河流和湖泊 - 优化数学运算
         float combinedRiver;
         if (river < 1f && adjustedLake < 1f) {
             float leastLowering = Math.min(adjustedLake, river);
             float denominator = (1f - river) / river + (1f - adjustedLake) / adjustedLake;
             combinedRiver = 1f / (denominator + 1f);
-            combinedRiver = (combinedRiver + leastLowering) * 0.5f; // 用乘法代替除法
+            combinedRiver = (combinedRiver + leastLowering) * 0.5f;
         } else {
             combinedRiver = Math.min(adjustedLake, river);
         }
 
-        // 平滑顶部边缘 - 减少重复计算
         float invertedRiver = 1f - combinedRiver;
         invertedRiver = invertedRiver * (invertedRiver / (invertedRiver + 0.05f) * 1.05f);
         combinedRiver = 1f - invertedRiver;
 
-        // 水域平坦化
         float riverFlattening = Math.max(0f, combinedRiver * (1f + riverFlatteningAddend) - riverFlatteningAddend);
 
-        // 生成地形噪声并应用侵蚀
         float terrainNoise = terrain.generateNoise(rtgWorld, x, y, border, riverFlattening);
         return erodedNoise(rtgWorld, x, y, combinedRiver, border, terrainNoise);
     }

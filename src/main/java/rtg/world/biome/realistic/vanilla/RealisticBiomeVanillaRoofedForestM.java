@@ -119,7 +119,7 @@ public class RealisticBiomeVanillaRoofedForestM extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainGrasslandMountains(x, y, rtgWorld, river, 4f, 50f, 68f);
+            return terrainGrasslandMountains(x, y, rtgWorld, river, 6f, 60f, 68f);
         }
     }
 

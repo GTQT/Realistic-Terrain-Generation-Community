@@ -35,7 +35,7 @@ public class RealisticBiomeBOPGlacier extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainBOPGlacier(230f, 40f, 68f);
+        return new TerrainBOPGlacier(230f, 60f, 68f);
     }
 
     @Override

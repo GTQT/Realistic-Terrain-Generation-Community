@@ -39,7 +39,7 @@ public class RealisticBiomeVanillaJungleHills extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainVanillaJungleHills(72f, 40f);
+        return new TerrainVanillaJungleHills(72f, 80f);
     }
 
     @Override
@@ -62,7 +62,7 @@ public class RealisticBiomeVanillaJungleHills extends RealisticBiomeBase {
 
     public static class TerrainVanillaJungleHills extends TerrainBase {
 
-        private float hillStrength = 40f;
+        private float hillStrength = 60f;
 
         public TerrainVanillaJungleHills(float bh, float hs) {
 

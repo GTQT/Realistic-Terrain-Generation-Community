@@ -15,7 +15,7 @@ public class EarlyMixin implements IEarlyMixinLoader, IFMLLoadingPlugin {
 
     @Override
     public List<String> getMixinConfigs() {
-        return Collections.singletonList("mixins.rtg_early.json");
+        return null;
     }
 
     @Override

@@ -69,7 +69,7 @@ public class RealisticBiomeBOPEucalyptusForest extends RealisticBiomeBase {
         private float peakyHillWavelength = 40f;
         private float peakyHillStrength = 20f;
         private float smoothHillWavelength = 20f;
-        private float smoothHillStrength = 20f;
+        private float smoothHillStrength = 10f;
 
         public TerrainBOPEucalyptusForest() {
 

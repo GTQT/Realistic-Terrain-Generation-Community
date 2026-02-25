@@ -65,13 +65,13 @@ public class RealisticBiomeVanillaColdTaigaHills extends RealisticBiomeBase {
 
         public TerrainVanillaColdTaigaHills() {
 
-            base = 82f;
+            base = 72f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainHighland(x, y, rtgWorld, river, 10f, 68f, 90f, base - 62f);
+            return terrainHighland(x, y, rtgWorld, river, 10f, 68f, 60f, base - 62f);
         }
     }
 

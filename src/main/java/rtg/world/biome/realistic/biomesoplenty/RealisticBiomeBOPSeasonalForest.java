@@ -42,7 +42,7 @@ public class RealisticBiomeBOPSeasonalForest extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainBOPSeasonalForest(15f, 100f, 68f, 170f);
+        return new TerrainBOPSeasonalForest(15f, 80f, 68f, 170f);
     }
 
     @Override

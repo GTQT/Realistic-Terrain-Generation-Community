@@ -44,8 +44,8 @@ public abstract class TerrainBase {
     private static final float INV_240 = 1f / 240f;
     private static final float INV_80 = 1f / 80f;
     // Pre-calculated constants
-    private static final float BLENDED_HILL_NORMALIZATION = 1f / 0.46631f;
-    private static final float BLENDED_HILL_OFFSET = 4.62021f;
+    private static final float BLENDED_HILL_NORMALIZATION = 1f / 0.45f;
+    private static final float BLENDED_HILL_OFFSET = 4.5f;
     protected final float minDuneHeight; // The strength factor to which the dune height config option is added.
     protected final float groundNoiseAmplitudeHills;
     protected final float groundVariation;

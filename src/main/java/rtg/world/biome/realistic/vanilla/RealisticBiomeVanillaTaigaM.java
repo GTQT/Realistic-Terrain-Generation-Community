@@ -40,7 +40,7 @@ public class RealisticBiomeVanillaTaigaM extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainVanillaTaigaM(100f, 220f, 7f, 100f, 38f, 160f, 68f);
+        return new TerrainVanillaTaigaM(70f, 180f, 7f, 100f, 38f, 160f, 68f);
     }
 
     @Override

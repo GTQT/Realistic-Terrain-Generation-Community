@@ -606,7 +606,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 float baseHeight = baseHeights[idx];
 
                 if (river > 0.4f) {
-                    float erosion = 8f * Math.min(1f, (river - 0.15f) / 0.85f);
+                    float erosion = 12f * Math.min(1f, (river - 0.15f) / 0.85f);
                     float riverHeight = baseHeight - erosion;
 
                     // 对所有点（包括边界）应用相同的3x3平均

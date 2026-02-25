@@ -67,7 +67,7 @@ public class RealisticBiomeVanillaColdTaigaM extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainGrasslandMountains(x, y, rtgWorld, river, 4f, 80f, 68f);
+            return terrainGrasslandMountains(x, y, rtgWorld, river, 10f, 120f, 68f);
         }
     }
 

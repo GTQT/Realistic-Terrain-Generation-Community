@@ -2,6 +2,7 @@ package rtg;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.DimensionType;
+import net.minecraft.world.WorldType;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.*;
 import rtg.RTGConfig.RTGGuiConfigFactory;
@@ -77,6 +78,7 @@ public class RTG {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         EventHandlerCommon.init();// TERRAIN_GEN_BUS, ORE_GEN_BUS
+        DefaultWorldType();
     }
 
     @Mod.EventHandler
@@ -94,6 +96,17 @@ public class RTG {
     @Mod.EventHandler
     public void serverStarting(final FMLServerStartingEvent event) {
         event.registerServerCommand(new RTGCommandTree());
+    }
+
+    public static void DefaultWorldType() {
+        for (int i = 0; i < WorldType.WORLD_TYPES.length; ++i) {
+            if (WorldType.WORLD_TYPES[i] == WorldType.byName("rtgc")) {
+                WorldType defaultype = WorldType.WORLD_TYPES[0];
+                WorldType.WORLD_TYPES[0] = WorldType.WORLD_TYPES[i];
+                WorldType.WORLD_TYPES[i] = defaultype;
+                break;
+            }
+        }
     }
 
     public interface RTGProxy {

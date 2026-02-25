@@ -1,9 +1,11 @@
 package rtg.api.world.gen.feature;
 
+import net.minecraft.block.BlockDirectional;
 import net.minecraft.block.BlockLog;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.world.World;
@@ -13,6 +15,7 @@ import rtg.api.util.BlockUtil.MatchType;
 import rtg.api.util.Logger;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.Random;
 
 
@@ -22,10 +25,6 @@ public class WorldGenLog extends WorldGenerator {
     private IBlockState leavesBlock;
     private int logLength;
     private boolean generateLeaves;
-
-    // 重用MutableBlockPos减少对象创建
-    private final MutableBlockPos checkPos = new MutableBlockPos();
-    private final MutableBlockPos leafCheckPos = new MutableBlockPos();
 
     /**
      * @param logBlock
@@ -42,124 +41,104 @@ public class WorldGenLog extends WorldGenerator {
     }
 
     @Override
+// TODO: [1.12] Fix fallen log generation to be more efficent; Stop using ArrayLists.
     public boolean generate(@Nonnull World world, @Nonnull Random rand, @Nonnull BlockPos pos) {
 
         int x = pos.getX(),
-                y = pos.getY(),
-                z = pos.getZ();
+            y = pos.getY(),
+            z = pos.getZ();
 
-        // 重用MutableBlockPos检查地面
-        IBlockState ground = world.getBlockState(checkPos.setPos(x, y - 1, z));
-        Material groundMaterial = ground.getMaterial();
-        if (groundMaterial != Material.GROUND && groundMaterial != Material.GRASS &&
-                groundMaterial != Material.SAND && groundMaterial != Material.ROCK) {
+        IBlockState g = world.getBlockState(new BlockPos(x, y - 1, z));
+        if (g.getMaterial() != Material.GROUND && g.getMaterial() != Material.GRASS && g.getMaterial() != Material.SAND && g.getMaterial() != Material.ROCK) {
             return false;
         }
 
         int dir = rand.nextInt(2); // The direction of the log (0 = X; 1 = Z)
+        IBlockState b;
+        int air = 0;
 
-        // 提前计算方向偏移
-        int xOffset = (dir == 0) ? 1 : 0;
-        int zOffset = (dir == 1) ? 1 : 0;
+        ArrayList<Integer> aX = new ArrayList<Integer>();
+        ArrayList<Integer> aY = new ArrayList<Integer>();
+        ArrayList<Integer> aZ = new ArrayList<Integer>();
+        ArrayList<IBlockState> aBlock = new ArrayList<IBlockState>();
 
-        // 使用数组代替ArrayList，预分配足够空间
-        int maxSize = logLength * 2;
-        int[] xPositions = new int[maxSize];
-        int[] yPositions = new int[maxSize];
-        int[] zPositions = new int[maxSize];
-        IBlockState[] blocks = new IBlockState[maxSize];
-        int placedCount = 0;
-
-        // 重用MutableBlockPos
         MutableBlockPos mpos = new MutableBlockPos(pos);
-
-        // 第一阶段：向后查找起始点
         for (int i = 0; i < logLength; i++) {
-            int checkX = x - (xOffset * i);
-            int checkZ = z - (zOffset * i);
+            b = world.getBlockState(mpos.setPos(x - (dir == 0 ? 1 : 0), y, z - (dir == 1 ? 1 : 0)));
 
-            IBlockState block = world.getBlockState(mpos.setPos(checkX, y, checkZ));
-            Material material = block.getMaterial();
-
-            if (material != Material.AIR && material != Material.VINE && material != Material.PLANTS) {
+            if (b.getMaterial() != Material.AIR && b.getMaterial() != Material.VINE && b.getMaterial() != Material.PLANTS) {
                 break;
             }
 
-            x = checkX;
-            z = checkZ;
+            x -= dir == 0 ? 1 : 0;
+            z -= dir == 1 ? 1 : 0;
 
             if (airCheck(world, x, y, z) > 0) {
                 return false;
             }
         }
 
-        // 第二阶段：向前放置日志
-        int airCount = 0;
-        for (int i = 0; i < maxSize; i++) {
-            int checkX = x + (xOffset * i);
-            int checkZ = z + (zOffset * i);
+        for (int i = 0; i < logLength * 2; i++) {
+            b = world.getBlockState(mpos.setPos(x + (dir == 0 ? 1 : 0), y, z + (dir == 1 ? 1 : 0)));
 
-            IBlockState block = world.getBlockState(mpos.setPos(checkX, y, checkZ));
-            Material material = block.getMaterial();
-
-            if (material != Material.AIR && material != Material.VINE && material != Material.PLANTS) {
+            if (b.getMaterial() != Material.AIR && b.getMaterial() != Material.VINE && b.getMaterial() != Material.PLANTS) {
                 break;
             }
 
-            airCount += airCheck(world, checkX, y, checkZ);
-            if (airCount > 2) {
+            air += airCheck(world, x, y, z);
+            if (air > 2) {
                 return false;
             }
 
             /*
              * Before we place the log block, let's make sure that there's an air block immediately above it.
+             * This is to ensure that the log doesn't override, for example, a 2-block tall plant,
+             * which some mods (like WAILA) have trouble handling.
+             *
+             * Also, to ensure that we don't have 'broken' logs, if one log block fails the check,
+             * then no logs actually get placed.
              */
-            if (!BlockUtil.checkVerticalBlocks(MatchType.ALL, world, mpos.setPos(checkX, y, checkZ), 1, Blocks.AIR)) {
+            if (!BlockUtil.checkVerticalBlocks(MatchType.ALL, world, pos, 1, Blocks.AIR)) {
                 return false;
             }
 
-            // 预计算日志方块方向
-            IBlockState logState;
+            // Store the log information instead of placing it straight away.
+            aX.add(x);
+            aY.add(y);
+            aZ.add(z);
+
+            // If we can't rotate the log block for whatever reason, then don't even try placing it and bail.
+            // We'd rather generate nothing than something ugly.
             try {
-                logState = logBlock.withProperty(BlockLog.LOG_AXIS,
-                        (dir == 0 ? BlockLog.EnumAxis.X : BlockLog.EnumAxis.Z));
+                aBlock.add(logBlock.withProperty(BlockLog.LOG_AXIS, (dir == 0 ? BlockLog.EnumAxis.X : BlockLog.EnumAxis.Z)));
             }
             catch (Exception e) {
+                //aBlock.add(logBlock);
+                //Logger.error(e.getMessage());
                 return false;
             }
 
-            // 存储位置和方块状态
-            xPositions[placedCount] = checkX;
-            yPositions[placedCount] = y;
-            zPositions[placedCount] = checkZ;
-            blocks[placedCount] = logState;
-            placedCount++;
-
             if (this.generateLeaves) {
-                addLeaves(world, rand, dir, checkX, y, checkZ);
+                addLeaves(world, rand, dir, x, y, z);
             }
+
+            x += dir == 0 ? 1 : 0;
+            z += dir == 1 ? 1 : 0;
         }
 
-        // 一次性放置所有日志方块
-        for (int i = 0; i < placedCount; i++) {
-            world.setBlockState(mpos.setPos(xPositions[i], yPositions[i], zPositions[i]), blocks[i], 2);
+        for (int i = 0; i < aBlock.size(); i++) {
+            world.setBlockState(mpos.setPos(aX.get(i), aY.get(i), aZ.get(i)), aBlock.get(i), 2);
         }
 
-        return placedCount > 0;
+        return true;
     }
 
     private int airCheck(World world, int x, int y, int z) {
 
-        // 重用MutableBlockPos
-        IBlockState below1 = world.getBlockState(checkPos.setPos(x, y - 1, z));
-        Material material1 = below1.getMaterial();
-        if (material1 == Material.AIR || material1 == Material.VINE ||
-                material1 == Material.WATER || material1 == Material.PLANTS) {
-
-            IBlockState below2 = world.getBlockState(checkPos.setPos(x, y - 2, z));
-            Material material2 = below2.getMaterial();
-            if (material2 == Material.AIR || material2 == Material.VINE ||
-                    material2 == Material.WATER || material2 == Material.PLANTS) {
+        IBlockState b = world.getBlockState(new BlockPos(x, y - 1, z));
+        if (b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.WATER || b.getMaterial() == Material.PLANTS) {
+            b = world.getBlockState(new BlockPos(x, y - 2, z));
+            if (b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.WATER || b.getMaterial() == Material.PLANTS) {
                 return 99;
             }
             return 1;
@@ -170,59 +149,52 @@ public class WorldGenLog extends WorldGenerator {
 
     private void addLeaves(World world, Random rand, int dir, int x, int y, int z) {
 
-        // 重用MutableBlockPos
-        MutableBlockPos pos = this.leafCheckPos;
-        IBlockState block;
-
+        IBlockState b;
         if (dir == 0) {
-            // Z方向检查
-            block = world.getBlockState(pos.setPos(x, y, z - 1));
-            if (isReplaceable(block.getMaterial()) && rand.nextInt(3) == 0) {
-                world.setBlockState(pos, leavesBlock, 2);
+            b = world.getBlockState(new BlockPos(x, y, z - 1));
+            if ((b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.PLANTS) && rand.nextInt(3) == 0) {
+                world.setBlockState(new BlockPos(x, y, z - 1), leavesBlock, 2);
             }
-            block = world.getBlockState(pos.setPos(x, y, z + 1));
-            if (isReplaceable(block.getMaterial()) && rand.nextInt(3) == 0) {
-                world.setBlockState(pos, leavesBlock, 2);
+            b = world.getBlockState(new BlockPos(x, y, z + 1));
+            if ((b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.PLANTS) && rand.nextInt(3) == 0) {
+                world.setBlockState(new BlockPos(x, y, z + 1), leavesBlock, 2);
             }
         }
         else {
-            // X方向检查
-            block = world.getBlockState(pos.setPos(x - 1, y, z));
-            if (isReplaceable(block.getMaterial()) && rand.nextInt(3) == 0) {
-                world.setBlockState(pos, leavesBlock, 2);
+            b = world.getBlockState(new BlockPos(x - 1, y, z));
+            if ((b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.PLANTS) && rand.nextInt(3) == 0) {
+                world.setBlockState(new BlockPos(x - 1, y, z), leavesBlock, 2);
             }
-            block = world.getBlockState(pos.setPos(x + 1, y, z));
-            if (isReplaceable(block.getMaterial()) && rand.nextInt(3) == 0) {
-                world.setBlockState(pos, leavesBlock, 2);
+            b = world.getBlockState(new BlockPos(x + 1, y, z));
+            if ((b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.PLANTS) && rand.nextInt(3) == 0) {
+                world.setBlockState(new BlockPos(x + 1, y, z), leavesBlock, 2);
             }
         }
 
-        // 上方检查
-        block = world.getBlockState(pos.setPos(x, y + 1, z));
-        if (isReplaceable(block.getMaterial()) && rand.nextInt(3) == 0) {
-            world.setBlockState(pos, leavesBlock, 2);
+        b = world.getBlockState(new BlockPos(x, y + 1, z));
+        if ((b.getMaterial() == Material.AIR || b.getMaterial() == Material.VINE || b.getMaterial() == Material.PLANTS) && rand.nextInt(3) == 0) {
+            world.setBlockState(new BlockPos(x, y + 1, z), leavesBlock, 2);
         }
-    }
-
-    // 提取可替换材料检查
-    private boolean isReplaceable(Material material) {
-        return material == Material.AIR || material == Material.VINE || material == Material.PLANTS;
     }
 
     public IBlockState getLogBlock() {
+
         return logBlock;
     }
 
     public WorldGenLog setLogBlock(IBlockState logBlock) {
+
         this.logBlock = logBlock;
         return this;
     }
 
     public IBlockState getLeavesBlock() {
+
         return leavesBlock;
     }
 
     public WorldGenLog setLeavesBlock(IBlockState leavesBlock) {
+
         this.leavesBlock = leavesBlock;
         return this;
     }

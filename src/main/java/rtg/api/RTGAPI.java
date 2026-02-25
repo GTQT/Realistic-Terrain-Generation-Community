@@ -13,6 +13,7 @@ import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.fml.common.Loader;
 import org.apache.logging.log4j.Level;
 import rtg.api.util.Logger;
+import rtg.api.util.NoiseArrayPool;
 import rtg.api.util.UtilityClass;
 import rtg.api.util.storage.SparseList;
 import rtg.api.world.biome.IRealisticBiome;
@@ -39,6 +40,13 @@ public final class RTGAPI {
     private static volatile IRealisticBiome[] BIOME_CACHE = null;
     /** 标记缓存是否已初始化 */
     private static volatile boolean cacheInitialized = false;
+
+    private static final NoiseArrayPool NOISE_POOL = new NoiseArrayPool();
+
+    public static NoiseArrayPool getNoiseArrayPool() {
+        return NOISE_POOL;
+    }
+
 
     private RTGAPI() {
     }

@@ -31,7 +31,7 @@ public class RealisticBiomeBOPTropicalRainforest extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainBOPTropicalRainforest(0f, 60f, 68f, 200f);
+        return new TerrainBOPTropicalRainforest(0f, 80f, 68f, 200f);
     }
 
     @Override

@@ -336,13 +336,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // 装饰生成
         float river = -TerrainBase.getRiverStrength(blockPos.add(16, 0, 16), rtgWorld);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
-            if (river > 0.9f) {
+            if (river > 0.8f) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
             } else {
                 biome.baseBiome().decorate(this.world, this.rand, blockPos);
             }
         } else {
-            if (river > 0.9f) {
+            if (river > 0.8f) {
                 biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
             } else {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
@@ -429,19 +429,19 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     /**
      * Generate noise and biome data for a chunk using pooled arrays and precomputed heights
+     * 优化：保留并行，河流公式改回老版本 (阈值0.5, blend从0开始, erosion=8f, 4邻域)
      */
     private void getNewerNoise(final BiomeProvider biomeProvider, final int worldX,
                                final int worldZ, ChunkLandscape landscape) {
-        int slot = threadNoiseSlot.get();  // ThreadLocal 绑定槽位，无锁
+        int slot = threadNoiseSlot.get();
         float[][] hugeRender = noisePool.borrowHuge(slot);
         float[][] smallRender = noisePool.borrowSmall(slot);
         try {
 
             // ==================== 步骤1: 采样生物群系数据 (13×13 网格, 8格间隔) ====================
-
             final int baseOffsetX = worldX - 8;
             final int baseOffsetZ = worldZ - 8;
-            final int totalSampleSize = 2 * sampleSize + 5;  // 21
+            final int totalSampleSize = 2 * sampleSize + 5;
             try (PosHandle tempPosHandle = borrowPosHandle()) {
                 MutableBlockPos tempPos = tempPosHandle.pos;
                 for (int i = 0; i < totalSampleSize; i++) {
@@ -454,6 +454,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     }
                 }
             }
+
             // ==================== 步骤2: HUGE 渲染层 (9×9) - 抛物线权重聚合 ====================
             for (int i = -1; i < 4; i++) {
                 for (int j = -1; j < 4; j++) {
@@ -470,6 +471,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     }
                 }
             }
+
             // ==================== 步骤3: HUGE 层混合 (4×4 中间点) ====================
             final int hugeWidth = 9;
             for (int i = 0; i < 4; i++) {
@@ -486,45 +488,49 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     );
                 }
             }
+
             // ==================== 步骤4: 创建 SMALL 渲染层 (25×25) ====================
             final int smallWidth = 25;
-            // 4.1 初始化关键点 (7×7 网格)
-            for (int i = 0; i < 7; i++) {
+
+            // 4.1 初始化关键点 (7×7=49任务)
+            java.util.stream.IntStream.range(0, 49).parallel().forEach(idx -> {
+                int i = idx / 7;
+                int j = idx % 7;
                 int i1 = i + 1, i2 = i + 2, i4 = i * 4;
-                for (int j = 0; j < 7; j++) {
-                    int j1 = j + 1, j2 = j + 2, j4 = j * 4;
-                    int smallIndex = i4 * smallWidth + j4;
-                    if (((i ^ j) & 1) != 0) {  // 位运算优化奇偶判断
-                        mix4InPlace(
-                                hugeRender[i * hugeWidth + j1],
-                                hugeRender[i1 * hugeWidth + j],
-                                hugeRender[i1 * hugeWidth + j2],
-                                hugeRender[i2 * hugeWidth + j1],
-                                smallRender[smallIndex]
-                        );
-                    } else {
-                        System.arraycopy(hugeRender[i1 * hugeWidth + j1], 0,
-                                smallRender[smallIndex], 0, 256);
-                    }
-                }
-            }
-            // 4.2 SMALL 层混合 1: 6×6 角点
-            for (int i = 0; i < 6; i++) {
-                int i4 = i * 4, i4p4 = i4 + 4, rowCenter = i4 + 2;
-                for (int j = 0; j < 6; j++) {
-                    int j4 = j * 4, j4p4 = j4 + 4, colCenter = j4 + 2;
-                    int index = rowCenter * smallWidth + colCenter;
+                int j1 = j + 1, j2 = j + 2, j4 = j * 4;
+                int smallIndex = i4 * smallWidth + j4;
+                if (((i ^ j) & 1) != 0) {
                     mix4InPlace(
-                            smallRender[i4 * smallWidth + j4],
-                            smallRender[i4p4 * smallWidth + j4],
-                            smallRender[i4 * smallWidth + j4p4],
-                            smallRender[i4p4 * smallWidth + j4p4],
-                            smallRender[index]
+                            hugeRender[i * hugeWidth + j1],
+                            hugeRender[i1 * hugeWidth + j],
+                            hugeRender[i1 * hugeWidth + j2],
+                            hugeRender[i2 * hugeWidth + j1],
+                            smallRender[smallIndex]
                     );
+                } else {
+                    System.arraycopy(hugeRender[i1 * hugeWidth + j1], 0,
+                            smallRender[smallIndex], 0, 256);
                 }
-            }
-            // 4.3 SMALL 层混合 2: 11×11 交叉点 (奇偶交替)
-            for (int i = 0; i < 11; i++) {
+            });
+
+            // 4.2 SMALL 层混合 1: 6×6=36角点
+            java.util.stream.IntStream.range(0, 36).parallel().forEach(idx -> {
+                int i = idx / 6;
+                int j = idx % 6;
+                int i4 = i * 4, i4p4 = i4 + 4, rowCenter = i4 + 2;
+                int j4 = j * 4, j4p4 = j4 + 4, colCenter = j4 + 2;
+                int index = rowCenter * smallWidth + colCenter;
+                mix4InPlace(
+                        smallRender[i4 * smallWidth + j4],
+                        smallRender[i4p4 * smallWidth + j4],
+                        smallRender[i4 * smallWidth + j4p4],
+                        smallRender[i4p4 * smallWidth + j4p4],
+                        smallRender[index]
+                );
+            });
+
+            // 4.3 SMALL 层混合 2: 11×11交叉点
+            java.util.stream.IntStream.range(0, 11).parallel().forEach(i -> {
                 int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4;
                 for (int j = (i & 1) ^ 1; j < 11; j += 2) {
                     int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
@@ -537,40 +543,42 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                             smallRender[index]
                     );
                 }
-            }
-            // 4.4 SMALL 层混合 3: 9×9 中间点
-            for (int i = 0; i < 9; i++) {
+            });
+
+            // 4.4 SMALL 层混合 3: 9×9=81中间点
+            java.util.stream.IntStream.range(0, 81).parallel().forEach(idx -> {
+                int i = idx / 9;
+                int j = idx % 9;
                 int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4, rowCenter = i2 + 3;
-                for (int j = 0; j < 9; j++) {
-                    int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4, colCenter = j2 + 3;
-                    int index = rowCenter * smallWidth + colCenter;
-                    mix4InPlace(
-                            smallRender[i2p2 * smallWidth + j2p2],
-                            smallRender[i2p4 * smallWidth + j2p2],
-                            smallRender[i2p2 * smallWidth + j2p4],
-                            smallRender[i2p4 * smallWidth + j2p4],
-                            smallRender[index]
-                    );
-                }
-            }
-            // 4.5 SMALL 层混合 4: 填充剩余点到 16×16
-            for (int i = 0; i < 16; i++) {
+                int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4, colCenter = j2 + 3;
+                int index = rowCenter * smallWidth + colCenter;
+                mix4InPlace(
+                        smallRender[i2p2 * smallWidth + j2p2],
+                        smallRender[i2p4 * smallWidth + j2p2],
+                        smallRender[i2p2 * smallWidth + j2p4],
+                        smallRender[i2p4 * smallWidth + j2p4],
+                        smallRender[index]
+                );
+            });
+
+            // 4.5 SMALL 层混合 4: 填充剩余点到16×16
+            java.util.stream.IntStream.range(0, 128).parallel().forEach(idx -> {
+                int i = idx / 8;
+                int j = (idx % 8) * 2 + ((i & 1) ^ 1);
                 int i3 = i + 3, i4 = i + 4, i5 = i + 5;
-                for (int j = (i & 1) ^ 1; j < 16; j += 2) {
-                    int j4 = j + 4;
-                    int index = i4 * smallWidth + j4;
-                    mix4InPlace(
-                            smallRender[i3 * smallWidth + j4],
-                            smallRender[i4 * smallWidth + (j4 - 1)],
-                            smallRender[i4 * smallWidth + (j4 + 1)],
-                            smallRender[i5 * smallWidth + j4],
-                            smallRender[index]
-                    );
-                }
-            }
+                int j4 = j + 4;
+                int index = i4 * smallWidth + j4;
+                mix4InPlace(
+                        smallRender[i3 * smallWidth + j4],
+                        smallRender[i4 * smallWidth + (j4 - 1)],
+                        smallRender[i4 * smallWidth + (j4 + 1)],
+                        smallRender[i5 * smallWidth + j4],
+                        smallRender[index]
+                );
+            });
 
             // ==================== 步骤5: 预计算河流强度 ====================
-            float[] riverValues = new float[256];  // 小数组，栈分配
+            float[] riverValues = new float[256];
             try (PosHandle riverPosHandle = borrowPosHandle()) {
                 MutableBlockPos riverPos = riverPosHandle.pos;
                 for (int i = 0; i < 16; i++) {
@@ -583,7 +591,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
             // ==================== 步骤6: 预计算所有位置的基础高度 ====================
             float[] baseHeights = new float[256];
-            for (int idx = 0; idx < 256; idx++) {
+            java.util.stream.IntStream.range(0, 256).parallel().forEach(idx -> {
                 int i = idx >> 4;
                 int j = idx & 15;
                 int l = (i + 4) * smallWidth + (j + 4);
@@ -598,37 +606,30 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     totalHeight += biome.rNoise(rtgWorld, x, z, weight, riverValues[idx] + 1f) * weight;
                 }
                 baseHeights[idx] = totalHeight;
-            }
+            });
 
             // ==================== 步骤7: 应用河流侵蚀 ====================
-            for (int idx = 0; idx < 256; idx++) {
+            java.util.stream.IntStream.range(0, 256).parallel().forEach(idx -> {
                 float river = riverValues[idx];
                 float baseHeight = baseHeights[idx];
 
-                if (river > 0.4f) {
-                    float erosion = 12f * Math.min(1f, (river - 0.15f) / 0.85f);
+                if (river > 0.5f) {
+                    float blend = river * 2f - 1f;
+
+                    float erosion = 8f * blend;
                     float riverHeight = baseHeight - erosion;
 
-                    // 对所有点（包括边界）应用相同的3x3平均
-                    float avg = 0f;
-                    int count = 0;
-                    for (int di = -1; di <= 1; di++) {
-                        for (int dj = -1; dj <= 1; dj++) {
-                            int ni = (idx >> 4) + di;
-                            int nj = (idx & 15) + dj;
+                    if (idx > 15 && idx < 240 && (idx & 15) > 0 && (idx & 15) < 15) {
+                        float avg = 0.25f * (
+                                baseHeights[idx - 16] +  // north
+                                        baseHeights[idx + 16] +  // south
+                                        baseHeights[idx - 1]  +  // west
+                                        baseHeights[idx + 1]     // east
+                        );
 
-                            if (ni >= 0 && ni < 16 && nj >= 0 && nj < 16) {
-                                avg += baseHeights[ni * 16 + nj];
-                                count++;
-                            }
-                        }
-                    }
-
-                    if (count > 0) {
-                        avg /= count;
-                        float blend = (river - 0.15f) / 0.85f;
                         blend = blend * blend * (3f - 2f * blend);
-                        landscape.noise[idx] = avg + (riverHeight - avg) * blend;
+
+                        landscape.noise[idx] = avg * (1f - blend) + riverHeight * blend;
                     } else {
                         landscape.noise[idx] = riverHeight;
                     }
@@ -637,7 +638,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
 
                 landscape.river[idx] = river;
-            }
+            });
 
             // ==================== 步骤8: 填充生物群系数据 ====================
             try (PosHandle biomePosHandle = borrowPosHandle()) {
@@ -652,6 +653,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     }
                 }
             }
+
         } finally {
             noisePool.returnHuge(slot);
             noisePool.returnSmall(slot);

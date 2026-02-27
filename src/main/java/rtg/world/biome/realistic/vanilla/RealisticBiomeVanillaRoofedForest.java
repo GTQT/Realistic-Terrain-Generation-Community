@@ -85,7 +85,7 @@ public class RealisticBiomeVanillaRoofedForest extends RealisticBiomeBase {
         mangroveTree.setTreeType(DecoTree.TreeType.RTG_TREE);
         mangroveTree.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
         mangroveTree.setTreeConditionChance(1);
-        mangroveTree.setStrengthFactorForLoops(18f);
+        mangroveTree.setStrengthFactorForLoops(12f);
         mangroveTree.setMaxY(110);
         //this.addDeco(mangroveTree);
 
@@ -104,7 +104,7 @@ public class RealisticBiomeVanillaRoofedForest extends RealisticBiomeBase {
         ceibaPentandraTree.setTreeType(DecoTree.TreeType.RTG_TREE);
         ceibaPentandraTree.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
         ceibaPentandraTree.setTreeConditionChance(1);
-        ceibaPentandraTree.setStrengthFactorForLoops(18f);
+        ceibaPentandraTree.setStrengthFactorForLoops(12f);
         ceibaPentandraTree.setMaxY(110);
         this.addDeco(ceibaPentandraTree);
 

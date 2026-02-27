@@ -37,7 +37,7 @@ public class DecoCollectionExtremeHillsPlus extends DecoCollectionBase {
         this.addTree(nigraTree);
 
         DecoTree nigraDeco = new DecoTree(nigraTree);
-        nigraDeco.setStrengthFactorForLoops(4f);
+        nigraDeco.setStrengthFactorForLoops(3f);
         nigraDeco.setStrengthNoiseFactorXForLoops(true);
         nigraDeco.getDistribution().setNoiseDivisor(100f);
         nigraDeco.getDistribution().setNoiseFactor(6f);

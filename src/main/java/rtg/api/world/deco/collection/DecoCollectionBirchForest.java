@@ -58,7 +58,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
         this.addTree(birchTree);
 
         return new DecoTree(birchTree)
-            .setStrengthFactorForLoops(3f)
+            .setStrengthFactorForLoops(2f)
             .setTreeType(DecoTree.TreeType.RTG_TREE)
             .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
             .setMaxY(100);
@@ -67,7 +67,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
     protected DecoTree tallVariableTrees(float noiseMin, float noiseMax) {
     	
         return new DecoVariableMaterialTree(TreeMaterials.inBirchForest)
-                .setStrengthFactorForLoops(6f)
+                .setStrengthFactorForLoops(5f)
                 .setTreeType(DecoTree.TreeType.RTG_TREE)
                 .setDistribution(treeFrequencyDistribution)
                 .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
@@ -80,7 +80,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
     private DecoTree vanillaTrees() {
         return new DecoTree(new WorldGenTrees(false))
             .setTreeType(DecoTree.TreeType.WORLDGEN)
-            .setStrengthFactorForLoops(3f)
+            .setStrengthFactorForLoops(2f)
             .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
             .setMaxY(100);
     }

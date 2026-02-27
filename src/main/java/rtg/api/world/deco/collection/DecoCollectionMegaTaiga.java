@@ -35,7 +35,7 @@ public class DecoCollectionMegaTaiga extends DecoCollectionBase {
 
         DecoTree smallPines = new DecoTree(sitchensisTree);
         smallPines.setStrengthNoiseFactorXForLoops(true);
-        smallPines.setStrengthFactorForLoops(4f);
+        smallPines.setStrengthFactorForLoops(3f);
         smallPines.setTreeType(TreeType.RTG_TREE);
         smallPines.setTreeCondition(TreeCondition.ALWAYS_GENERATE);
         smallPines.setTreeConditionChance(3);

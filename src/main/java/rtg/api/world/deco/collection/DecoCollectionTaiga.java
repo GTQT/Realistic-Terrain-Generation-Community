@@ -44,7 +44,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         //this.addTree(sempervirensSpruceTree1);
 
         DecoTree bigSpruceTrees1 = new DecoTree(sempervirensSpruceTree1);
-        bigSpruceTrees1.setStrengthFactorForLoops(4f);
+        bigSpruceTrees1.setStrengthFactorForLoops(3f);
         bigSpruceTrees1.setTreeType(TreeType.RTG_TREE);
         bigSpruceTrees1.getDistribution().setNoiseDivisor(100f);
         bigSpruceTrees1.getDistribution().setNoiseFactor(6f);
@@ -64,7 +64,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         //this.addTree(sempervirensSpruceOakTree1);
 
         DecoTree bigSpruceOakTrees1 = new DecoTree(sempervirensSpruceOakTree1);
-        bigSpruceOakTrees1.setStrengthFactorForLoops(4f);
+        bigSpruceOakTrees1.setStrengthFactorForLoops(3f);
         bigSpruceOakTrees1.setTreeType(TreeType.RTG_TREE);
         bigSpruceOakTrees1.getDistribution().setNoiseDivisor(100f);
         bigSpruceOakTrees1.getDistribution().setNoiseFactor(6f);
@@ -87,7 +87,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         //this.addTree(sempervirensSpruceTree2);
 
         DecoTree bigSpruceTrees2 = new DecoTree(sempervirensSpruceTree2);
-        bigSpruceTrees2.setStrengthFactorForLoops(4f);
+        bigSpruceTrees2.setStrengthFactorForLoops(3f);
         bigSpruceTrees2.setTreeType(TreeType.RTG_TREE);
         bigSpruceTrees2.getDistribution().setNoiseDivisor(80f);
         bigSpruceTrees2.getDistribution().setNoiseFactor(60f);
@@ -107,7 +107,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         //this.addTree(sempervirensSpruceOakTree2);
 
         DecoTree bigSpruceOakTrees2 = new DecoTree(sempervirensSpruceOakTree2);
-        bigSpruceOakTrees2.setStrengthFactorForLoops(4f);
+        bigSpruceOakTrees2.setStrengthFactorForLoops(3f);
         bigSpruceOakTrees2.setTreeType(TreeType.RTG_TREE);
         bigSpruceOakTrees2.getDistribution().setNoiseDivisor(80f);
         bigSpruceOakTrees2.getDistribution().setNoiseFactor(60f);
@@ -171,7 +171,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         //this.addTree(sitchensisTree);
 
         DecoTree decoTrees = new DecoTree(sitchensisTree);
-        decoTrees.setStrengthFactorForLoops(4f);
+        decoTrees.setStrengthFactorForLoops(3f);
         decoTrees.setTreeType(TreeType.RTG_TREE);
         decoTrees.setTreeCondition(TreeCondition.RANDOM_CHANCE);
         decoTrees.setTreeConditionChance(3);
@@ -227,7 +227,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
     	
     	DecoVariableTaigaTree result = new DecoVariableTaigaTree();
         
-            result.setStrengthFactorForLoops(6f)
+            result.setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)

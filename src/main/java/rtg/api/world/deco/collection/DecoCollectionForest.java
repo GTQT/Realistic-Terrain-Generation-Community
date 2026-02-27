@@ -86,7 +86,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     	DecoTree result = new DecoVariableMaterialTree(TreeMaterials.inOakForest);
 
         return result
-            .setStrengthFactorForLoops(6f)
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -102,7 +102,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     private DecoTree oakTrees(float noiseMin, float noiseMax) {
 
         return new DecoVariableOak()
-            .setStrengthFactorForLoops(6f)
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -118,7 +118,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     private DecoTree birchTrees(float noiseMin, float noiseMax) {
 
         return new DecoVariableBirch()
-            .setStrengthFactorForLoops(6f)
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -144,7 +144,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
         this.addTree(piceaPungens);
 
         return new DecoTree(piceaPungens)
-            .setStrengthFactorForLoops(3f)
+            .setStrengthFactorForLoops(2f)
             .setTreeType(TreeType.RTG_TREE)
             .setTreeCondition(TreeCondition.RANDOM_CHANCE)
             .setTreeConditionChance(5)

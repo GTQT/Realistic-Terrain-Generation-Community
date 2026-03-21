@@ -70,7 +70,7 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
         this.addTree(birchTree);
 
         DecoTree birchTrees = new DecoTree(birchTree);
-        birchTrees.setStrengthFactorForLoops(7f);
+        birchTrees.setStrengthFactorForLoops(5f);
         birchTrees.setTreeType(DecoTree.TreeType.RTG_TREE);
         birchTrees.getDistribution().setNoiseDivisor(100f);
         birchTrees.getDistribution().setNoiseFactor(6f);
@@ -90,7 +90,7 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
         this.addTree(sitchensisTree);
 
         DecoTree smallPine = new DecoTree(sitchensisTree);
-        smallPine.setStrengthFactorForLoops(7f);
+        smallPine.setStrengthFactorForLoops(5f);
         smallPine.setTreeType(DecoTree.TreeType.RTG_TREE);
         smallPine.getDistribution().setNoiseDivisor(100f);
         smallPine.getDistribution().setNoiseFactor(6f);

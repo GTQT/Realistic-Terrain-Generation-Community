@@ -72,13 +72,13 @@ public class RealisticBiomeSFSugiForest extends RealisticBiomeSFBase {
         decoShrubSugi.setLogBlock(sugiLogBlock);
         decoShrubSugi.setLeavesBlock(sugiLeavesBlock);
         decoShrubSugi.setMaxY(90);
-        decoShrubSugi.setLoopMultiplier(4f);
+        decoShrubSugi.setLoopMultiplier(3f);
         decoShrubSugi.setChance(8);
         this.addDeco(decoShrubSugi);
 
         DecoShrub decoShrubOak = new DecoShrub();
         decoShrubOak.setMaxY(90);
-        decoShrubOak.setLoopMultiplier(4f);
+        decoShrubOak.setLoopMultiplier(3f);
         decoShrubOak.setChance(4);
         this.addDeco(decoShrubOak);
 

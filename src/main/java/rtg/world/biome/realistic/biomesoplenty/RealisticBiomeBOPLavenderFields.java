@@ -42,7 +42,7 @@ public class RealisticBiomeBOPLavenderFields extends RealisticBiomeBase {
         DecoShrub decoShrub = new DecoShrub();
         decoShrub.setMaxY(110);
         decoShrub.setChance(10);
-        decoShrub.setLoopMultiplier(4f);
+        decoShrub.setLoopMultiplier(3f);
         this.addDeco(decoShrub);
     }
 

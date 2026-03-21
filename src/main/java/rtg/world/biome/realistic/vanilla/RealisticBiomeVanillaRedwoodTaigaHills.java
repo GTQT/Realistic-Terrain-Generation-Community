@@ -74,7 +74,7 @@ public class RealisticBiomeVanillaRedwoodTaigaHills extends RealisticBiomeBase {
 
         DecoShrub decoShrub = new DecoShrub();
         decoShrub.setMaxY(100);
-        decoShrub.setLoopMultiplier(2f);
+        decoShrub.setLoopMultiplier(1f);
         decoShrub.setChance(10);
         this.addDeco(decoShrub);
 

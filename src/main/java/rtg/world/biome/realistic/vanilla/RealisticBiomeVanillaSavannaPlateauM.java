@@ -81,7 +81,7 @@ public class RealisticBiomeVanillaSavannaPlateauM extends RealisticBiomeBase {
         acaciaShrub.setLogBlock(Blocks.LOG2.getDefaultState());
         acaciaShrub.setLeavesBlock(Blocks.LEAVES2.getDefaultState());
         acaciaShrub.setMaxY(160);
-        acaciaShrub.setLoopMultiplier(3f);
+        acaciaShrub.setLoopMultiplier(2f);
         acaciaShrub.setChance(9);
         this.addDeco(acaciaShrub);
 

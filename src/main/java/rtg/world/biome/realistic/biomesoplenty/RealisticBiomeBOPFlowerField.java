@@ -59,7 +59,7 @@ public class RealisticBiomeBOPFlowerField extends RealisticBiomeBase {
         // First, let's get a few shrubs in to break things up a bit.
         DecoShrub decoShrub = new DecoShrub();
         decoShrub.setMaxY(110);
-        decoShrub.setLoopMultiplier(4f);
+        decoShrub.setLoopMultiplier(3f);
         decoShrub.setChance(3);
         this.addDeco(decoShrub);
 

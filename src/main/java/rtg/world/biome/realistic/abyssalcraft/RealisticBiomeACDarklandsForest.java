@@ -181,7 +181,7 @@ public class RealisticBiomeACDarklandsForest extends RealisticBiomeBase {
         decoShrubCustom.setLeavesBlock(BlockUtil.getBlock(Mods.abyssalcraft.getResourceLocation("dltleaves"), Blocks.LEAVES).getDefaultState());
         decoShrubCustom.setMaxY(110);
         decoShrubCustom.setNotEqualsZeroChance(3);
-        decoShrubCustom.setLoopMultiplier(3f);
+        decoShrubCustom.setLoopMultiplier(2f);
         this.addDeco(decoShrubCustom);
     }
 }

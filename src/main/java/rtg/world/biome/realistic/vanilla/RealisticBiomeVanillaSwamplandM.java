@@ -93,7 +93,7 @@ public class RealisticBiomeVanillaSwamplandM extends RealisticBiomeBase {
 
         DecoShrub decoShrub = new DecoShrub();
         decoShrub.setMaxY(100);
-        decoShrub.setLoopMultiplier(3f);
+        decoShrub.setLoopMultiplier(2f);
         this.addDeco(decoShrub);
 
         DecoFallenTree decoFallenTree = new DecoFallenTree();

@@ -22,7 +22,7 @@ public class DecoCollectionSavanna extends DecoCollectionBase {
         acaciaShrub.setLogBlock(Blocks.LOG2.getDefaultState());
         acaciaShrub.setLeavesBlock(Blocks.LEAVES2.getDefaultState());
         acaciaShrub.setMaxY(160);
-        acaciaShrub.setLoopMultiplier(2f);
+        acaciaShrub.setLoopMultiplier(1f);
         acaciaShrub.setChance(12);
         this.addDeco(acaciaShrub);
 

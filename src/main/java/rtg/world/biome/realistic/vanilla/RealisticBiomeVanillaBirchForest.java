@@ -113,7 +113,6 @@ public class RealisticBiomeVanillaBirchForest extends RealisticBiomeBase {
             SimplexNoise simplex = rtgWorld.simplexInstance(0);
             float c = TerrainBase.calcCliff(x, z, noise, river);
             int cliff = 0;
-            boolean m = false;
 
             Block b;
             for (int k = 255; k > -1; k--) {
@@ -157,7 +156,6 @@ public class RealisticBiomeVanillaBirchForest extends RealisticBiomeBase {
                         }
                         else if (simplex.noise2f(i / 12f, j / 12f) > mixHeight) {
                             primer.setBlockState(x, k, z, mixBlock);
-                            m = true;
                         }
                         else {
                             primer.setBlockState(x, k, z, topBlock);

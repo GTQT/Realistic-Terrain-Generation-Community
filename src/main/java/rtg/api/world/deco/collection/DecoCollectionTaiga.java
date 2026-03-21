@@ -193,7 +193,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         decoShrubSpruce.setLogBlock(BlockUtil.getStateLog(EnumType.SPRUCE));
         decoShrubSpruce.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.SPRUCE));
         decoShrubSpruce.setMaxY(100);
-        decoShrubSpruce.setLoopMultiplier(6f);
+        decoShrubSpruce.setLoopMultiplier(3f);
         decoShrubSpruce.setChance(6);
         this.addDeco(decoShrubSpruce);
 

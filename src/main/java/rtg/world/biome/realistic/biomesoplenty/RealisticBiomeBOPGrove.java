@@ -50,12 +50,12 @@ public class RealisticBiomeBOPGrove extends RealisticBiomeBase {
         decoShrubCustom.setLogBlock(BlockUtil.getStateLog(EnumType.BIRCH));
         decoShrubCustom.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.BIRCH));
         decoShrubCustom.setMaxY(110);
-        decoShrubCustom.setLoopMultiplier(2f);
+        decoShrubCustom.setLoopMultiplier(1f);
         DecoShrub decoShrubCustom2 = new DecoShrub();
         decoShrubCustom2.setLogBlock(BlockUtil.getStateLog(EnumType.DARK_OAK));
         decoShrubCustom2.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.DARK_OAK));
         decoShrubCustom2.setMaxY(110);
-        decoShrubCustom2.setLoopMultiplier(2f);
+        decoShrubCustom2.setLoopMultiplier(1f);
         DecoHelper5050 decoHelperHelper50502 = new DecoHelper5050(decoShrubCustom, decoShrubCustom2);
         this.addDeco(decoHelperHelper50502);
 

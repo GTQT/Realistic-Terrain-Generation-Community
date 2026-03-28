@@ -71,7 +71,7 @@ public class RealisticBiomeVanillaRoofedForestM extends RealisticBiomeBase {
         this.addTree(mucronataTree);
 
         DecoTree decoTrees = new DecoTree(mucronataTree);
-        decoTrees.setStrengthFactorForLoops(8f);
+        decoTrees.setStrengthFactorForLoops(6f);
         decoTrees.getDistribution().setNoiseDivisor(80f);
         decoTrees.getDistribution().setNoiseFactor(60f);
         decoTrees.getDistribution().setNoiseAddend(-15f);

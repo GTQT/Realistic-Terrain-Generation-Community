@@ -104,7 +104,7 @@ public class RealisticBiomeVanillaRoofedForest extends RealisticBiomeBase {
         ceibaPentandraTree.setTreeType(DecoTree.TreeType.RTG_TREE);
         ceibaPentandraTree.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
         ceibaPentandraTree.setTreeConditionChance(1);
-        ceibaPentandraTree.setStrengthFactorForLoops(6f);
+        ceibaPentandraTree.setStrengthFactorForLoops(4f);
         ceibaPentandraTree.setMaxY(110);
         this.addDeco(ceibaPentandraTree);
 

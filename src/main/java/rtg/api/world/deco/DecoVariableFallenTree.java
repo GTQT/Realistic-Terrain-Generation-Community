@@ -45,38 +45,27 @@ public class DecoVariableFallenTree extends DecoBase {
 
     @Override
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
-
-    	BlockPos offsetpos = getOffsetPos(chunkPos);
-        float noise = distribution.getValue(getOffsetPos(chunkPos), rtgWorld.treeDistributionNoise());
-        // adjust to [0,1]
-        noise = noise/2f+0.5f;
-        // a bit more
-        noise = noise *2f;
-        // Adjust the chance according to biome config.
-        noise *= biome.getConfig().FALLEN_LOG_DENSITY_MULTIPLIER.get();
+        BlockPos offsetpos = getOffsetPos(chunkPos);
+        float noise = distribution.getValue(offsetpos, rtgWorld.treeDistributionNoise());
+        noise = (noise + 1f) / 2f;
+        noise = Math.min(1f, noise * biome.getConfig().FALLEN_LOG_DENSITY_MULTIPLIER.get());
 
         final int finalSize = (this.maxSize > this.minSize) ? getRangedRandom(rand, this.minSize, this.maxSize) : (this.maxSize == this.minSize) ? this.minSize : 4;
 
-        while (noise>0) {
-            if (rand.nextFloat()<noise*.2f) { // increments of .2 for more variability
+        if (rand.nextFloat() < noise) {
+            BlockPos pos = offsetpos.add(rand.nextInt(16), 0, rand.nextInt(16));
+            pos = pos.up(rtgWorld.world().getHeight(pos).getY());
 
-                BlockPos pos = offsetpos.add(rand.nextInt(16), 0, rand.nextInt(16));
-                pos = pos.up(rtgWorld.world().getHeight(pos).getY());
-
-                if (pos.getY() <= this.maxY) {
-
-                    // If we're in a village, check to make sure the log has extra room to grow to avoid corrupting the village.
-                    if (hasVillage) {
-                        if (!BlockUtil.checkAreaBlocks(MatchType.ALL_IGNORE_REPLACEABLE, rtgWorld.world(), pos, finalSize)) {
-                            return;
-                        }
+            if (pos.getY() <= this.maxY) {
+                if (hasVillage) {
+                    if (!BlockUtil.checkAreaBlocks(MatchType.ALL_IGNORE_REPLACEABLE, rtgWorld.world(), pos, finalSize)) {
+                        return;
                     }
-                    TreeMaterials materials = materialFor(pos,rtgWorld,rand);
-                    new WorldGenLog(materials.log, materials.leaves, finalSize)
-                        .generate(rtgWorld.world(), rand, pos);
                 }
+                TreeMaterials materials = materialFor(pos, rtgWorld, rand);
+                new WorldGenLog(materials.log, materials.leaves, finalSize)
+                        .generate(rtgWorld.world(), rand, pos);
             }
-            noise =- 0.2f;
         }
     }
 

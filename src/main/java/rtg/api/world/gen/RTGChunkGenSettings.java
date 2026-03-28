@@ -283,7 +283,7 @@ public final class RTGChunkGenSettings {
         public int sandDuneHeight = 4;
         //      public int      snowDuneHeight       = 4;
         public boolean useSnowLayers = true;
-        public float   snowLayerTemp = 0.12f;
+        public float   snowLayerTemp = 0.08f;
 
         public int bedrockLayers = 5;
 
@@ -436,7 +436,7 @@ public final class RTGChunkGenSettings {
             this.sandDuneHeight = 4;
 //          this.snowDuneHeight         = 4;
             this.useSnowLayers = true;
-            this.snowLayerTemp = 0.12f;
+            this.snowLayerTemp = 0.08f;
 
             this.bedrockLayers = 5;
             this.useCaves = true;

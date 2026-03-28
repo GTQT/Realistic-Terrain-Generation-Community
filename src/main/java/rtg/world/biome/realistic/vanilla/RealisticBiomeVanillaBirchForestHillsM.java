@@ -62,7 +62,7 @@ public class RealisticBiomeVanillaBirchForestHillsM extends RealisticBiomeBase {
 
     public static class TerrainVanillaBirchForestHillsM extends TerrainBase {
 
-        private float hillStrength = 70f;
+        private float hillStrength = 90f;
 
         public TerrainVanillaBirchForestHillsM() {
 

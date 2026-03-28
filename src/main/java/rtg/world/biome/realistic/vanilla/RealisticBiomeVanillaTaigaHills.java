@@ -59,11 +59,11 @@ public class RealisticBiomeVanillaTaigaHills extends RealisticBiomeBase {
     
     public static class TerrainVanillaTaigaHills extends TerrainBase {
 
-        private float hillStrength = 50f;
+        private float hillStrength = 70f;
 
         public TerrainVanillaTaigaHills() {
 
-            this(72f, 50f);
+            this(72f, 70f);
         }
 
         public TerrainVanillaTaigaHills(float bh, float hs) {

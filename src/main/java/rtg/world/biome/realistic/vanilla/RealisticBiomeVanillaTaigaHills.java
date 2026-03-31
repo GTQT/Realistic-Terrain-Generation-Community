@@ -59,11 +59,11 @@ public class RealisticBiomeVanillaTaigaHills extends RealisticBiomeBase {
     
     public static class TerrainVanillaTaigaHills extends TerrainBase {
 
-        private float hillStrength = 70f;
+        private float hillStrength = 40f;
 
         public TerrainVanillaTaigaHills() {
 
-            this(72f, 70f);
+            this(72f, 40f);
         }
 
         public TerrainVanillaTaigaHills(float bh, float hs) {
@@ -75,7 +75,7 @@ public class RealisticBiomeVanillaTaigaHills extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainHighland(x, y, rtgWorld, river, 10f, 68f, hillStrength, base - 62f);
+            return terrainHighland(x, y, rtgWorld, river, 10f, 48f, hillStrength, base - 62f);
         }
     }
 

@@ -75,7 +75,7 @@ public class RealisticBiomeVanillaMesaBryce extends RealisticBiomeBase {
     }
 
     public class TerrainRTGMesaBryce extends TerrainBase {
-        private static final float height = 20f;
+        private static final float height = 40f;
         TerrainRTGMesaBryce() { }
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {

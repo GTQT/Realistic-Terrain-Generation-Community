@@ -38,7 +38,7 @@ public class TreeRTGAcaciaBucheri extends TreeRTG {
 
         this.setLogBlock(Blocks.LOG2.getDefaultState());
         this.setLeavesBlock(Blocks.LEAVES2.getDefaultState());
-        this.trunkSize = 10;
+        this.trunkSize = 6;
         this.lowestVariableTrunkProportion = 0.45f;
         this.trunkProportionVariability = 0.2f;
         this.maxAllowedObstruction = 4;

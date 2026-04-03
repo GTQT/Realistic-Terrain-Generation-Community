@@ -49,7 +49,7 @@ public class TreeRTGBetulaNigra extends TreeRTG {
     public TreeRTGBetulaNigra() {
 
         super();
-        this.crownSize = 20;
+        this.crownSize = 10;
         this.trunkSize = 5;
         TreeMaterials.Picker picker  = new TreeMaterials.Picker();
         this.branchBlock = picker.birch.branches;

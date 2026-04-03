@@ -49,8 +49,8 @@ public class TreeRTGBetulaPendula extends TreeRTG {
     public TreeRTGBetulaPendula() {
 
         super();
-        this.crownSize = 20;
-        this.trunkSize = 5;
+        this.crownSize = 12;
+        this.trunkSize = 4;
         TreeMaterials.Picker picker  = new TreeMaterials.Picker();
         this.branchBlock = picker.birch.branches;
         this.leavesBlock = picker.birch.leaves;

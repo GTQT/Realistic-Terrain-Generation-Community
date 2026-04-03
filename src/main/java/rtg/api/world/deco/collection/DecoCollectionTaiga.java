@@ -167,7 +167,7 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         sitchensisTree.setMinTrunkSize(4);
         sitchensisTree.setMaxTrunkSize(9);
         sitchensisTree.setMinCrownSize(5);
-        sitchensisTree.setMaxCrownSize(14);
+        sitchensisTree.setMaxCrownSize(12);
         //this.addTree(sitchensisTree);
 
         DecoTree decoTrees = new DecoTree(sitchensisTree);

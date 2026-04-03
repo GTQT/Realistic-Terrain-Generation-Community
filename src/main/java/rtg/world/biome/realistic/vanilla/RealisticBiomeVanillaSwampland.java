@@ -80,7 +80,7 @@ public class RealisticBiomeVanillaSwampland extends RealisticBiomeBase {
         ponderosaTree.setMinTrunkSize(3);
         ponderosaTree.setMaxTrunkSize(6);
         ponderosaTree.setMinCrownSize(6);
-        ponderosaTree.setMaxCrownSize(14);
+        ponderosaTree.setMaxCrownSize(12);
         ponderosaTree.setNoLeaves(true);
         this.addTree(ponderosaTree);
 

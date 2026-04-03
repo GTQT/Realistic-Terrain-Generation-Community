@@ -29,8 +29,8 @@ public class DecoCollectionJungle extends DecoCollectionBase {
         mucronataTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.JUNGLE));
         mucronataTree.setMinTrunkSize(3);
         mucronataTree.setMaxTrunkSize(4);
-        mucronataTree.setMinCrownSize(10);
-        mucronataTree.setMaxCrownSize(27);
+        mucronataTree.setMinCrownSize(8);
+        mucronataTree.setMaxCrownSize(18);
         this.addTree(mucronataTree);
 
         DecoTree mangroves = new DecoTree(new TreeRTGRhizophoraMucronata(4, 5, 13f, 0.32f, 0.2f));

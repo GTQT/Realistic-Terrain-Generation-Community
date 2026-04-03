@@ -38,11 +38,11 @@ abstract public class DecoVariableTree extends DecoTree {
 	protected final TreeMaterials.Picker materialsPicker = new TreeMaterials.Picker();
 	protected TreeMaterials materials ;
 	
-	protected int tallTreeMinimumHeight = 21; // shortest allowed tall tree
+	protected int tallTreeMinimumHeight = 12; // shortest allowed tall tree
 	protected int tallTreeMinimumVariability = 9; // this less 1 (Random.nextInt()) added to minimum for largest allowed medium tree
-	protected int mediumTreeMinimumHeight = 12; // etc.
-	protected int mediumTreeMinimumVariability = 5;
-	protected int smallTreeMinimumHeight = 7;
+	protected int mediumTreeMinimumHeight = 9; // etc.
+	protected int mediumTreeMinimumVariability = 6;
+	protected int smallTreeMinimumHeight = 6;
 	protected int smallTreeMinimumVariability = 3;
 	protected int vanillaTreeMinimumHeight = 2;
 	protected int vanillaTreeMinimumVariability = 2;

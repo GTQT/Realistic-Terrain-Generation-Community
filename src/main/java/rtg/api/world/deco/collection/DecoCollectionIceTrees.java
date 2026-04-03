@@ -57,8 +57,8 @@ public class DecoCollectionIceTrees extends DecoCollectionBase {
         iceSpike.setLeavesBlock(leaves);
         iceSpike.setMinTrunkSize(1);
         iceSpike.setMaxTrunkSize(1);
-        iceSpike.setMinCrownSize(10);
-        iceSpike.setMaxCrownSize(24);
+        iceSpike.setMinCrownSize(8);
+        iceSpike.setMaxCrownSize(18);
 
         ArrayList<IBlockState> validBlocks = iceSpike.getValidGroundBlocks();
         validBlocks.add(Blocks.SNOW.getDefaultState());

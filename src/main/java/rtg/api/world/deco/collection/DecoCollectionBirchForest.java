@@ -53,7 +53,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
             .setMinTrunkSize(4)
             .setMaxTrunkSize(10)
             .setMinCrownSize(8)
-            .setMaxCrownSize(19);
+            .setMaxCrownSize(16);
 
         this.addTree(birchTree);
 

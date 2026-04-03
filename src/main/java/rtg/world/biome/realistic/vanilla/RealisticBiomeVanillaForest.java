@@ -66,7 +66,7 @@ public class RealisticBiomeVanillaForest extends RealisticBiomeBase {
     
     public static class TerrainVanillaForest extends TerrainBase {
 
-        private float hillStrength = 10f;// this needs to be linked to the
+        private float hillStrength = 20f;// this needs to be linked to the
 
         public TerrainVanillaForest() {
 

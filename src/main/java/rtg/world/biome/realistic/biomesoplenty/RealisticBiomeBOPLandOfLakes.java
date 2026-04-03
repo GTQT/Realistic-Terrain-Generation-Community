@@ -64,9 +64,9 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
         birchTree.setLogBlock(BlockUtil.getStateLog(EnumType.BIRCH));
         birchTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.BIRCH));
         birchTree.setMinTrunkSize(4);
-        birchTree.setMaxTrunkSize(10);
+        birchTree.setMaxTrunkSize(8);
         birchTree.setMinCrownSize(8);
-        birchTree.setMaxCrownSize(19);
+        birchTree.setMaxCrownSize(16);
         this.addTree(birchTree);
 
         DecoTree birchTrees = new DecoTree(birchTree);

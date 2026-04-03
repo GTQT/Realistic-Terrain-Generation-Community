@@ -46,8 +46,8 @@ public class TreeRTGCeibaRosea extends TreeRTG {
 
         super();
 
-        length = 16f;
-        branch = 5;
+        length = 8f;
+        branch = 4;
         verStart = 0.32f;
         verRand = 0.1f;
     }

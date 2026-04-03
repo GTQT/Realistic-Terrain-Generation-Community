@@ -48,8 +48,8 @@ public class TreeRTGQuercusNigra extends TreeRTG {
     public TreeRTGQuercusNigra() {
 
         super();
-        this.crownSize = 20;
-        this.trunkSize = 5;
+        this.crownSize = 12;
+        this.trunkSize = 4;
         
     }
     

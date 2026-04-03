@@ -45,9 +45,9 @@ public class DecoCollectionMegaTaiga extends DecoCollectionBase {
         pungensTree.setLogBlock(BlockUtil.getStateLog(EnumType.SPRUCE));
         pungensTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.SPRUCE));
         pungensTree.setMinTrunkSize(2);
-        pungensTree.setMaxTrunkSize(7);
-        pungensTree.setMinCrownSize(6);
-        pungensTree.setMaxCrownSize(17);
+        pungensTree.setMaxTrunkSize(6);
+        pungensTree.setMinCrownSize(4);
+        pungensTree.setMaxCrownSize(14);
         this.addTree(pungensTree);
 
         DecoTree spruceTrees = new DecoTree(pungensTree);
@@ -61,10 +61,10 @@ public class DecoCollectionMegaTaiga extends DecoCollectionBase {
         TreeRTG ponderosaTree = new TreeRTGPinusPonderosa();
         ponderosaTree.setLogBlock(Blocks.LOG.getDefaultState());
         ponderosaTree.setLeavesBlock(Blocks.LEAVES.getDefaultState());
-        ponderosaTree.setMinTrunkSize(11);
-        ponderosaTree.setMaxTrunkSize(21);
-        ponderosaTree.setMinCrownSize(15);
-        ponderosaTree.setMaxCrownSize(29);
+        ponderosaTree.setMinTrunkSize(6);
+        ponderosaTree.setMaxTrunkSize(12);
+        ponderosaTree.setMinCrownSize(12);
+        ponderosaTree.setMaxCrownSize(18);
         this.addTree(ponderosaTree);
 
         DecoTree oakPines = new DecoTree(ponderosaTree);

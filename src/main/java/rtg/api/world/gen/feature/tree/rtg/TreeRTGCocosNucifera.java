@@ -100,8 +100,8 @@ public class TreeRTGCocosNucifera extends TreeRTG {
 
         this.setLogBlock(BlockUtil.getStateLog(EnumType.JUNGLE));
         this.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.JUNGLE));
-        this.trunkSize = 8;
-        this.crownSize = 7;
+        this.trunkSize = 6;
+        this.crownSize = 5;
     }
 
     @Override

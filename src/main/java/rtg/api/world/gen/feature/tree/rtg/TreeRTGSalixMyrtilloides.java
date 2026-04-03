@@ -59,10 +59,10 @@ public class TreeRTGSalixMyrtilloides extends TreeRTG {
         
         SkylightTracker lightTracker = new SkylightTracker(this.furthestLikelyExtension(),pos,world);
 
-        int height = 13;
-        int leaveheight = 5;
-        int branches = 6;
-        int branchLenght = 6;
+        int height = 9;
+        int leaveheight = 3;
+        int branches = 4;
+        int branchLenght = 4;
 
         for (int i = 0; i < height; i++) {
             this.placeTrunkBlock(world, new BlockPos(x, y + i, z), this.generateFlag, lightTracker);

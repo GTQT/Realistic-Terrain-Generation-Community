@@ -26,7 +26,7 @@ public class TreeRTGQuercusRobur extends TreeRTG {
     double scaleWidth = 1.0D;
     double leafDensity = 1.0D;
     int trunkSize = 1;
-    int heightLimitLimit = 12;
+    int heightLimitLimit = 8;
     /**
      * Sets the distance limit for how far away the generator will populate leaves from the base leaf node.
      */
@@ -60,8 +60,8 @@ public class TreeRTGQuercusRobur extends TreeRTG {
 
         this.setLogBlock(Blocks.LOG.getDefaultState());
         this.setLeavesBlock(Blocks.LEAVES.getDefaultState());
-        this.trunkSize = 4;
-        this.crownSize = 8;
+        this.trunkSize = 3;
+        this.crownSize = 6;
     }
     
 	public float estimatedSize() {

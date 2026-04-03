@@ -47,14 +47,14 @@ public class RealisticBiomeBOPHighland extends RealisticBiomeBase {
 
     public static class TerrainBOPHighland extends TerrainBase {
 
-        private float baseHeight = 90f;
+        private float baseHeight = 120f;
         private BumpyHillsEffect onTop = new BumpyHillsEffect();
         private JitterEffect withJitter;
 
         public TerrainBOPHighland() {
 
-            onTop.hillHeight = 30;
-            onTop.hillWavelength = 60;
+            onTop.hillHeight = 40;
+            onTop.hillWavelength = 90;
             onTop.spikeHeight = 20;
             onTop.spikeWavelength = 10;
 

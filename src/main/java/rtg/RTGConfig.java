@@ -64,6 +64,7 @@ public final class RTGConfig {
         Arrays.stream(Setting.values()).forEach(setting -> {
             switch (setting) {
                 case worldTypeNotification:
+                case defaultWorldType:
                 case enableDebugging:
                 case additionalBiomeInfo:
                 case lushRiverbanksInDesert:
@@ -146,6 +147,10 @@ public final class RTGConfig {
 
     public static boolean worldTypeNotification() {
         return (Boolean) Setting.worldTypeNotification.getCurVal();
+    }
+
+    public static boolean enableDefaultWorldType() {
+        return (Boolean) Setting.defaultWorldType.getCurVal();
     }
 
     public static int getBiomeSize() {
@@ -293,6 +298,11 @@ public final class RTGConfig {
         worldTypeNotification(Type.BOOLEAN, Category.client,
                 "When enabled, this will display an informational message about RTG when entering the Customize World screen.\n" +
                         "This will display once and automatically disable itself.",
+                true),
+
+        defaultWorldType(Type.MOD_ID, Category.common,
+                "RTGC To be the default world type for new worlds.\n" +
+                        "!This setting is not used for existing worlds!",
                 true),
 
         biomeSize(Type.INTEGER, Category.geography,

@@ -78,7 +78,7 @@ public class RTG {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         EventHandlerCommon.init();// TERRAIN_GEN_BUS, ORE_GEN_BUS
-        DefaultWorldType();
+        if(RTGConfig.enableDefaultWorldType())DefaultWorldType();
     }
 
     @Mod.EventHandler

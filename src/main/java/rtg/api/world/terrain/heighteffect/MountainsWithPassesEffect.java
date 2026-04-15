@@ -31,12 +31,9 @@ public class MountainsWithPassesEffect extends HeightEffect {
         float spikeNoise = TerrainBase.blendedHillHeight(noise, 0.1f);
         spikeNoise *= spikeNoise;
         spikeNoise = TerrainBase.blendedHillHeight(spikeNoise * noise);
-        if (noise > 1.01) {
-            throw new RuntimeException();
-        }
-        if (spikeNoise > 1.01) {
-            throw new RuntimeException();
-        }
+
+        noise = Math.min(noise, 1.0f);
+        spikeNoise = Math.min(spikeNoise, 1.0f);
         return noise * mountainHeight + spikeNoise * spikeHeight;
     }
 }

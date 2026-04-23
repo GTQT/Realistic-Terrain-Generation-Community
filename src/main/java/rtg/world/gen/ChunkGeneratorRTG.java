@@ -797,30 +797,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
 
             // ==================== 步骤 7: 河流侵蚀 ====================
-            // 移除并行流
             for (int k = 0; k < 256; k++) {
-                float river = riverValues[k];
-                float baseHeight = baseHeights[k];
-                if (river > 0.5f) {
-                    float erosion = 8f * Math.min(1f, (river - 0.5f) * 2f);
-                    float riverHeight = baseHeight - erosion;
-                    int i = k >> 4;
-                    int j = k & 15;
-                    if (i >= 1 && i <= 14 && j >= 1 && j <= 14) {
-                        float avg = 0.25f * (
-                                baseHeights[k - 16] + baseHeights[k + 16] +
-                                        baseHeights[k - 1] + baseHeights[k + 1]
-                        );
-                        float blend = river * 2f - 1f;
-                        blend = blend * blend * (3f - 2f * blend);
-                        landscape.noise[k] = avg + (riverHeight - avg) * blend;
-                    } else {
-                        landscape.noise[k] = riverHeight;
-                    }
-                } else {
-                    landscape.noise[k] = baseHeight;
-                }
-                landscape.river[k] = river;
+                landscape.noise[k] = baseHeights[k];
+                landscape.river[k] = riverValues[k];
             }
 
             // ==================== 步骤 8: 生物群系数据 ====================

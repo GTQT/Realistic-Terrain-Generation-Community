@@ -7,6 +7,7 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldEntitySpawner;
 import net.minecraft.world.biome.Biome;
@@ -575,199 +576,204 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             landscape.river[k] = river;
         }
     }
+    private void getNewerNoise(BiomeProvider biomeProvider,
+                               int chunkWorldX,
+                               int chunkWorldZ,
+                               ChunkLandscape landscape) {
 
-    private void getNewerNoise(final BiomeProvider biomeProvider, final int worldX,
-                               final int worldZ, ChunkLandscape landscape) {
         final int hugeWidth = 9;
         final int smallWidth = 25;
-
-        // ==================== 步骤 1: 采样生物群系数据 ====================
-        final int baseOffsetX = worldX - 8;
-        final int baseOffsetZ = worldZ - 8;
         final int totalSampleSize = 2 * sampleSize + 5;
+        final int baseOffsetX = chunkWorldX - 8;
+        final int baseOffsetZ = chunkWorldZ - 8;
+
         MutableBlockPos tempPos = borrowPos();
 
         for (int i = 0; i < totalSampleSize; i++) {
-            final int xOffset = ((i - sampleSize) * 8) - 8;
-            final int dataRow = i * sampleArraySize;
+            int xOffset = ((i - sampleSize) * 8) - 8;
+            int rowOffset = i * sampleArraySize;
             for (int j = 0; j < totalSampleSize; j++) {
-                final int zOffset = ((j - sampleSize) * 8) - 8;
+                int zOffset = ((j - sampleSize) * 8) - 8;
                 tempPos.setPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
-                biomeData[dataRow + j] = Biome.getIdForBiome(biomeProvider.getBiome(tempPos));
+                biomeData[rowOffset + j] = Biome.getIdForBiome(biomeProvider.getBiome(tempPos));
             }
         }
 
-        // ==================== 步骤 2: HUGE 渲染层 (9×9) ====================
         for (int i = -1; i < 4; i++) {
+            int iBase = (i * 2 + 2) * hugeWidth;
+            int iSample = i + sampleSize + 1;
             for (int j = -1; j < 4; j++) {
-                int index = (i * 2 + 2) * 9 + (j * 2 + 2);
-                float[] weights = hugeRender[index];
-                Arrays.fill(weights, 0f); // 复用数组需清空历史数据
+                int idx = iBase + (j * 2 + 2);
+                float[] target = hugeRender[idx];
+                Arrays.fill(target, 0f);
+                int jSample = j + sampleSize + 1;
                 for (int k = -parabolicSize; k <= parabolicSize; k++) {
-                    int rowIdx = (i + k + sampleSize + 1) * sampleArraySize;
-                    int weightRow = (k + parabolicSize) * parabolicArraySize;
+                    int rowBiome = (iSample + k) * sampleArraySize;
+                    int rowWeight = (k + parabolicSize) * parabolicArraySize;
                     for (int l = -parabolicSize; l <= parabolicSize; l++) {
-                        int biomeId = biomeData[rowIdx + (j + l + sampleSize + 1)];
-                        float weight = parabolicField[weightRow + (l + parabolicSize)] * parabolicFieldTotalInv;
-                        weights[biomeId] += weight;
+                        int biomeId = biomeData[rowBiome + (jSample + l)];
+                        float weight = parabolicField[rowWeight + (l + parabolicSize)] * parabolicFieldTotalInv;
+                        target[biomeId] += weight;
                     }
                 }
             }
         }
 
-        // ==================== 步骤 3: HUGE 层混合 ====================
         for (int i = 0; i < 4; i++) {
             int i2 = i * 2, i2p2 = i2 + 2, rowCenter = i2 + 1;
+            int rowTop = i2 * hugeWidth, rowBottom = i2p2 * hugeWidth;
             for (int j = 0; j < 4; j++) {
                 int j2 = j * 2, j2p2 = j2 + 2, colCenter = j2 + 1;
-                int index = rowCenter * hugeWidth + colCenter;
-                Arrays.fill(hugeRender[index], 0f);
-                mix4(
-                        hugeRender[i2 * hugeWidth + j2],
-                        hugeRender[i2p2 * hugeWidth + j2],
-                        hugeRender[i2 * hugeWidth + j2p2],
-                        hugeRender[i2p2 * hugeWidth + j2p2],
-                        hugeRender[index]
-                );
+                int idx = rowCenter * hugeWidth + colCenter;
+                Arrays.fill(hugeRender[idx], 0f);
+                mix4(hugeRender[rowTop + j2], hugeRender[rowBottom + j2],
+                        hugeRender[rowTop + j2p2], hugeRender[rowBottom + j2p2],
+                        hugeRender[idx]);
             }
         }
 
-        // ==================== 步骤 4: SMALL 渲染层 (25×25) ====================
-        // 4.1 初始化关键点
-        for (int idx = 0; idx < 49; idx++) {
-            int i = idx / 7;
-            int j = idx % 7;
-            int i1 = i + 1, i2 = i + 2, i4 = i * 4;
-            int j1 = j + 1, j2 = j + 2, j4 = j * 4;
-            int smallIndex = i4 * smallWidth + j4;
-            Arrays.fill(smallRender[smallIndex], 0f);
-
-            if (((i ^ j) & 1) != 0) {
-                mix4(
-                        hugeRender[i * hugeWidth + j1],
-                        hugeRender[i1 * hugeWidth + j],
-                        hugeRender[i1 * hugeWidth + j2],
-                        hugeRender[i2 * hugeWidth + j1],
-                        smallRender[smallIndex]
-                );
-            } else {
-                System.arraycopy(hugeRender[i1 * hugeWidth + j1], 0, smallRender[smallIndex], 0, 256);
+        for (int i = 0; i < 7; i++) {
+            for (int j = 0; j < 7; j++) {
+                int i4 = i * 4, j4 = j * 4, smallIdx = i4 * smallWidth + j4;
+                Arrays.fill(smallRender[smallIdx], 0f);
+                if (((i ^ j) & 1) != 0) {
+                    mix4(hugeRender[i * hugeWidth + (j + 1)], hugeRender[(i + 1) * hugeWidth + j],
+                            hugeRender[(i + 1) * hugeWidth + (j + 2)], hugeRender[(i + 2) * hugeWidth + (j + 1)],
+                            smallRender[smallIdx]);
+                } else {
+                    System.arraycopy(hugeRender[(i + 1) * hugeWidth + (j + 1)], 0, smallRender[smallIdx], 0, 256);
+                }
             }
         }
 
-        // 4.2 SMALL 层混合 1
-        for (int idx = 0; idx < 36; idx++) {
-            int i = idx / 6;
-            int j = idx % 6;
-            int i4 = i * 4, i4p4 = i4 + 4, rowCenter = i4 + 2;
-            int j4 = j * 4, j4p4 = j4 + 4, colCenter = j4 + 2;
-            int index = rowCenter * smallWidth + colCenter;
-            Arrays.fill(smallRender[index], 0f);
-            mix4(
-                    smallRender[i4 * smallWidth + j4],
-                    smallRender[i4p4 * smallWidth + j4],
-                    smallRender[i4 * smallWidth + j4p4],
-                    smallRender[i4p4 * smallWidth + j4p4],
-                    smallRender[index]
-            );
+        for (int i = 0; i < 6; i++) {
+            for (int j = 0; j < 6; j++) {
+                int i4 = i * 4, j4 = j * 4;
+                int targetIdx = (i4 + 2) * smallWidth + (j4 + 2);
+                Arrays.fill(smallRender[targetIdx], 0f);
+                mix4(smallRender[i4 * smallWidth + j4], smallRender[(i4 + 4) * smallWidth + j4],
+                        smallRender[i4 * smallWidth + (j4 + 4)], smallRender[(i4 + 4) * smallWidth + (j4 + 4)],
+                        smallRender[targetIdx]);
+            }
         }
 
-        // 4.3 SMALL 层混合 2
         for (int i = 0; i < 11; i++) {
             int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4;
-            for (int j = (i & 1) ^ 1; j < 11; j += 2) {
-                int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
-                int index = i2p2 * smallWidth + j2p2;
-                Arrays.fill(smallRender[index], 0f);
-                mix4(
-                        smallRender[i2 * smallWidth + j2p2],
-                        smallRender[i2p2 * smallWidth + j2],
-                        smallRender[i2p2 * smallWidth + j2p4],
-                        smallRender[i2p4 * smallWidth + j2p2],
-                        smallRender[index]
-                );
-            }
-        }
-
-        // 4.4 SMALL 层混合 3
-        for (int idx = 0; idx < 81; idx++) {
-            int i = idx / 9;
-            int j = idx % 9;
-            int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4, rowCenter = i2 + 3;
-            int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4, colCenter = j2 + 3;
-            int index = rowCenter * smallWidth + colCenter;
-            Arrays.fill(smallRender[index], 0f);
-            mix4(
-                    smallRender[i2p2 * smallWidth + j2p2],
-                    smallRender[i2p4 * smallWidth + j2p2],
-                    smallRender[i2p2 * smallWidth + j2p4],
-                    smallRender[i2p4 * smallWidth + j2p4],
-                    smallRender[index]
-            );
-        }
-
-        // 4.5 SMALL 层混合 4
-        for (int idx = 0; idx < 128; idx++) {
-            int i = idx / 8;
-            int j = (idx % 8) * 2 + ((i & 1) ^ 1);
-            int i3 = i + 3, i4 = i + 4, i5 = i + 5;
-            int j4 = j + 4;
-            int index = i4 * smallWidth + j4;
-            Arrays.fill(smallRender[index], 0f);
-            mix4(
-                    smallRender[i3 * smallWidth + j4],
-                    smallRender[i4 * smallWidth + (j4 - 1)],
-                    smallRender[i4 * smallWidth + (j4 + 1)],
-                    smallRender[i5 * smallWidth + j4],
-                    smallRender[index]
-            );
-        }
-
-        // ==================== 步骤 5: 河流强度 ====================
-        float[] riverValues = new float[256];
-        MutableBlockPos riverPos = borrowPos();
-        for (int i = 0; i < 16; i++) {
-            for (int j = 0; j < 16; j++) {
-                riverPos.setPos(worldX + i, 0, worldZ + j);
-                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
-            }
-        }
-
-        // ==================== 步骤 6: 基础高度 ====================
-        float[] baseHeights = new float[256];
-        for (int i = 0; i < 16; i++) {
-            for (int j = 0; j < 16; j++) {
-                int k = i * 16 + j;
-                int l = (i + 4) * smallWidth + (j + 4);
-                int x = worldX + i;
-                int z = worldZ + j;
-                float totalHeight = 0f;
-                for (int biomeId = 0; biomeId < 256; biomeId++) {
-                    float weight = smallRender[l][biomeId];
-                    if (weight <= 0) continue;
-                    IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
-                    if (biome == null) continue;
-                    totalHeight += biome.rNoise(rtgWorld, x, z, weight, riverValues[k] + 1f) * weight;
+            for (int j = 0; j < 11; j++) {
+                if (((i ^ j) & 1) != 0) {
+                    int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
+                    int targetIdx = i2p2 * smallWidth + j2p2;
+                    Arrays.fill(smallRender[targetIdx], 0f);
+                    mix4(smallRender[i2 * smallWidth + j2p2], smallRender[i2p2 * smallWidth + j2],
+                            smallRender[i2p2 * smallWidth + j2p4], smallRender[i2p4 * smallWidth + j2p2],
+                            smallRender[targetIdx]);
                 }
-                baseHeights[k] = totalHeight;
             }
         }
 
-        // ==================== 步骤 7: 河流侵蚀 ====================
-        for (int k = 0; k < 256; k++) {
-            landscape.noise[k] = baseHeights[k];
-            landscape.river[k] = riverValues[k];
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4;
+                int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
+                int targetIdx = (i2 + 3) * smallWidth + (j2 + 3);
+                Arrays.fill(smallRender[targetIdx], 0f);
+                mix4(smallRender[i2p2 * smallWidth + j2p2], smallRender[i2p4 * smallWidth + j2p2],
+                        smallRender[i2p2 * smallWidth + j2p4], smallRender[i2p4 * smallWidth + j2p4],
+                        smallRender[targetIdx]);
+            }
         }
 
-        // ==================== 步骤 8: 生物群系数据 ====================
+        for (int i = 0; i < 16; i++) {
+            int i3 = i + 3, i4 = i + 4, i5 = i + 5;
+            for (int j = 0; j < 16; j++) {
+                if (((i ^ j) & 1) != 0) {
+                    int j4 = j + 4, targetIdx = i4 * smallWidth + j4;
+                    Arrays.fill(smallRender[targetIdx], 0f);
+                    mix4(smallRender[i3 * smallWidth + j4], smallRender[i4 * smallWidth + (j4 - 1)],
+                            smallRender[i4 * smallWidth + (j4 + 1)], smallRender[i5 * smallWidth + j4],
+                            smallRender[targetIdx]);
+                }
+            }
+        }
+
+        IRealisticBiome dominantBiome = null;
+        float[] center = hugeRender[40];
+        for (int id = 0; id < 256; id++) {
+            if (center[id] > 0.95f) {
+                dominantBiome = RTGAPI.getRTGBiome(id);
+                break;
+            }
+        }
+
+        float[] riverVals = new float[256];
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                tempPos.setPos(chunkWorldX + x, 0, chunkWorldZ + z);
+                riverVals[x * 16 + z] = TerrainBase.getRiverStrength(tempPos, rtgWorld);
+            }
+        }
+
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int idx = x * 16 + z;
+                int smallIdx = (x + 4) * smallWidth + (z + 4);
+                int worldX = chunkWorldX + x;
+                int worldZ = chunkWorldZ + z;
+                float river = riverVals[idx];
+
+                if (dominantBiome != null) {
+                    landscape.biome[idx] = dominantBiome;
+                    landscape.noise[idx] = dominantBiome.rNoise(rtgWorld, worldX, worldZ, 1.0f, river + 1f);
+                } else {
+                    float bCount = 0f, bRand = 0.5f + (float)(Math.sin(worldX * 0.05f + x * 0.5f) * Math.cos(worldZ * 0.05f + z * 0.5f));
+                    bRand = MathHelper.clamp(bRand, 0f, 0.99999f);
+                    float totalNoise = 0f;
+                    IRealisticBiome chosenBiome = null;
+
+                    for (int bid = 0; bid < 256; bid++) {
+                        float w = smallRender[smallIdx][bid];
+                        if (w <= 0f) continue;
+                        if (bCount <= 1f) {
+                            bCount += w;
+                            if (bCount > bRand) {
+                                chosenBiome = RTGAPI.getRTGBiome(bid);
+                                bCount = 2f;
+                            }
+                        }
+                        IRealisticBiome biome = RTGAPI.getRTGBiome(bid);
+                        if (biome != null) {
+                            totalNoise += biome.rNoise(rtgWorld, worldX, worldZ, w, river + 1f) * w;
+                        }
+                    }
+                    landscape.biome[idx] = chosenBiome;
+                    landscape.noise[idx] = totalNoise;
+                }
+                landscape.river[idx] = river;
+            }
+        }
+
+        for (int k = 0; k < 256; k++) {
+            float river = landscape.river[k];
+            if (river > 0.5f) {
+                float erosion = 8f * MathHelper.clamp((river - 0.5f) * 2f, 0f, 1f);
+                float riverHeight = landscape.noise[k] - erosion;
+                int lx = k >> 4, lz = k & 15;
+                if (lx > 0 && lx < 15 && lz > 0 && lz < 15) {
+                    float avg = 0.25f * (landscape.noise[k - 16] + landscape.noise[k + 16] + landscape.noise[k - 1] + landscape.noise[k + 1]);
+                    landscape.noise[k] = avg + (riverHeight - avg) * MathHelper.clamp((river - 0.5f) * 2f, 0f, 1f);
+                } else {
+                    landscape.noise[k] = riverHeight;
+                }
+            }
+        }
+
         MutableBlockPos biomePos = borrowPos();
         for (int x = 0; x < 16; x++) {
-            int wx = worldX + (x - 7) * 8 + 4;
+            int wx = chunkWorldX + (x - 7) * 8 + 4;
             for (int z = 0; z < 16; z++) {
-                int wz = worldZ + (z - 7) * 8 + 4;
+                int wz = chunkWorldZ + (z - 7) * 8 + 4;
                 biomePos.setPos(wx, 0, wz);
-                landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(
-                        biomeProvider.getBiome(biomePos));
+                landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(biomeProvider.getBiome(biomePos));
             }
         }
     }

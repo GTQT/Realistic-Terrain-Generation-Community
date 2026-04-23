@@ -39,31 +39,6 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
         ;
     }
 
-    private DecoHelperRandomSplit randomTrees() {
-        return new DecoHelperRandomSplit()
-            .setDecos(new DecoBase[]{tallBirchTrees(), vanillaTrees()})
-            .setChances(new int[]{10, 4});
-    }
-
-    private DecoTree tallBirchTrees() {
-
-        TreeRTG birchTree = new TreeRTGBetulaPapyrifera()
-            .setLogBlock(BlockUtil.getStateLog(EnumType.BIRCH))
-            .setLeavesBlock(BlockUtil.getStateLeaf(EnumType.BIRCH))
-            .setMinTrunkSize(4)
-            .setMaxTrunkSize(10)
-            .setMinCrownSize(8)
-            .setMaxCrownSize(16);
-
-        this.addTree(birchTree);
-
-        return new DecoTree(birchTree)
-            .setStrengthFactorForLoops(2f)
-            .setTreeType(DecoTree.TreeType.RTG_TREE)
-            .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
-            .setMaxY(100);
-    }
-
     protected DecoTree tallVariableTrees(float noiseMin, float noiseMax) {
     	
         return new DecoVariableMaterialTree(TreeMaterials.inBirchForest)

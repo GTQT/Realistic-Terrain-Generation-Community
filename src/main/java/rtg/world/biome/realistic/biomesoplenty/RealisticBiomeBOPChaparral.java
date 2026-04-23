@@ -43,10 +43,10 @@ public class RealisticBiomeBOPChaparral extends RealisticBiomeBase {
     public static class TerrainBOPChaparral extends TerrainBase {
 
         private float baseHeight = 76f;
-        private float peakyHillWavelength = 50f;
-        private float peakyHillStrength = 50f;
-        private float smoothHillWavelength = 70f;
-        private float smoothHillStrength = 40f;
+        private float peakyHillWavelength = 40f;
+        private float peakyHillStrength = 40f;
+        private float smoothHillWavelength = 60f;
+        private float smoothHillStrength = 30f;
         private float wavelength = 10f;// of jitter
         private float amplitude = 2f;// of jitter
 

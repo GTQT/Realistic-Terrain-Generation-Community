@@ -1,14 +1,11 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
-
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockDirt.DirtType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.noise.SimplexNoise;
@@ -16,20 +13,20 @@ import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.api.world.terrain.heighteffect.BumpyHillsEffect;
-import rtg.api.world.terrain.heighteffect.GroundEffect;
-import rtg.api.world.terrain.heighteffect.HeightEffect;
-import rtg.api.world.terrain.heighteffect.JitterEffect;
-import rtg.api.world.terrain.heighteffect.RaiseEffect;
-import rtg.api.world.terrain.heighteffect.VariableRuggednessEffect;
+import rtg.api.world.terrain.heighteffect.*;
+
+import java.util.Random;
 
 
 public class RealisticBiomeBOPBambooForest extends RealisticBiomeBase {
 
-    public RealisticBiomeBOPBambooForest(final Biome biome) { super(biome); }
+    public RealisticBiomeBOPBambooForest(final Biome biome) {
+        super(biome);
+    }
 
     @Override
-    public void initDecos() {}
+    public void initDecos() {
+    }
 
     @Override
     public void initConfig() {
@@ -48,18 +45,18 @@ public class RealisticBiomeBOPBambooForest extends RealisticBiomeBase {
 
     public static class TerrainBOPBambooForest extends TerrainBase {
 
-    /* Basic idea: High hilly terrain mixed with ground-noisy flats
-     * using a transition that also generates the hills
-     */
+        /* Basic idea: High hilly terrain mixed with ground-noisy flats
+         * using a transition that also generates the hills
+         */
 
-        private float hillockWavelength = 30;
-        private float hillockBoost = 5;
-        private float hillockVariance = 10;
-        private float hillockSpikeWidth = 8;
-        private float hillockSpikeHeight = 4;
-        private float terrainBase = 68;
+        private final float hillockWavelength = 120;
+        private final float hillockBoost = 5;
+        private final float hillockVariance = 60;
+        private final float hillockSpikeWidth = 8;
+        private final float hillockSpikeHeight = 2;
+        private final float terrainBase = 68;
 
-        private JitterEffect biomeHeight;// this includes the base
+        private final JitterEffect biomeHeight;// this includes the base
 
 
         public TerrainBOPBambooForest() {
@@ -104,15 +101,15 @@ public class RealisticBiomeBOPBambooForest extends RealisticBiomeBase {
 
     public static class SurfaceBOPBambooForest extends SurfaceBase {
 
-        private float min;
+        private final float min;
 
         private float sCliff = 1.5f;
         private float sHeight = 60f;
         private float sStrength = 65f;
         private float cCliff = 1.5f;
 
-        private IBlockState mix;
-        private float mixHeight;
+        private final IBlockState mix;
+        private final float mixHeight;
 
         public SurfaceBOPBambooForest(BiomeConfig config, IBlockState top, IBlockState fill, float minCliff, float stoneCliff,
                                       float stoneHeight, float stoneStrength, float clayCliff, IBlockState mixBlock, float mixSize) {
@@ -143,8 +140,7 @@ public class RealisticBiomeBOPBambooForest extends RealisticBiomeBase {
                 b = primer.getBlockState(x, k, z).getBlock();
                 if (b == Blocks.AIR) {
                     depth = -1;
-                }
-                else if (b == Blocks.STONE) {
+                } else if (b == Blocks.STONE) {
                     depth++;
 
                     if (depth == 0) {
@@ -161,39 +157,30 @@ public class RealisticBiomeBOPBambooForest extends RealisticBiomeBase {
                             if (rand.nextInt(3) == 0) {
 
                                 primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
+                            } else {
 
                                 primer.setBlockState(x, k, z, hcStone());
                             }
-                        }
-                        else if (cliff == 2) {
+                        } else if (cliff == 2) {
                             primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else if (k < 63) {
+                        } else if (k < 63) {
                             if (k < 62) {
                                 primer.setBlockState(x, k, z, fillerBlock);
-                            }
-                            else {
+                            } else {
                                 primer.setBlockState(x, k, z, topBlock);
                             }
-                        }
-                        else if (simplex.noise2f(i / 12f, j / 12f) > mixHeight) {
+                        } else if (simplex.noise2f(i / 12f, j / 12f) > mixHeight) {
                             primer.setBlockState(x, k, z, mix);
                             m = true;
-                        }
-                        else {
+                        } else {
                             primer.setBlockState(x, k, z, topBlock);
                         }
-                    }
-                    else if (depth < 6) {
+                    } else if (depth < 6) {
                         if (cliff == 1) {
                             primer.setBlockState(x, k, z, hcStone());
-                        }
-                        else if (cliff == 2) {
+                        } else if (cliff == 2) {
                             primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else {
+                        } else {
                             primer.setBlockState(x, k, z, fillerBlock);
                         }
                     }

@@ -28,7 +28,6 @@ import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
 import rtg.api.util.Logger;
-import rtg.api.util.NoiseArrayPool;
 import rtg.api.util.noise.ISimplexData2D;
 import rtg.api.util.noise.SimplexData2D;
 import rtg.api.world.RTGWorld;
@@ -41,12 +40,8 @@ import rtg.world.gen.structure.WoodlandMansionRTG;
 
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ChunkGeneratorRTG implements IChunkGenerator {
-    private static final ThreadLocal<Integer> threadNoiseSlot =
-            ThreadLocal.withInitial(() -> ThreadLocalRandom.current().nextInt(NoiseArrayPool.POOL_SIZE));
 
     public final RTGWorld rtgWorld;
     private final RTGChunkGenSettings settings;
@@ -59,10 +54,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final MapGenScatteredFeature scatteredFeatureGenerator;
     private final StructureOceanMonument oceanMonumentGenerator;
     private final World world;
-    private final NoiseArrayPool noisePool;
+    private final float[][] hugeRender = new float[81][256];
+    private final float[][] smallRender = new float[625][256];
+    private final MutableBlockPos[] posCache = new MutableBlockPos[4];
     private final float parabolicFieldTotalInv;
-    private final MutableBlockPos[] posPool = new MutableBlockPos[4];
-    private final AtomicInteger posBorrowedMask = new AtomicInteger(0);
     private final Map<ChunkPos, ChunkLandscape> landscapeCache;
     private final int sampleSize = 8;
     private final int sampleArraySize = sampleSize * 2 + 5;
@@ -76,6 +71,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int parabolicArraySize;
     private final float[] parabolicField;
     private final MutableBlockPos mpos = new MutableBlockPos();
+    private int posCacheIndex = 0;
 
     public ChunkGeneratorRTG(RTGWorld rtgWorld) {
         Logger.debug("Instantiating CPRTG using generator settings: {}", rtgWorld.world().getWorldInfo().getGeneratorOptions());
@@ -118,10 +114,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
         this.parabolicFieldTotalInv = 1.0f / parabolicFieldTotal;
-        this.noisePool = RTGAPI.getNoiseArrayPool();
-        for (int i = 0; i < posPool.length; i++) {
-            posPool[i] = new MutableBlockPos();
+
+        // 初始化位置缓存池
+        for (int i = 0; i < posCache.length; i++) {
+            posCache[i] = new MutableBlockPos();
         }
+
         this.landscapeCache = Collections.synchronizedMap(new LinkedHashMap<ChunkPos, ChunkLandscape>(RTGConfig.landscapeCacheSize(), 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<ChunkPos, ChunkLandscape> eldest) {
@@ -131,17 +129,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         Logger.debug("FINISHED instantiating CPRTG.");
     }
 
-    private PosHandle borrowPosHandle() {
-        int mask = posBorrowedMask.getAndUpdate(m -> {
-            if (m == 0b1111) throw new RuntimeException("No available pos handles");
-            return m | (m + 1);
-        });
-        int slot = Integer.numberOfTrailingZeros(~mask & 0b1111);
-        return new PosHandle(slot);
-    }
-
-    private void returnPosHandle(int slot) {
-        posBorrowedMask.updateAndGet(m -> m & ~(1 << slot));
+    /**
+     * 单线程安全的位置借用：循环覆盖，无需归还
+     */
+    private MutableBlockPos borrowPos() {
+        MutableBlockPos pos = posCache[posCacheIndex];
+        posCacheIndex = (posCacheIndex + 1) % posCache.length;
+        return pos;
     }
 
     @Override
@@ -236,7 +230,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             return;
         }
 
-        // ============= 单一生物群系覆盖 =============
         if (this.settings.useSingleBiome) {
             IRealisticBiome singleBiome = getSingleBiomeTarget();
             int worldX = cx * 16;
@@ -251,7 +244,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
             return;
         }
-        // ============= 常规逻辑 =============
 
         int worldX = cx * 16;
         int worldZ = cz * 16;
@@ -265,9 +257,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
     }
 
-    /**
-     * 获取单一生物群系配置下的目标生物群系（带空值保护）
-     */
     private IRealisticBiome getSingleBiomeTarget() {
         if (!this.settings.useSingleBiome) return null;
 
@@ -305,7 +294,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         boolean hasVillage = false;
         ForgeEventFactory.onChunkPopulate(true, this, this.world, this.rand, chunkX, chunkZ, false);
 
-        // 结构生成 (位标志压缩配置)
         if (this.mapFeaturesEnabled) {
             byte flags = 0;
             if (settings.useMineShafts) flags |= 1;
@@ -322,7 +310,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             if ((flags & 32) != 0) woodlandMansionGenerator.generateStructure(world, rand, chunkPos);
         }
 
-        // 水湖生成
         if (settings.useWaterLakes && settings.waterLakeChance > 0 && !hasVillage) {
             long nextChance = rand.nextLong();
             int surfaceChance = settings.getSurfaceWaterLakeChance(biome.waterLakeMult());
@@ -342,7 +329,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        // 岩浆湖生成
         if (settings.useLavaLakes && settings.lavaLakeChance > 0 && !hasVillage) {
             long nextChance = rand.nextLong();
             int surfaceChance = settings.getSurfaceLavaLakeChance(biome.lavaLakeMult());
@@ -362,7 +348,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        // 地牢生成
         if (settings.useDungeons && TerrainGen.populate(this, world, rand, chunkX, chunkZ,
                 hasVillage, PopulateChunkEvent.Populate.EventType.DUNGEON)) {
             for (int i = 0; i < settings.dungeonChance; i++) {
@@ -371,7 +356,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        // 装饰生成
         float river = -TerrainBase.getRiverStrength(blockPos.add(16, 0, 16), rtgWorld);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
             if (river > 0.8f) {
@@ -387,14 +371,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        // 生物生成
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ANIMALS)) {
             WorldEntitySpawner.performWorldGenSpawning(this.world, biome.baseBiome(),
                     blockPos.getX() + 8, blockPos.getZ() + 8, 16, 16, this.rand);
         }
 
-        // 冰雪生成
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ICE)) {
             float snowTempThreshold = settings.getClampedSnowLayerTemp();
@@ -526,23 +508,14 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private ChunkLandscape generateLandscape(BiomeProvider biomeProvider, BlockPos blockPos) {
         final ChunkLandscape landscape = new ChunkLandscape();
 
-        // ============= 单一生物群系特殊处理 =============
         if (this.settings.useSingleBiome) {
             IRealisticBiome singleBiome = getSingleBiomeTarget();
             int biomeId = Biome.getIdForBiome(singleBiome.baseBiome());
-
-            // 填充 biomeData 数组（供噪声采样使用）
             Arrays.fill(this.biomeData, biomeId);
-
-            // 生成基础噪声（仍需要噪声数据，但使用单一生物群系参数）
             getNewerNoiseSingleBiome(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape, singleBiome);
-
-            // 填充 landscape.biome 数组
             Arrays.fill(landscape.biome, singleBiome);
-
             return landscape;
         }
-        // ============= 常规多生物群系逻辑 =============
 
         getNewerNoise(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape);
         Biome[] biomes = new Biome[256];
@@ -555,20 +528,14 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         return landscape;
     }
 
-    /**
-     * 单一生物群系模式下的简化噪声生成
-     * 跳过复杂的生物群系混合计算，直接使用目标生物群系的噪声参数
-     */
     private void getNewerNoiseSingleBiome(final BiomeProvider biomeProvider, final int worldX,
                                           final int worldZ, ChunkLandscape landscape, IRealisticBiome singleBiome) {
         float[] riverValues = new float[256];
-        try (PosHandle riverPosHandle = borrowPosHandle()) {
-            MutableBlockPos riverPos = riverPosHandle.pos;
-            for (int i = 0; i < 16; i++) {
-                for (int j = 0; j < 16; j++) {
-                    riverPos.setPos(worldX + i, 0, worldZ + j);
-                    riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
-                }
+        MutableBlockPos riverPos = borrowPos();
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                riverPos.setPos(worldX + i, 0, worldZ + j);
+                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
             }
         }
 
@@ -597,8 +564,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                             landscape.noise[k - 16] + landscape.noise[k + 16] +
                                     landscape.noise[k - 1] + landscape.noise[k + 1]
                     );
-                    float blend = river * 2f - 1f;
-                    blend = blend * blend * (3f - 2f * blend);
+                    float blend = Math.min(1f, (river - 0.5f) * 2f);
                     landscape.noise[k] = avg + (riverHeight - avg) * blend;
                 } else {
                     landscape.noise[k] = riverHeight;
@@ -610,220 +576,202 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
     }
 
-    /**
-     * Generate noise and biome data for a chunk using pooled arrays
-     */
     private void getNewerNoise(final BiomeProvider biomeProvider, final int worldX,
                                final int worldZ, ChunkLandscape landscape) {
-        int slot = threadNoiseSlot.get();
-        float[][] hugeRender = noisePool.borrowHuge(slot);
-        float[][] smallRender = noisePool.borrowSmall(slot);
-        try {
-            // ==================== 步骤 1: 采样生物群系数据 ====================
-            final int baseOffsetX = worldX - 8;
-            final int baseOffsetZ = worldZ - 8;
-            final int totalSampleSize = 2 * sampleSize + 5;
-            try (PosHandle tempPosHandle = borrowPosHandle()) {
-                MutableBlockPos tempPos = tempPosHandle.pos;
-                for (int i = 0; i < totalSampleSize; i++) {
-                    final int xOffset = ((i - sampleSize) * 8) - 8;
-                    final int dataRow = i * sampleArraySize;
-                    for (int j = 0; j < totalSampleSize; j++) {
-                        final int zOffset = ((j - sampleSize) * 8) - 8;
-                        tempPos.setPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
-                        biomeData[dataRow + j] = Biome.getIdForBiome(biomeProvider.getBiome(tempPos));
+        final int hugeWidth = 9;
+        final int smallWidth = 25;
+
+        // ==================== 步骤 1: 采样生物群系数据 ====================
+        final int baseOffsetX = worldX - 8;
+        final int baseOffsetZ = worldZ - 8;
+        final int totalSampleSize = 2 * sampleSize + 5;
+        MutableBlockPos tempPos = borrowPos();
+
+        for (int i = 0; i < totalSampleSize; i++) {
+            final int xOffset = ((i - sampleSize) * 8) - 8;
+            final int dataRow = i * sampleArraySize;
+            for (int j = 0; j < totalSampleSize; j++) {
+                final int zOffset = ((j - sampleSize) * 8) - 8;
+                tempPos.setPos(baseOffsetX + xOffset, 0, baseOffsetZ + zOffset);
+                biomeData[dataRow + j] = Biome.getIdForBiome(biomeProvider.getBiome(tempPos));
+            }
+        }
+
+        // ==================== 步骤 2: HUGE 渲染层 (9×9) ====================
+        for (int i = -1; i < 4; i++) {
+            for (int j = -1; j < 4; j++) {
+                int index = (i * 2 + 2) * 9 + (j * 2 + 2);
+                float[] weights = hugeRender[index];
+                Arrays.fill(weights, 0f); // 复用数组需清空历史数据
+                for (int k = -parabolicSize; k <= parabolicSize; k++) {
+                    int rowIdx = (i + k + sampleSize + 1) * sampleArraySize;
+                    int weightRow = (k + parabolicSize) * parabolicArraySize;
+                    for (int l = -parabolicSize; l <= parabolicSize; l++) {
+                        int biomeId = biomeData[rowIdx + (j + l + sampleSize + 1)];
+                        float weight = parabolicField[weightRow + (l + parabolicSize)] * parabolicFieldTotalInv;
+                        weights[biomeId] += weight;
                     }
                 }
             }
+        }
 
-            // ==================== 步骤 2: HUGE 渲染层 (9×9) ====================
-            for (int i = -1; i < 4; i++) {
-                for (int j = -1; j < 4; j++) {
-                    int index = (i * 2 + 2) * 9 + (j * 2 + 2);
-                    float[] weights = hugeRender[index];
-                    for (int k = -parabolicSize; k <= parabolicSize; k++) {
-                        int rowIdx = (i + k + sampleSize + 1) * sampleArraySize;
-                        int weightRow = (k + parabolicSize) * parabolicArraySize;
-                        for (int l = -parabolicSize; l <= parabolicSize; l++) {
-                            int biomeId = biomeData[rowIdx + (j + l + sampleSize + 1)];
-                            float weight = parabolicField[weightRow + (l + parabolicSize)] * parabolicFieldTotalInv;
-                            weights[biomeId] += weight;
-                        }
-                    }
-                }
-            }
-
-            // ==================== 步骤 3: HUGE 层混合 ====================
-            final int hugeWidth = 9;
-            for (int i = 0; i < 4; i++) {
-                int i2 = i * 2, i2p2 = i2 + 2, rowCenter = i2 + 1;
-                for (int j = 0; j < 4; j++) {
-                    int j2 = j * 2, j2p2 = j2 + 2, colCenter = j2 + 1;
-                    int index = rowCenter * hugeWidth + colCenter;
-                    // 确保目标数组存在
-                    if (hugeRender[index] == null) hugeRender[index] = new float[256];
-                    mix4(
-                            hugeRender[i2 * hugeWidth + j2],
-                            hugeRender[i2p2 * hugeWidth + j2],
-                            hugeRender[i2 * hugeWidth + j2p2],
-                            hugeRender[i2p2 * hugeWidth + j2p2],
-                            hugeRender[index]
-                    );
-                }
-            }
-
-            // ==================== 步骤 4: SMALL 渲染层 (25×25) ====================
-            final int smallWidth = 25;
-            // 4.1 初始化关键点 (7×7=49 任务) - 移除并行流
-            for (int idx = 0; idx < 49; idx++) {
-                int i = idx / 7;
-                int j = idx % 7;
-                int i1 = i + 1, i2 = i + 2, i4 = i * 4;
-                int j1 = j + 1, j2 = j + 2, j4 = j * 4;
-                int smallIndex = i4 * smallWidth + j4;
-                if (smallRender[smallIndex] == null) smallRender[smallIndex] = new float[256];
-
-                if (((i ^ j) & 1) != 0) {
-                    mix4(
-                            hugeRender[i * hugeWidth + j1],
-                            hugeRender[i1 * hugeWidth + j],
-                            hugeRender[i1 * hugeWidth + j2],
-                            hugeRender[i2 * hugeWidth + j1],
-                            smallRender[smallIndex]
-                    );
-                } else {
-                    System.arraycopy(hugeRender[i1 * hugeWidth + j1], 0, smallRender[smallIndex], 0, 256);
-                }
-            }
-
-            // 4.2 SMALL 层混合 1: 6×6=36 角点 - 移除并行流
-            for (int idx = 0; idx < 36; idx++) {
-                int i = idx / 6;
-                int j = idx % 6;
-                int i4 = i * 4, i4p4 = i4 + 4, rowCenter = i4 + 2;
-                int j4 = j * 4, j4p4 = j4 + 4, colCenter = j4 + 2;
-                int index = rowCenter * smallWidth + colCenter;
-                if (smallRender[index] == null) smallRender[index] = new float[256];
+        // ==================== 步骤 3: HUGE 层混合 ====================
+        for (int i = 0; i < 4; i++) {
+            int i2 = i * 2, i2p2 = i2 + 2, rowCenter = i2 + 1;
+            for (int j = 0; j < 4; j++) {
+                int j2 = j * 2, j2p2 = j2 + 2, colCenter = j2 + 1;
+                int index = rowCenter * hugeWidth + colCenter;
+                Arrays.fill(hugeRender[index], 0f);
                 mix4(
-                        smallRender[i4 * smallWidth + j4],
-                        smallRender[i4p4 * smallWidth + j4],
-                        smallRender[i4 * smallWidth + j4p4],
-                        smallRender[i4p4 * smallWidth + j4p4],
-                        smallRender[index]
+                        hugeRender[i2 * hugeWidth + j2],
+                        hugeRender[i2p2 * hugeWidth + j2],
+                        hugeRender[i2 * hugeWidth + j2p2],
+                        hugeRender[i2p2 * hugeWidth + j2p2],
+                        hugeRender[index]
                 );
             }
+        }
 
-            // 4.3 SMALL 层混合 2: 11×11 交叉点 - 移除并行流
-            for (int i = 0; i < 11; i++) {
-                int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4;
-                for (int j = (i & 1) ^ 1; j < 11; j += 2) {
-                    int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
-                    int index = i2p2 * smallWidth + j2p2;
-                    if (smallRender[index] == null) smallRender[index] = new float[256];
-                    mix4(
-                            smallRender[i2 * smallWidth + j2p2],
-                            smallRender[i2p2 * smallWidth + j2],
-                            smallRender[i2p2 * smallWidth + j2p4],
-                            smallRender[i2p4 * smallWidth + j2p2],
-                            smallRender[index]
-                    );
-                }
-            }
+        // ==================== 步骤 4: SMALL 渲染层 (25×25) ====================
+        // 4.1 初始化关键点
+        for (int idx = 0; idx < 49; idx++) {
+            int i = idx / 7;
+            int j = idx % 7;
+            int i1 = i + 1, i2 = i + 2, i4 = i * 4;
+            int j1 = j + 1, j2 = j + 2, j4 = j * 4;
+            int smallIndex = i4 * smallWidth + j4;
+            Arrays.fill(smallRender[smallIndex], 0f);
 
-            // 4.4 SMALL 层混合 3: 9×9=81 中间点 - 移除并行流
-            for (int idx = 0; idx < 81; idx++) {
-                int i = idx / 9;
-                int j = idx % 9;
-                int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4, rowCenter = i2 + 3;
-                int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4, colCenter = j2 + 3;
-                int index = rowCenter * smallWidth + colCenter;
-                if (smallRender[index] == null) smallRender[index] = new float[256];
+            if (((i ^ j) & 1) != 0) {
                 mix4(
-                        smallRender[i2p2 * smallWidth + j2p2],
-                        smallRender[i2p4 * smallWidth + j2p2],
+                        hugeRender[i * hugeWidth + j1],
+                        hugeRender[i1 * hugeWidth + j],
+                        hugeRender[i1 * hugeWidth + j2],
+                        hugeRender[i2 * hugeWidth + j1],
+                        smallRender[smallIndex]
+                );
+            } else {
+                System.arraycopy(hugeRender[i1 * hugeWidth + j1], 0, smallRender[smallIndex], 0, 256);
+            }
+        }
+
+        // 4.2 SMALL 层混合 1
+        for (int idx = 0; idx < 36; idx++) {
+            int i = idx / 6;
+            int j = idx % 6;
+            int i4 = i * 4, i4p4 = i4 + 4, rowCenter = i4 + 2;
+            int j4 = j * 4, j4p4 = j4 + 4, colCenter = j4 + 2;
+            int index = rowCenter * smallWidth + colCenter;
+            Arrays.fill(smallRender[index], 0f);
+            mix4(
+                    smallRender[i4 * smallWidth + j4],
+                    smallRender[i4p4 * smallWidth + j4],
+                    smallRender[i4 * smallWidth + j4p4],
+                    smallRender[i4p4 * smallWidth + j4p4],
+                    smallRender[index]
+            );
+        }
+
+        // 4.3 SMALL 层混合 2
+        for (int i = 0; i < 11; i++) {
+            int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4;
+            for (int j = (i & 1) ^ 1; j < 11; j += 2) {
+                int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4;
+                int index = i2p2 * smallWidth + j2p2;
+                Arrays.fill(smallRender[index], 0f);
+                mix4(
+                        smallRender[i2 * smallWidth + j2p2],
+                        smallRender[i2p2 * smallWidth + j2],
                         smallRender[i2p2 * smallWidth + j2p4],
-                        smallRender[i2p4 * smallWidth + j2p4],
+                        smallRender[i2p4 * smallWidth + j2p2],
                         smallRender[index]
                 );
             }
+        }
 
-            // 4.5 SMALL 层混合 4: 填充剩余点 - 移除并行流
-            for (int idx = 0; idx < 128; idx++) {
-                int i = idx / 8;
-                int j = (idx % 8) * 2 + ((i & 1) ^ 1);
-                int i3 = i + 3, i4 = i + 4, i5 = i + 5;
-                int j4 = j + 4;
-                int index = i4 * smallWidth + j4;
-                if (smallRender[index] == null) smallRender[index] = new float[256];
-                mix4(
-                        smallRender[i3 * smallWidth + j4],
-                        smallRender[i4 * smallWidth + (j4 - 1)],
-                        smallRender[i4 * smallWidth + (j4 + 1)],
-                        smallRender[i5 * smallWidth + j4],
-                        smallRender[index]
-                );
+        // 4.4 SMALL 层混合 3
+        for (int idx = 0; idx < 81; idx++) {
+            int i = idx / 9;
+            int j = idx % 9;
+            int i2 = i * 2, i2p2 = i2 + 2, i2p4 = i2 + 4, rowCenter = i2 + 3;
+            int j2 = j * 2, j2p2 = j2 + 2, j2p4 = j2 + 4, colCenter = j2 + 3;
+            int index = rowCenter * smallWidth + colCenter;
+            Arrays.fill(smallRender[index], 0f);
+            mix4(
+                    smallRender[i2p2 * smallWidth + j2p2],
+                    smallRender[i2p4 * smallWidth + j2p2],
+                    smallRender[i2p2 * smallWidth + j2p4],
+                    smallRender[i2p4 * smallWidth + j2p4],
+                    smallRender[index]
+            );
+        }
+
+        // 4.5 SMALL 层混合 4
+        for (int idx = 0; idx < 128; idx++) {
+            int i = idx / 8;
+            int j = (idx % 8) * 2 + ((i & 1) ^ 1);
+            int i3 = i + 3, i4 = i + 4, i5 = i + 5;
+            int j4 = j + 4;
+            int index = i4 * smallWidth + j4;
+            Arrays.fill(smallRender[index], 0f);
+            mix4(
+                    smallRender[i3 * smallWidth + j4],
+                    smallRender[i4 * smallWidth + (j4 - 1)],
+                    smallRender[i4 * smallWidth + (j4 + 1)],
+                    smallRender[i5 * smallWidth + j4],
+                    smallRender[index]
+            );
+        }
+
+        // ==================== 步骤 5: 河流强度 ====================
+        float[] riverValues = new float[256];
+        MutableBlockPos riverPos = borrowPos();
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                riverPos.setPos(worldX + i, 0, worldZ + j);
+                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
             }
+        }
 
-            // ==================== 步骤 5: 河流强度 ====================
-            float[] riverValues = new float[256];
-            try (PosHandle riverPosHandle = borrowPosHandle()) {
-                MutableBlockPos riverPos = riverPosHandle.pos;
-                for (int i = 0; i < 16; i++) {
-                    for (int j = 0; j < 16; j++) {
-                        riverPos.setPos(worldX + i, 0, worldZ + j);
-                        riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
-                    }
+        // ==================== 步骤 6: 基础高度 ====================
+        float[] baseHeights = new float[256];
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int k = i * 16 + j;
+                int l = (i + 4) * smallWidth + (j + 4);
+                int x = worldX + i;
+                int z = worldZ + j;
+                float totalHeight = 0f;
+                for (int biomeId = 0; biomeId < 256; biomeId++) {
+                    float weight = smallRender[l][biomeId];
+                    if (weight <= 0) continue;
+                    IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
+                    if (biome == null) continue;
+                    totalHeight += biome.rNoise(rtgWorld, x, z, weight, riverValues[k] + 1f) * weight;
                 }
+                baseHeights[k] = totalHeight;
             }
+        }
 
-            // ==================== 步骤 6: 基础高度 ====================
-            float[] baseHeights = new float[256];
-            for (int i = 0; i < 16; i++) {
-                for (int j = 0; j < 16; j++) {
-                    int k = i * 16 + j;
-                    int l = (i + 4) * smallWidth + (j + 4);
-                    int x = worldX + i;
-                    int z = worldZ + j;
-                    float totalHeight = 0f;
-                    for (int biomeId = 0; biomeId < 256; biomeId++) {
-                        float weight = smallRender[l][biomeId];
-                        if (weight <= 0) continue;
-                        IRealisticBiome biome = RTGAPI.getRTGBiome(biomeId);
-                        if (biome == null) continue;
-                        totalHeight += biome.rNoise(rtgWorld, x, z, weight, riverValues[k] + 1f) * weight;
-                    }
-                    baseHeights[k] = totalHeight;
-                }
-            }
+        // ==================== 步骤 7: 河流侵蚀 ====================
+        for (int k = 0; k < 256; k++) {
+            landscape.noise[k] = baseHeights[k];
+            landscape.river[k] = riverValues[k];
+        }
 
-            // ==================== 步骤 7: 河流侵蚀 ====================
-            for (int k = 0; k < 256; k++) {
-                landscape.noise[k] = baseHeights[k];
-                landscape.river[k] = riverValues[k];
+        // ==================== 步骤 8: 生物群系数据 ====================
+        MutableBlockPos biomePos = borrowPos();
+        for (int x = 0; x < 16; x++) {
+            int wx = worldX + (x - 7) * 8 + 4;
+            for (int z = 0; z < 16; z++) {
+                int wz = worldZ + (z - 7) * 8 + 4;
+                biomePos.setPos(wx, 0, wz);
+                landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(
+                        biomeProvider.getBiome(biomePos));
             }
-
-            // ==================== 步骤 8: 生物群系数据 ====================
-            try (PosHandle biomePosHandle = borrowPosHandle()) {
-                MutableBlockPos biomePos = biomePosHandle.pos;
-                for (int x = 0; x < 16; x++) {
-                    int wx = worldX + (x - 7) * 8 + 4;
-                    for (int z = 0; z < 16; z++) {
-                        int wz = worldZ + (z - 7) * 8 + 4;
-                        biomePos.setPos(wx, 0, wz);
-                        landscape.biome[x * 16 + z] = RTGAPI.getRTGBiome(
-                                biomeProvider.getBiome(biomePos));
-                    }
-                }
-            }
-        } finally {
-            noisePool.returnHuge(slot);
-            noisePool.returnSmall(slot);
         }
     }
 
-    /**
-     * 优化版 mix4: 写入目标数组，避免分配
-     */
     private void mix4(float[] a, float[] b, float[] c, float[] d, float[] out) {
         for (int i = 0; i < 256; i++) {
             out[i] = (a[i] + b[i] + c[i] + d[i]) * 0.25f;
@@ -861,21 +809,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     break;
             }
             return ret;
-        }
-    }
-
-    private class PosHandle implements AutoCloseable {
-        final int slot;
-        final MutableBlockPos pos;
-
-        PosHandle(int slot) {
-            this.slot = slot;
-            this.pos = posPool[slot];
-        }
-
-        @Override
-        public void close() {
-            returnPosHandle(slot);
         }
     }
 }

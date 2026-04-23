@@ -30,6 +30,8 @@ gui.createWorld.customize.setting.biomeSize=生物群系规模
 gui.createWorld.customize.setting.biomeSize.tooltip=改变生物群落的平均规模
 
 gui.createWorld.customize.setting.seaLevel=海平面
+gui.createWorld.customize.setting.useSingleBiome=启用单一生物群系
+gui.createWorld.customize.setting.singleBiomeId=单一生物群系ID
 gui.createWorld.customize.setting.riverSizeMult=河流缩放尺寸
 gui.createWorld.customize.category.SURFACE=地表设置
 gui.createWorld.customize.setting.useBoulders=启用巨石

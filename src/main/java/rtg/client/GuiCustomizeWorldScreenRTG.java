@@ -241,46 +241,59 @@ public class GuiCustomizeWorldScreenRTG extends GuiScreen implements FormatHelpe
 
                     if (setting.getSettingType().equals(SettingType.BOOLEAN)) {
                         pages[pg][id.next()] = new GuiButtonEntry(
-                            setting.getID(),
-                            setting.getLangKey(),
-                            setting.isPage1(),
-                            setting.curValue().getBool()
+                                setting.getID(),
+                                setting.getLangKey(),
+                                setting.isPage1(),
+                                setting.curValue().getBool()
                         );
                     }
                     if (setting.getSettingType().equals(SettingType.INTEGER)) {
                         pages[pg][id.next()] = new GuiSlideEntry(
-                            setting.getID(),
-                            setting.getLangKey(),
-                            setting.isPage1(),
-                            (fid, fname, fval) -> {
+                                setting.getID(),
+                                setting.getLangKey(),
+                                setting.isPage1(),
+                                (fid, fname, fval) -> {
+                                    // ============= RTG 单一生物群系特殊显示 =============
+                                    if (setting.equals(Setting.singleBiomeId)) {
+                                        int biomeId = (int) fval;
+                                        net.minecraft.world.biome.Biome biome = net.minecraft.world.biome.Biome.getBiome(biomeId);
+                                        if (biome != null) {
+                                            String biomeName = biome.getBiomeName();
+                                            return fname + ": " + biomeId + " (" + biomeName + ")";
+                                        } else {
+                                            return fname + ": " + biomeId + " (Unknown)";
+                                        }
+                                    }
+                                    // ==================================================
+
 // TODO: [Generator settings] Disable fixedBiome for now as it requires modification to the GenLayer classes to work.
                             /*if (setting.equals(Setting.fixedBiome)) { // special handling for fixedBiome
                                   return ((int)fval == -1) ? "Biome: All Biomes" : "Biome: " + biomeList.get((int)fval).getBiomeName();
                               }
                               else*/
-                                if (setting.equals(Setting.waterSpoutChance) || setting.equals(Setting.lavaSpoutChance)) { // special handling for waterSpoutChance/lavaSpoutChance
-                                    return fname + (((int) fval == 0) ? ": Disabled" : ": " + String.format("%d", (int) fval));
-                                }
-                                return fname + ": " + String.format("%d", (int) fval);
-                            },
-                            setting.minValue().getInt(),
+                                    if (setting.equals(Setting.waterSpoutChance) || setting.equals(Setting.lavaSpoutChance)) { // special handling for waterSpoutChance/lavaLakeChance
+                                        return fname + (((int) fval == 0) ? ": Disabled" : ": " + String.format("%d", (int) fval));
+                                    }
+                                    return fname + ": " + String.format("%d", (int) fval);
+                                },
+                                setting.minValue().getInt(),
 // TODO: [Generator settings] Disable fixedBiome for now as it requires modification to the GenLayer classes to work.
-                            /*setting.equals(Setting.fixedBiome) ? biomeList.size() - 1 :*/ setting.maxValue().getInt(), // special handling for fixedBiome
-                            setting.curValue().getInt()
+                                /*setting.equals(Setting.fixedBiome) ? biomeList.size() - 1 :*/ setting.maxValue().getInt(), // special handling for fixedBiome
+                                setting.curValue().getInt()
                         );
                     }
 
                     if (setting.getSettingType().equals(SettingType.FLOAT)) {
                         pages[pg][id.next()] = new GuiSlideEntry(
-                            setting.getID(),
-                            setting.getLangKey(),
-                            setting.isPage1(),
-                            (fid, fname, fval) -> setting.equals(Setting.riverCutOffScale) // special handling for riverCutOffScale
-                                ? fname + ": " + String.format("%3.3f", fval)
-                                : fname + ": " + String.format("%1.3f", fval),
-                            setting.minValue().getFloat(),
-                            setting.maxValue().getFloat(),
-                            setting.curValue().getFloat()
+                                setting.getID(),
+                                setting.getLangKey(),
+                                setting.isPage1(),
+                                (fid, fname, fval) -> setting.equals(Setting.riverCutOffScale) // special handling for riverCutOffScale
+                                        ? fname + ": " + String.format("%3.3f", fval)
+                                        : fname + ": " + String.format("%1.3f", fval),
+                                setting.minValue().getFloat(),
+                                setting.maxValue().getFloat(),
+                                setting.curValue().getFloat()
                         );
                     }
                 }); // SETTINGS END
@@ -517,6 +530,8 @@ public class GuiCustomizeWorldScreenRTG extends GuiScreen implements FormatHelpe
 //      fixedBiome          (SettingType.INTEGER, defaults.fixedBiome,             -1,  255, Category.WORLD), // Max value is replaced during createPagedList() to match the size of the biome list
 //      biomeSize           (SettingType.INTEGER, defaults.biomeSize,               2,    8, Category.WORLD),
         seaLevel(SettingType.INTEGER, defaults.seaLevel, 31, 95, Category.WORLD),
+        useSingleBiome(SettingType.BOOLEAN, defaults.useSingleBiome, null, null, Category.WORLD),
+        singleBiomeId(SettingType.INTEGER, defaults.singleBiomeId, 0, 255, Category.WORLD),
 
         useBoulders(SettingType.BOOLEAN, defaults.useBoulders, null, null, Category.SURFACE),
         boulderMult(SettingType.FLOAT, defaults.boulderMult, 0.2f, 5.0f, Category.SURFACE),

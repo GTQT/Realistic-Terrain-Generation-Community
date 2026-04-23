@@ -155,8 +155,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         generateTerrain(primer, landscape.noise);
 
         // 获取标准生物群系数据
-        for (int i = 0; i < 256; i++) {
-            this.baseBiomesList[i] = landscape.biome[i].baseBiome();
+        if (this.settings.useSingleBiome) {
+            Biome singleBaseBiome = getSingleBiomeTarget().baseBiome();
+            Arrays.fill(this.baseBiomesList, singleBaseBiome);
+        } else {
+            for (int i = 0; i < 256; i++) {
+                this.baseBiomesList[i] = landscape.biome[i].baseBiome();
+            }
         }
 
         ISimplexData2D jitterData = SimplexData2D.newDisk();
@@ -230,6 +235,24 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         if (!ForgeEventFactory.onReplaceBiomeBlocks(this, cx, cz, primer, this.world)) {
             return;
         }
+
+        // ============= 单一生物群系覆盖 =============
+        if (this.settings.useSingleBiome) {
+            IRealisticBiome singleBiome = getSingleBiomeTarget();
+            int worldX = cx * 16;
+            int worldZ = cz * 16;
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    mpos.setPos(worldX + x, 0, worldZ + z);
+                    float river = -TerrainBase.getRiverStrength(mpos, rtgWorld);
+                    singleBiome.rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
+                    primer.setBlockState(x, 0, z, Blocks.BEDROCK.getDefaultState());
+                }
+            }
+            return;
+        }
+        // ============= 常规逻辑 =============
+
         int worldX = cx * 16;
         int worldZ = cz * 16;
         for (int x = 0; x < 16; x++) {
@@ -242,6 +265,26 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
     }
 
+    /**
+     * 获取单一生物群系配置下的目标生物群系（带空值保护）
+     */
+    private IRealisticBiome getSingleBiomeTarget() {
+        if (!this.settings.useSingleBiome) return null;
+
+        Biome targetBase = Biome.getBiome(this.settings.singleBiomeId);
+        if (targetBase == null) {
+            Logger.warn("Single biome ID {} not found, fallback to Plains (ID: 1)", this.settings.singleBiomeId);
+            targetBase = Biome.getBiome(1);
+        }
+
+        IRealisticBiome targetRTG = RTGAPI.getRTGBiome(targetBase);
+        if (targetRTG == null) {
+            Logger.warn("RTG biome wrapper not found for {}, fallback to Plains", this.settings.singleBiomeId);
+            targetRTG = RTGAPI.getRTGBiome(1);
+        }
+        return targetRTG;
+    }
+
     @Override
     public void populate(int chunkX, int chunkZ) {
         BlockFalling.fallInstantly = true;
@@ -249,8 +292,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
         final BlockPos blockPos = new BlockPos(chunkX * 16, 0, chunkZ * 16);
         final BlockPos offsetPos = blockPos.add(8, 0, 8);
-        IRealisticBiome biome = RTGAPI.getRTGBiome(
-                biomeProvider.getBiome(blockPos.add(16, 0, 16)));
+
+        IRealisticBiome biome;
+        if (this.settings.useSingleBiome) {
+            biome = getSingleBiomeTarget();
+        } else {
+            biome = RTGAPI.getRTGBiome(
+                    biomeProvider.getBiome(blockPos.add(16, 0, 16)));
+        }
+
         this.rand.setSeed(rtgWorld.getChunkSeed(chunkX, chunkZ));
         boolean hasVillage = false;
         ForgeEventFactory.onChunkPopulate(true, this, this.world, this.rand, chunkX, chunkZ, false);
@@ -475,6 +525,25 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     private ChunkLandscape generateLandscape(BiomeProvider biomeProvider, BlockPos blockPos) {
         final ChunkLandscape landscape = new ChunkLandscape();
+
+        // ============= 单一生物群系特殊处理 =============
+        if (this.settings.useSingleBiome) {
+            IRealisticBiome singleBiome = getSingleBiomeTarget();
+            int biomeId = Biome.getIdForBiome(singleBiome.baseBiome());
+
+            // 填充 biomeData 数组（供噪声采样使用）
+            Arrays.fill(this.biomeData, biomeId);
+
+            // 生成基础噪声（仍需要噪声数据，但使用单一生物群系参数）
+            getNewerNoiseSingleBiome(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape, singleBiome);
+
+            // 填充 landscape.biome 数组
+            Arrays.fill(landscape.biome, singleBiome);
+
+            return landscape;
+        }
+        // ============= 常规多生物群系逻辑 =============
+
         getNewerNoise(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape);
         Biome[] biomes = new Biome[256];
         for (int x = 0; x < 16; x++) {
@@ -484,6 +553,61 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
         analyzer.newRepair(biomes, this.biomeData, landscape);
         return landscape;
+    }
+
+    /**
+     * 单一生物群系模式下的简化噪声生成
+     * 跳过复杂的生物群系混合计算，直接使用目标生物群系的噪声参数
+     */
+    private void getNewerNoiseSingleBiome(final BiomeProvider biomeProvider, final int worldX,
+                                          final int worldZ, ChunkLandscape landscape, IRealisticBiome singleBiome) {
+        float[] riverValues = new float[256];
+        try (PosHandle riverPosHandle = borrowPosHandle()) {
+            MutableBlockPos riverPos = riverPosHandle.pos;
+            for (int i = 0; i < 16; i++) {
+                for (int j = 0; j < 16; j++) {
+                    riverPos.setPos(worldX + i, 0, worldZ + j);
+                    riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
+                }
+            }
+        }
+
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int k = i * 16 + j;
+                int x = worldX + i;
+                int z = worldZ + j;
+                float height = singleBiome.rNoise(rtgWorld, x, z, 1.0f, riverValues[k] + 1f);
+                landscape.noise[k] = height;
+            }
+        }
+
+        for (int k = 0; k < 256; k++) {
+            float river = riverValues[k];
+            float baseHeight = landscape.noise[k];
+
+            if (river > 0.5f) {
+                float erosion = 8f * Math.min(1f, (river - 0.5f) * 2f);
+                float riverHeight = baseHeight - erosion;
+                int i = k >> 4;
+                int j = k & 15;
+
+                if (i >= 1 && i <= 14 && j >= 1 && j <= 14) {
+                    float avg = 0.25f * (
+                            landscape.noise[k - 16] + landscape.noise[k + 16] +
+                                    landscape.noise[k - 1] + landscape.noise[k + 1]
+                    );
+                    float blend = river * 2f - 1f;
+                    blend = blend * blend * (3f - 2f * blend);
+                    landscape.noise[k] = avg + (riverHeight - avg) * blend;
+                } else {
+                    landscape.noise[k] = riverHeight;
+                }
+            } else {
+                landscape.noise[k] = baseHeight;
+            }
+            landscape.river[k] = river;
+        }
     }
 
     /**

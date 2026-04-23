@@ -141,6 +141,9 @@ public final class RTGChunkGenSettings {
     public final int lapisCenterHeight;     // Vanilla
     public final int lapisSpread;           // Vanilla
 
+    public final boolean useSingleBiome;        // RTG - 是否启用单一生物群系
+    public final int singleBiomeId;             // RTG - 指定生成的单一生物群系ID
+
 
     private RTGChunkGenSettings(RTGChunkGenSettings.Factory settingsFactory) {
 
@@ -268,6 +271,9 @@ public final class RTGChunkGenSettings {
         this.lapisCount = settingsFactory.lapisCount;
         this.lapisCenterHeight = settingsFactory.lapisCenterHeight;
         this.lapisSpread = settingsFactory.lapisSpread;
+
+        this.useSingleBiome = settingsFactory.useSingleBiome;
+        this.singleBiomeId = settingsFactory.singleBiomeId;
     }
 
     public static class Factory {
@@ -399,6 +405,8 @@ public final class RTGChunkGenSettings {
         public int lapisCenterHeight = 16;
         public int lapisSpread = 16;
 
+        public boolean useSingleBiome = false;      // 默认关闭
+        public int singleBiomeId = 1;               // 默认平原 (Biome.PLAINS)
 
         public Factory() {
             this.setDefaults();
@@ -550,6 +558,9 @@ public final class RTGChunkGenSettings {
             this.lapisCount = 1;
             this.lapisCenterHeight = 16;
             this.lapisSpread = 16;
+
+            this.useSingleBiome = false;
+            this.singleBiomeId = 1; // Biome.PLAINS
         }
 
         public RTGChunkGenSettings build() {
@@ -697,6 +708,9 @@ public final class RTGChunkGenSettings {
                 settings.lapisCount = JsonUtils.getInt(json, "lapisCount", settings.lapisCount);
                 settings.lapisCenterHeight = JsonUtils.getInt(json, "lapisCenterHeight", settings.lapisCenterHeight);
                 settings.lapisSpread = JsonUtils.getInt(json, "lapisSpread", settings.lapisSpread);
+
+                settings.useSingleBiome = JsonUtils.getBoolean(json, "useSingleBiome", settings.useSingleBiome);
+                settings.singleBiomeId = JsonUtils.getInt(json, "singleBiomeId", settings.singleBiomeId);
             }
             catch (Exception ignore) {
             }
@@ -833,6 +847,9 @@ public final class RTGChunkGenSettings {
             json.addProperty("lapisCount", factory.lapisCount);
             json.addProperty("lapisCenterHeight", factory.lapisCenterHeight);
             json.addProperty("lapisSpread", factory.lapisSpread);
+
+            json.addProperty("useSingleBiome", factory.useSingleBiome);
+            json.addProperty("singleBiomeId", factory.singleBiomeId);
             return json;
         }
     }

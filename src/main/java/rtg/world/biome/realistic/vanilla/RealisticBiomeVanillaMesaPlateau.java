@@ -9,7 +9,6 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.Logger;
 import rtg.api.util.PlateauUtil;
 import rtg.api.util.noise.ISimplexData2D;
 import rtg.api.util.noise.SimplexData2D;

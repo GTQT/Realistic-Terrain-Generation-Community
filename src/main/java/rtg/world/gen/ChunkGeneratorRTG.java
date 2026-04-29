@@ -7,7 +7,6 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockPos.MutableBlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldEntitySpawner;
 import net.minecraft.world.biome.Biome;
@@ -57,7 +56,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final World world;
     private final float[][] hugeRender = new float[81][256];
     private final float[][] smallRender = new float[625][256];
-    private final MutableBlockPos[] posCache = new MutableBlockPos[4];
     private final float parabolicFieldTotalInv;
     private final Map<ChunkPos, ChunkLandscape> landscapeCache;
     private final int sampleSize = 8;
@@ -72,7 +70,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int parabolicArraySize;
     private final float[] parabolicField;
     private final MutableBlockPos mpos = new MutableBlockPos();
-    private int posCacheIndex = 0;
+
 
     public ChunkGeneratorRTG(RTGWorld rtgWorld) {
         Logger.debug("Instantiating CPRTG using generator settings: {}", rtgWorld.world().getWorldInfo().getGeneratorOptions());
@@ -116,11 +114,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
         this.parabolicFieldTotalInv = 1.0f / parabolicFieldTotal;
 
-        // 初始化位置缓存池
-        for (int i = 0; i < posCache.length; i++) {
-            posCache[i] = new MutableBlockPos();
-        }
-
         this.landscapeCache = Collections.synchronizedMap(new LinkedHashMap<ChunkPos, ChunkLandscape>(RTGConfig.landscapeCacheSize(), 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<ChunkPos, ChunkLandscape> eldest) {
@@ -128,15 +121,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         });
         Logger.debug("FINISHED instantiating CPRTG.");
-    }
-
-    /**
-     * 单线程安全的位置借用：循环覆盖，无需归还
-     */
-    private MutableBlockPos borrowPos() {
-        MutableBlockPos pos = posCache[posCacheIndex];
-        posCacheIndex = (posCacheIndex + 1) % posCache.length;
-        return pos;
     }
 
     @Override
@@ -513,7 +497,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             IRealisticBiome singleBiome = getSingleBiomeTarget();
             int biomeId = Biome.getIdForBiome(singleBiome.baseBiome());
             Arrays.fill(this.biomeData, biomeId);
-            getNewerNoiseSingleBiome(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape, singleBiome);
+            getNewerNoiseSingleBiome(blockPos.getX(), blockPos.getZ(), landscape, singleBiome);
             Arrays.fill(landscape.biome, singleBiome);
             return landscape;
         }
@@ -529,10 +513,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         return landscape;
     }
 
-    private void getNewerNoiseSingleBiome(final BiomeProvider biomeProvider, final int worldX,
+    private void getNewerNoiseSingleBiome(final int worldX,
                                           final int worldZ, ChunkLandscape landscape, IRealisticBiome singleBiome) {
         float[] riverValues = new float[256];
-        MutableBlockPos riverPos = borrowPos();
+        MutableBlockPos riverPos = new MutableBlockPos();
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 riverPos.setPos(worldX + i, 0, worldZ + j);
@@ -587,7 +571,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final int baseOffsetX = chunkWorldX - 8;
         final int baseOffsetZ = chunkWorldZ - 8;
 
-        MutableBlockPos tempPos = borrowPos();
+        MutableBlockPos tempPos = new MutableBlockPos();
 
         for (int i = 0; i < totalSampleSize; i++) {
             int xOffset = ((i - sampleSize) * 8) - 8;
@@ -705,69 +689,46 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        float[] riverVals = new float[256];
+        float[] riverValues = new float[256];
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 tempPos.setPos(chunkWorldX + x, 0, chunkWorldZ + z);
-                riverVals[x * 16 + z] = TerrainBase.getRiverStrength(tempPos, rtgWorld);
+                riverValues[x * 16 + z] = TerrainBase.getRiverStrength(tempPos, rtgWorld);
             }
         }
 
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                int idx = x * 16 + z;
-                int smallIdx = (x + 4) * smallWidth + (z + 4);
-                int worldX = chunkWorldX + x;
-                int worldZ = chunkWorldZ + z;
-                float river = riverVals[idx];
+        float[] baseHeights = new float[256];
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int k = i * 16 + j;
+                int smallIdx = (i + 4) * smallWidth + (j + 4);
+                int worldX = chunkWorldX + i;
+                int worldZ = chunkWorldZ + j;
 
                 if (dominantBiome != null) {
-                    landscape.biome[idx] = dominantBiome;
-                    landscape.noise[idx] = dominantBiome.rNoise(rtgWorld, worldX, worldZ, 1.0f, river + 1f);
+                    landscape.biome[k] = dominantBiome;
+                    baseHeights[k] = dominantBiome.rNoise(rtgWorld, worldX, worldZ, 1.0f, riverValues[k] + 1f);
                 } else {
-                    float bCount = 0f, bRand = 0.5f + (float)(Math.sin(worldX * 0.05f + x * 0.5f) * Math.cos(worldZ * 0.05f + z * 0.5f));
-                    bRand = MathHelper.clamp(bRand, 0f, 0.99999f);
-                    float totalNoise = 0f;
-                    IRealisticBiome chosenBiome = null;
-
+                    float totalHeight = 0f;
                     for (int bid = 0; bid < 256; bid++) {
-                        float w = smallRender[smallIdx][bid];
-                        if (w <= 0f) continue;
-                        if (bCount <= 1f) {
-                            bCount += w;
-                            if (bCount > bRand) {
-                                chosenBiome = RTGAPI.getRTGBiome(bid);
-                                bCount = 2f;
-                            }
-                        }
+                        float weight = smallRender[smallIdx][bid];
+                        if (weight <= 0f) continue;
                         IRealisticBiome biome = RTGAPI.getRTGBiome(bid);
                         if (biome != null) {
-                            totalNoise += biome.rNoise(rtgWorld, worldX, worldZ, w, river + 1f) * w;
+                            totalHeight += biome.rNoise(rtgWorld, worldX, worldZ, weight, riverValues[k] + 1f) * weight;
                         }
                     }
-                    landscape.biome[idx] = chosenBiome;
-                    landscape.noise[idx] = totalNoise;
+                    baseHeights[k] = totalHeight;
                 }
-                landscape.river[idx] = river;
             }
         }
 
         for (int k = 0; k < 256; k++) {
-            float river = landscape.river[k];
-            if (river > 0.5f) {
-                float erosion = 8f * MathHelper.clamp((river - 0.5f) * 2f, 0f, 1f);
-                float riverHeight = landscape.noise[k] - erosion;
-                int lx = k >> 4, lz = k & 15;
-                if (lx > 0 && lx < 15 && lz > 0 && lz < 15) {
-                    float avg = 0.25f * (landscape.noise[k - 16] + landscape.noise[k + 16] + landscape.noise[k - 1] + landscape.noise[k + 1]);
-                    landscape.noise[k] = avg + (riverHeight - avg) * MathHelper.clamp((river - 0.5f) * 2f, 0f, 1f);
-                } else {
-                    landscape.noise[k] = riverHeight;
-                }
-            }
+            landscape.noise[k] = baseHeights[k];
+            landscape.river[k] = riverValues[k];
         }
 
-        MutableBlockPos biomePos = borrowPos();
+        MutableBlockPos biomePos = new MutableBlockPos();
         for (int x = 0; x < 16; x++) {
             int wx = chunkWorldX + (x - 7) * 8 + 4;
             for (int z = 0; z < 16; z++) {

@@ -592,12 +592,15 @@ public abstract class TerrainBase {
     }
 
     public static float getRiverStrength(final BlockPos blockPos, final RTGWorld rtgWorld) {
+        return getRiverStrength(blockPos, rtgWorld, SimplexData2D.newDisk());
+    }
+
+    public static float getRiverStrength(final BlockPos blockPos, final RTGWorld rtgWorld, final ISimplexData2D jitterData) {
 
         final int worldX = blockPos.getX();
         final int worldZ = blockPos.getZ();
         double pX = worldX;
         double pZ = worldZ;
-        ISimplexData2D jitterData = SimplexData2D.newDisk();
 
         //New river curve function. No longer creates worldwide curve correlations along cardinal axes.
         rtgWorld.simplexInstance(1).multiEval2D(worldX * 0.004166667f, worldZ * 0.004166667f, jitterData); // /240

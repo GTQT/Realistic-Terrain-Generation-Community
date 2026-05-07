@@ -59,6 +59,8 @@ public final class RTGWorld {
     private final RTGChunkGenSettings generatorSettings;
     private final SimplexNoise[] simplexNoiseInstances = new SimplexNoise[SIMPLEX_INSTANCE_COUNT];
     private final CellularNoise[] cellularNoiseInstances = new CellularNoise[CELLULAR_INSTANCE_COUNT];
+    private final long chunkSeedX;
+    private final long chunkSeedZ;
     // this field is mutable, but it can only be set once from #setRandom when the ChunkGeneratorRTG is initialised
     private Random generatorRandom = null;
 
@@ -66,6 +68,10 @@ public final class RTGWorld {
 
         this.world = world;
         this.generatorSettings = RTGChunkGenSettings.Factory.jsonToFactory(world.getWorldInfo().getGeneratorOptions()).build();
+
+        Random chunkSeedRand = new Random(this.seed());
+        this.chunkSeedX = chunkSeedRand.nextLong() / 2L * 2L + 1L;
+        this.chunkSeedZ = chunkSeedRand.nextLong() / 2L * 2L + 1L;
 
         for (int i = 0; i < SIMPLEX_INSTANCE_COUNT; i++) {
             this.simplexNoiseInstances[i] = new OpenSimplexNoise(this.seed() + i);
@@ -149,9 +155,7 @@ public final class RTGWorld {
      * @since 1.0.0
      */
     public long getChunkSeed(final int chunkX, final int chunkZ) {
-        final long seed = world().getSeed();
-        final Random rand = new Random(seed);
-        return (chunkX * (rand.nextLong() / 2L * 2L + 1L)) + (chunkZ * (rand.nextLong() / 2L * 2L + 1L)) ^ seed;
+        return (chunkX * this.chunkSeedX) + (chunkZ * this.chunkSeedZ) ^ this.seed();
     }
 
     /**

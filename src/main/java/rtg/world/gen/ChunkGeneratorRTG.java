@@ -2,6 +2,7 @@ package rtg.world.gen;
 
 import net.minecraft.block.BlockFalling;
 import net.minecraft.block.material.Material;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.EnumCreatureType;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
@@ -43,6 +44,12 @@ import java.util.*;
 
 public class ChunkGeneratorRTG implements IChunkGenerator {
 
+    private static final IBlockState STONE = Blocks.STONE.getDefaultState();
+    private static final IBlockState WATER = Blocks.WATER.getDefaultState();
+    private static final IBlockState BEDROCK = Blocks.BEDROCK.getDefaultState();
+    private static final IBlockState ICE = Blocks.ICE.getDefaultState();
+    private static final IBlockState SNOW_LAYER = Blocks.SNOW_LAYER.getDefaultState();
+
     public final RTGWorld rtgWorld;
     private final RTGChunkGenSettings settings;
     private final MapGenBase caveGenerator;
@@ -65,7 +72,18 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int[] xyinverted = analyzer.xyinverted();
     private final boolean mapFeaturesEnabled;
     private final Random rand;
+    private final WorldGenPond waterSurfaceLakeGenerator = new WorldGenPond(WATER);
+    private final WorldGenPond lavaSurfaceLakeGenerator = new WorldGenPond(Blocks.LAVA.getDefaultState());
+    private final WorldGenLakes waterLakeGenerator = new WorldGenLakes(Blocks.WATER);
+    private final WorldGenLakes lavaLakeGenerator = new WorldGenLakes(Blocks.LAVA);
+    private final WorldGenDungeons dungeonGenerator = new WorldGenDungeons();
     private final Biome[] baseBiomesList;
+    private final Biome[] rawBiomes = new Biome[256];
+    private final IRealisticBiome[] jitteredBiomes = new IRealisticBiome[256];
+    private final ISimplexData2D surfaceJitterData = SimplexData2D.newDisk();
+    private final ISimplexData2D riverJitterData = SimplexData2D.newDisk();
+    private final float[] riverValues = new float[256];
+    private final float[] baseHeights = new float[256];
     private final int parabolicSize;
     private final int parabolicArraySize;
     private final float[] parabolicField;
@@ -143,22 +161,20 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        ISimplexData2D jitterData = SimplexData2D.newDisk();
-        IRealisticBiome[] jitteredBiomes = new IRealisticBiome[256];
         IRealisticBiome jitterbiome, actualbiome;
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 int x = blockPos.getX() + i;
                 int z = blockPos.getZ() + j;
-                this.rtgWorld.simplexInstance(0).multiEval2D(x, z, jitterData);
-                int pX = (int) Math.round(x + jitterData.getDeltaX() * RTGConfig.surfaceBlendRadius());
-                int pZ = (int) Math.round(z + jitterData.getDeltaY() * RTGConfig.surfaceBlendRadius());
+                this.rtgWorld.simplexInstance(0).multiEval2D(x, z, surfaceJitterData);
+                int pX = (int) Math.round(x + surfaceJitterData.getDeltaX() * RTGConfig.surfaceBlendRadius());
+                int pZ = (int) Math.round(z + surfaceJitterData.getDeltaY() * RTGConfig.surfaceBlendRadius());
                 actualbiome = landscape.biome[(x & 15) * 16 + (z & 15)];
                 jitterbiome = landscape.biome[(pX & 15) * 16 + (pZ & 15)];
                 jitteredBiomes[i * 16 + j] = (actualbiome.getConfig().SURFACE_BLEED_IN.get() && jitterbiome.getConfig().SURFACE_BLEED_OUT.get()) ? jitterbiome : actualbiome;
             }
         }
-        replaceBiomeBlocks(cx, cz, primer, jitteredBiomes, this.baseBiomesList, landscape.noise);
+        replaceBiomeBlocks(cx, cz, primer, jitteredBiomes, this.baseBiomesList, landscape.noise, landscape.river);
 
         if (this.settings.useCaves) {
             this.caveGenerator.generate(this.world, cx, cz, primer);
@@ -177,7 +193,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         Chunk chunk = new Chunk(this.world, primer, cx, cz);
         int[] intBiomeArray = new int[256];
-        Arrays.fill(intBiomeArray, -1);
         byte[] byteBiomeArray = new byte[256];
         for (int i = 0; i < 256; ++i) {
             intBiomeArray[i] = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
@@ -193,24 +208,22 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     public void generateTerrain(ChunkPrimer primer, float[] noise) {
+        final int seaTop = Math.min(this.settings.seaLevel - 1, 255);
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 int height = (int) noise[x * 16 + z];
-                for (int y = 0; y < 256; y++) {
-                    if (y > height) {
-                        primer.setBlockState(x, y, z, y < this.settings.seaLevel ?
-                                Blocks.WATER.getDefaultState() :
-                                Blocks.AIR.getDefaultState()
-                        );
-                    } else {
-                        primer.setBlockState(x, y, z, Blocks.STONE.getDefaultState());
-                    }
+                int stoneTop = Math.min(height, 255);
+                for (int y = 0; y <= stoneTop; y++) {
+                    primer.setBlockState(x, y, z, STONE);
+                }
+                for (int y = Math.max(height + 1, 0); y <= seaTop; y++) {
+                    primer.setBlockState(x, y, z, WATER);
                 }
             }
         }
     }
 
-    private void replaceBiomeBlocks(int cx, int cz, ChunkPrimer primer, IRealisticBiome[] biomes, Biome[] base, float[] noise) {
+    private void replaceBiomeBlocks(int cx, int cz, ChunkPrimer primer, IRealisticBiome[] biomes, Biome[] base, float[] noise, float[] rivers) {
         if (!ForgeEventFactory.onReplaceBiomeBlocks(this, cx, cz, primer, this.world)) {
             return;
         }
@@ -222,9 +235,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
                     mpos.setPos(worldX + x, 0, worldZ + z);
-                    float river = -TerrainBase.getRiverStrength(mpos, rtgWorld);
+                    float river = -rivers[x * 16 + z];
                     singleBiome.rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
-                    primer.setBlockState(x, 0, z, Blocks.BEDROCK.getDefaultState());
+                    primer.setBlockState(x, 0, z, BEDROCK);
                 }
             }
             return;
@@ -235,9 +248,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 mpos.setPos(worldX + x, 0, worldZ + z);
-                float river = -TerrainBase.getRiverStrength(mpos, rtgWorld);
+                float river = -rivers[x * 16 + z];
                 biomes[x * 16 + z].rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
-                primer.setBlockState(x, 0, z, Blocks.BEDROCK.getDefaultState());
+                primer.setBlockState(x, 0, z, BEDROCK);
             }
         }
     }
@@ -302,14 +315,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             if (surfaceChance > 0 && nextChance % surfaceChance == 0) {
                 if (TerrainGen.populate(this, world, rand, chunkX, chunkZ, hasVillage,
                         PopulateChunkEvent.Populate.EventType.LAKE)) {
-                    new WorldGenPond(Blocks.WATER.getDefaultState())
-                            .generate(world, rand, pos.up(rand.nextInt(256)));
+                    waterSurfaceLakeGenerator.generate(world, rand, pos.up(rand.nextInt(256)));
                 }
             } else if (nextChance % settings.waterLakeChance == 0) {
                 if (TerrainGen.populate(this, world, rand, chunkX, chunkZ, hasVillage,
                         PopulateChunkEvent.Populate.EventType.LAKE)) {
-                    new WorldGenLakes(Blocks.WATER)
-                            .generate(world, rand, pos.up(rand.nextInt(50) + 4));
+                    waterLakeGenerator.generate(world, rand, pos.up(rand.nextInt(50) + 4));
                 }
             }
         }
@@ -321,14 +332,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             if (surfaceChance > 0 && nextChance % surfaceChance == 0) {
                 if (TerrainGen.populate(this, world, rand, chunkX, chunkZ, hasVillage,
                         PopulateChunkEvent.Populate.EventType.LAVA)) {
-                    new WorldGenPond(Blocks.LAVA.getDefaultState())
-                            .generate(world, rand, pos.up(rand.nextInt(256)));
+                    lavaSurfaceLakeGenerator.generate(world, rand, pos.up(rand.nextInt(256)));
                 }
             } else if (nextChance % settings.lavaLakeChance == 0) {
                 if (TerrainGen.populate(this, world, rand, chunkX, chunkZ, hasVillage,
                         PopulateChunkEvent.Populate.EventType.LAVA)) {
-                    new WorldGenLakes(Blocks.LAVA)
-                            .generate(world, rand, pos.up(rand.nextInt(50) + 4));
+                    lavaLakeGenerator.generate(world, rand, pos.up(rand.nextInt(50) + 4));
                 }
             }
         }
@@ -336,12 +345,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         if (settings.useDungeons && TerrainGen.populate(this, world, rand, chunkX, chunkZ,
                 hasVillage, PopulateChunkEvent.Populate.EventType.DUNGEON)) {
             for (int i = 0; i < settings.dungeonChance; i++) {
-                new WorldGenDungeons().generate(world, rand,
+                dungeonGenerator.generate(world, rand,
                         offsetPos.add(rand.nextInt(16), rand.nextInt(256), rand.nextInt(16)));
             }
         }
 
-        float river = -TerrainBase.getRiverStrength(blockPos.add(16, 0, 16), rtgWorld);
+        mpos.setPos(blockPos.getX() + 16, 0, blockPos.getZ() + 16);
+        float river = -TerrainBase.getRiverStrength(mpos, rtgWorld, riverJitterData);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
             if (river > 0.8f) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
@@ -372,7 +382,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     mutablePos.setPos(offsetPos.getX() + x, 0, offsetPos.getZ() + z);
                     BlockPos freezePos = world.getPrecipitationHeight(mutablePos).down();
                     if (this.world.canBlockFreezeWater(freezePos)) {
-                        this.world.setBlockState(freezePos, Blocks.ICE.getDefaultState(), 2);
+                        this.world.setBlockState(freezePos, ICE, 2);
                     }
                     if (settings.useSnowLayers) {
                         BlockPos surfacePos = world.getTopSolidOrLiquidBlock(mutablePos);
@@ -381,7 +391,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                                  checkPos.getY() >= surfacePos.getY(); checkPos = checkPos.down()) {
                                 if (world.getBlockState(checkPos).getMaterial() == Material.AIR
                                         && Blocks.SNOW_LAYER.canPlaceBlockAt(world, checkPos)) {
-                                    this.world.setBlockState(checkPos, Blocks.SNOW_LAYER.getDefaultState(), 2);
+                                    this.world.setBlockState(checkPos, SNOW_LAYER, 2);
                                     break;
                                 }
                             }
@@ -503,10 +513,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         getNewerNoise(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape);
-        Biome[] biomes = new Biome[256];
+        Biome[] biomes = this.rawBiomes;
+        MutableBlockPos biomePos = new MutableBlockPos();
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
-                biomes[x * 16 + z] = biomeProvider.getBiome(blockPos.add(x, 0, z));
+                biomePos.setPos(blockPos.getX() + x, 0, blockPos.getZ() + z);
+                biomes[x * 16 + z] = biomeProvider.getBiome(biomePos);
             }
         }
         analyzer.newRepair(biomes, this.biomeData, landscape);
@@ -515,12 +527,12 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     private void getNewerNoiseSingleBiome(final int worldX,
                                           final int worldZ, ChunkLandscape landscape, IRealisticBiome singleBiome) {
-        float[] riverValues = new float[256];
+        float[] riverValues = this.riverValues;
         MutableBlockPos riverPos = new MutableBlockPos();
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 riverPos.setPos(worldX + i, 0, worldZ + j);
-                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld);
+                riverValues[i * 16 + j] = TerrainBase.getRiverStrength(riverPos, rtgWorld, riverJitterData);
             }
         }
 
@@ -689,15 +701,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        float[] riverValues = new float[256];
+        float[] riverValues = this.riverValues;
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 tempPos.setPos(chunkWorldX + x, 0, chunkWorldZ + z);
-                riverValues[x * 16 + z] = TerrainBase.getRiverStrength(tempPos, rtgWorld);
+                riverValues[x * 16 + z] = TerrainBase.getRiverStrength(tempPos, rtgWorld, riverJitterData);
             }
         }
 
-        float[] baseHeights = new float[256];
+        float[] baseHeights = this.baseHeights;
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 int k = i * 16 + j;

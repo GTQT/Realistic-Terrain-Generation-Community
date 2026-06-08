@@ -157,6 +157,11 @@ public class DecoTree extends DecoBase {
     @Override
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
+        // ====== 早期退出：密度乘数接近0时直接跳过，避免无效开销 ======
+        if (RTGConfig.treeDensityMultiplier() <= 0.001 || biome.getConfig().TREE_DENSITY_MULTIPLIER.get() <= 0.001) {
+            return;
+        }
+
         final BlockPos offsetPos = getOffsetPos(chunkPos);
         final World world = rtgWorld.world();
 
@@ -208,21 +213,25 @@ public class DecoTree extends DecoBase {
 
             final int randRange = 16;
 
-            for (int i = 0; i < loopCount; i++) {
+            // ====== 批量预检：先用缓存高度筛选有效位置，再生成树 ======
+            // 使用原始类型数组，零GC压力
+            int[] xs = new int[loopCount];
+            int[] zs = new int[loopCount];
+            int[] ys = new int[loopCount];
+            int validCount = 0;
+            for (int attempts = 0; attempts < loopCount * 2 && validCount < loopCount; attempts++) {
                 int x = chunkX + rand.nextInt(randRange);
                 int z = chunkZ + rand.nextInt(randRange);
-                BlockPos pos = new BlockPos(x, 0, z);
-
-                int y = world.getHeight(pos).getY();
-                if (y > maxY || y < minY) {
-                    continue;
-                }
-
-                if (!isValidTreeCondition(noise, rand)) {
-                    continue;
-                }
-
-                doGenerate(rand, rtgWorld, chunkInfo, pos, y);
+                int y = chunkInfo.getHeight(x, z);
+                if (y > maxY || y < minY) continue;
+                if (!isValidTreeCondition(noise, rand)) continue;
+                xs[validCount] = x;
+                zs[validCount] = z;
+                ys[validCount] = y;
+                validCount++;
+            }
+            for (int i = 0; i < validCount; i++) {
+                doGenerate(rand, rtgWorld, chunkInfo, new BlockPos(xs[i], 0, zs[i]), ys[i]);
             }
         }
         else if (RTGConfig.enableDebugging()) {

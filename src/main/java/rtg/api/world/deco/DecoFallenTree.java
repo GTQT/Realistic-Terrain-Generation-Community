@@ -53,7 +53,7 @@ public class DecoFallenTree extends DecoBase {
     }
 
     @Override
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         final BlockPos offsetpos = getOffsetPos(chunkPos);
 
@@ -71,7 +71,7 @@ public class DecoFallenTree extends DecoBase {
             if (isValidLogCondition(rand)) {
 
                 BlockPos pos = offsetpos.add(rand.nextInt(16), 0, rand.nextInt(16));
-                pos = pos.up(rtgWorld.world().getHeight(pos).getY());
+                pos = pos.up(chunkInfo.getHeight(pos.getX(), pos.getZ()));
 
                 if (pos.getY() <= this.maxY) {
 

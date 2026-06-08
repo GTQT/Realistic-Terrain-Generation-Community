@@ -72,6 +72,11 @@ abstract public class DecoVariableTree extends DecoTree {
 	
     @Override
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
+        // ====== 早期退出：密度乘数接近0时直接跳过，避免无效开销 ======
+        if (RTGConfig.treeDensityMultiplier() <= 0.001 || biome.getConfig().TREE_DENSITY_MULTIPLIER.get() <= 0.001) {
+            return;
+        }
+
     	// duped from DecoTree to add debuggers
 
         final BlockPos offsetPos = getOffsetPos(chunkPos);
@@ -127,7 +132,7 @@ abstract public class DecoVariableTree extends DecoTree {
             TreeDensityLimiter treesRemaining = new TreeDensityLimiter(loopCount);
             while (treesRemaining.notDone()) {
                 final BlockPos pos = offsetPos.add(rand.nextInt(16), 0, rand.nextInt(16));
-                int y = rtgWorld.world().getHeight(pos).getY();
+                int y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                 if (y <= this.maxY && y >= this.minY && isValidTreeCondition(noise, rand)) {
 
                     // If we're in a village, check to make sure the tree has extra room to grow to avoid corrupting the village.

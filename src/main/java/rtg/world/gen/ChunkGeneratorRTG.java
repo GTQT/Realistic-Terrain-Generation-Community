@@ -88,6 +88,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final int parabolicArraySize;
     private final float[] parabolicField;
     private final MutableBlockPos mpos = new MutableBlockPos();
+    private final boolean useIntBiomeArray;
+    private final int[] intBiomeArray = new int[256];
+    private final byte[] byteBiomeArray = new byte[256];
+    private final MutableBlockPos snowCheckPos = new MutableBlockPos();
 
 
     public ChunkGeneratorRTG(RTGWorld rtgWorld) {
@@ -99,6 +103,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         this.rand = new Random(rtgWorld.seed());
         this.rtgWorld.setRandom(this.rand);
         this.mapFeaturesEnabled = world.getWorldInfo().isMapFeaturesEnabled();
+        this.useIntBiomeArray = Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid");
 
         // 初始化结构生成器
         this.caveGenerator = TerrainGen.getModdedMapGen(
@@ -192,16 +197,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         Chunk chunk = new Chunk(this.world, primer, cx, cz);
-        int[] intBiomeArray = new int[256];
-        byte[] byteBiomeArray = new byte[256];
         for (int i = 0; i < 256; ++i) {
-            intBiomeArray[i] = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
-            byteBiomeArray[i] = (byte) intBiomeArray[i];
+            int value = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
+            this.intBiomeArray[i] = value;
+            this.byteBiomeArray[i] = (byte) value;
         }
-        if (Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid")) {
-            ((INewChunk) chunk).setIntBiomeArray(intBiomeArray);
+        if (this.useIntBiomeArray) {
+            ((INewChunk) chunk).setIntBiomeArray(this.intBiomeArray);
         } else {
-            chunk.setBiomeArray(byteBiomeArray);
+            chunk.setBiomeArray(this.byteBiomeArray);
         }
         chunk.generateSkylightMap();
         return chunk;
@@ -380,18 +384,20 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
                     mutablePos.setPos(offsetPos.getX() + x, 0, offsetPos.getZ() + z);
-                    BlockPos freezePos = world.getPrecipitationHeight(mutablePos).down();
-                    if (this.world.canBlockFreezeWater(freezePos)) {
-                        this.world.setBlockState(freezePos, ICE, 2);
+                    int freezeY = world.getPrecipitationHeight(mutablePos).getY() - 1;
+                    snowCheckPos.setPos(mutablePos.getX(), freezeY, mutablePos.getZ());
+                    if (this.world.canBlockFreezeWater(snowCheckPos)) {
+                        this.world.setBlockState(snowCheckPos, ICE, 2);
                     }
                     if (settings.useSnowLayers) {
                         BlockPos surfacePos = world.getTopSolidOrLiquidBlock(mutablePos);
+                        int baseY = surfacePos.getY();
                         if (biomeProvider.getBiome(surfacePos).getTemperature(surfacePos) <= snowTempThreshold) {
-                            for (BlockPos checkPos = surfacePos.up(32);
-                                 checkPos.getY() >= surfacePos.getY(); checkPos = checkPos.down()) {
-                                if (world.getBlockState(checkPos).getMaterial() == Material.AIR
-                                        && Blocks.SNOW_LAYER.canPlaceBlockAt(world, checkPos)) {
-                                    this.world.setBlockState(checkPos, SNOW_LAYER, 2);
+                            for (int y = baseY + 32; y >= baseY; y--) {
+                                snowCheckPos.setPos(surfacePos.getX(), y, surfacePos.getZ());
+                                if (world.getBlockState(snowCheckPos).getMaterial() == Material.AIR
+                                        && Blocks.SNOW_LAYER.canPlaceBlockAt(world, snowCheckPos)) {
+                                    this.world.setBlockState(snowCheckPos, SNOW_LAYER, 2);
                                     break;
                                 }
                             }

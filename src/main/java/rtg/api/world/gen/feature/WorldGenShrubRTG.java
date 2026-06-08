@@ -21,6 +21,11 @@ public class WorldGenShrubRTG extends WorldGenerator {
 
     public WorldGenShrubRTG(int size, IBlockState log, IBlockState leav, boolean sand) {
 
+        reset(size, log, leav, sand);
+    }
+
+    // ====== 新增：重置参数以复用对象，避免反复new ======
+    public void reset(int size, IBlockState log, IBlockState leav, boolean sand) {
         varSize = size;
         varSand = sand;
 

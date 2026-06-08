@@ -46,12 +46,12 @@ public class DecoWorldGen extends DecoBase {
     }
 
     @Override
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         for (int i = 0; i <= loops; i++) {
 
             final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16));
-            final int y = rtgWorld.world().getHeight(pos).getY();
+            final int y = chunkInfo.getHeight(pos.getX(), pos.getZ());
 
             if (y >= this.minY && y <= this.maxY && rand.nextInt(this.chance) == 0) {
                 if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, eventtype)) {

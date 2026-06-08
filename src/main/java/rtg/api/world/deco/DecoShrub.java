@@ -65,7 +65,7 @@ public class DecoShrub extends DecoBase {
 
     @Override
 // TODO: [1.12] This seems overly complicated. Simplify.
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         if (!hasVillage && TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.TREE)) {
 
@@ -88,23 +88,36 @@ public class DecoShrub extends DecoBase {
             DecoBase.tweakShrubLeaves(this, false, true);
 
             final int loopCount = (int)((float)this.loops * this.loopMultiplier);
+
+            // ====== 复用WorldGenShrubRTG对象，避免每次循环new带来的GC压力 ======
+            BlockPos basePos = getOffsetPos(chunkPos);
+            WorldGenShrubRTG shrubGen = null;
+
             for (int i = 0; i < loopCount; i++) {
 
-                final BlockPos pos = rtgWorld.world().getHeight(getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16)));
-                if (pos.getY() >= this.minY && pos.getY() <= this.maxY) {
+                // ====== 使用缓存高度代替world.getHeight() ======
+                int x = basePos.getX() + rand.nextInt(16);
+                int z = basePos.getZ() + rand.nextInt(16);
+                int y = chunkInfo.getHeight(x, z);
+                if (y < this.minY || y > this.maxY) continue;
 
-                    if (this.notEqualsZeroChance > 1) {
-                        if (rand.nextInt(this.notEqualsZeroChance) != 0) {
-                            new WorldGenShrubRTG(this.size, this.logBlock, this.leavesBlock, this.sand)
-                                    .generate(rtgWorld.world(), rand, pos);
-                        }
+                BlockPos pos = new BlockPos(x, y, z);
+
+                boolean shouldGen;
+                if (this.notEqualsZeroChance > 1) {
+                    shouldGen = rand.nextInt(this.notEqualsZeroChance) != 0;
+                }
+                else {
+                    shouldGen = rand.nextInt(this.chance) == 0;
+                }
+
+                if (shouldGen) {
+                    if (shrubGen == null) {
+                        shrubGen = new WorldGenShrubRTG(this.size, this.logBlock, this.leavesBlock, this.sand);
+                    } else {
+                        shrubGen.reset(this.size, this.logBlock, this.leavesBlock, this.sand);
                     }
-                    else {
-                        if (rand.nextInt(this.chance) == 0) {
-                            new WorldGenShrubRTG(this.size, this.logBlock, this.leavesBlock, this.sand)
-                                    .generate(rtgWorld.world(), rand, pos);
-                        }
-                    }
+                    shrubGen.generate(rtgWorld.world(), rand, pos);
                 }
             }
         }

@@ -105,7 +105,7 @@ public class DecoVariableAcacia extends DecoVariableTree {
             TreeDensityLimiter treesRemaining = new TreeDensityLimiter(noise);
             while (treesRemaining.notDone()) {
                 final BlockPos pos = offsetPos.add(rand.nextInt(16), 0, rand.nextInt(16));
-                int y = rtgWorld.world().getHeight(pos).getY();
+                int y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                 if (y <= this.maxY && y >= this.minY && isValidTreeCondition(noise, rand)) {
 
                     // If we're in a village, check to make sure the tree has extra room to grow to avoid corrupting the village.

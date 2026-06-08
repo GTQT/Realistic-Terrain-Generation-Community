@@ -43,7 +43,7 @@ public class DecoCactus extends DecoBase {
     }
 
     @Override
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.CACTUS)) {
 
@@ -51,7 +51,7 @@ public class DecoCactus extends DecoBase {
             for (int i = 0; i < loopCount; i++) {
 
                 final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16));
-                final int y = rtgWorld.world().getHeight(pos).getY();
+                final int y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                 if (y <= this.maxY && rand.nextInt(this.chance) == 0) {
                     new WorldGenCacti(this.sandOnly, 0, this.soilBlock)
                         .generate(rtgWorld.world(), rand, pos.up(y));

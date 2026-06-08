@@ -170,10 +170,14 @@ public interface IRealisticBiome {
     }
 
     default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage) {
-        ChunkInfo info = new ChunkInfo(chunkPos,rtgWorld);
-        this.getDecos().stream()
-                .filter(deco -> deco.preGenerate(river))
-                .forEach(deco -> deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info));
+        ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld);
+
+        // for-each替代stream，减少临时对象和GC压力
+        for (DecoBase deco : this.getDecos()) {
+            if (deco.preGenerate(river)) {
+                deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
+            }
+        }
 
         if (overridesHardcoded()) {
             this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));

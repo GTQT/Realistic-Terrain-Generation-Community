@@ -45,7 +45,7 @@ public class DecoBoulder extends DecoBase {
     }
 
     @Override
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         // TODO: [1.12] Boulders are a decoration and not a terrain feature. This should probably have a config setting, not a generator setting.
         if (rtgWorld.getGeneratorSettings().useBoulders && TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.ROCK)) {
@@ -60,7 +60,7 @@ public class DecoBoulder extends DecoBase {
                         break;
                     case GET_HEIGHT_VALUE:
                     default:
-                        y = rtgWorld.world().getHeight(pos).getY();
+                        y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                         break;
                 }
 

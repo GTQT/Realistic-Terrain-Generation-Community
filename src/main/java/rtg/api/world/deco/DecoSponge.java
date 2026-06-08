@@ -60,7 +60,7 @@ public class DecoSponge extends DecoBase {
     }
 
     @Override
-    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         for (int i = 0; i < this.strengthFactor; ++i) {
 
@@ -73,11 +73,11 @@ public class DecoSponge extends DecoBase {
                     break;
 
                 case GET_HEIGHT_VALUE:
-                    y = rtgWorld.world().getHeight(pos).getY();
+                    y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                     break;
 
                 default:
-                    y = rtgWorld.world().getHeight(pos).getY();
+                    y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                     break;
             }
 

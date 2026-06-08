@@ -100,7 +100,10 @@ public class DecoVariableAcacia extends DecoVariableTree {
             }
 
             // TODO: [1.12] This should be done in #setLeavesBlock.
-            DecoBase.tweakTreeLeaves(this, false, true);
+            if (!leavesTweaked) {
+                DecoBase.tweakTreeLeaves(this, false, true);
+                leavesTweaked = true;
+            }
 
             TreeDensityLimiter treesRemaining = new TreeDensityLimiter(noise);
             while (treesRemaining.notDone()) {

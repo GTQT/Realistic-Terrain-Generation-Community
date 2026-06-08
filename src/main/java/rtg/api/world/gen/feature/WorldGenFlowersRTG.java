@@ -31,7 +31,7 @@ public class WorldGenFlowersRTG extends WorldGenerator {
             return false;
         }
 
-        IBlockState flower = BlockUtil.getStateFlower(Iterables.get(this.flowers, new Random().nextInt(this.flowers.size())));
+        IBlockState flower = BlockUtil.getStateFlower(Iterables.get(this.flowers, rand.nextInt(this.flowers.size())));
         BlockFlower block = (BlockFlower) flower.getBlock();
 
         if (world.isAirBlock(pos) && pos.getY() < 255 && block.canPlaceBlockAt(world, pos) && block.canBlockStay(world, pos, flower)) {

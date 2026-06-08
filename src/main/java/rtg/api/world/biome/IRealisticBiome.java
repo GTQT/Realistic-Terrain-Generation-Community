@@ -169,10 +169,9 @@ public interface IRealisticBiome {
         this.addTree(tree, true);
     }
 
-    default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage) {
-        ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld);
+    default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, final float[] noise) {
+        ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld, noise);
 
-        // for-each替代stream，减少临时对象和GC压力
         for (DecoBase deco : this.getDecos()) {
             if (deco.preGenerate(river)) {
                 deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
@@ -180,18 +179,32 @@ public interface IRealisticBiome {
         }
 
         if (overridesHardcoded()) {
-            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
+            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(),
+                    new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
         } else {
-            if (this.allowVanillaTrees()) {
-                this.baseBiome().decorate(rtgWorld.world(), rand, new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
-            } else {
-                // have to shut off tree decorations but not the rest
-                BiomeDecorator decorator = this.baseBiome().decorator;
-                decorator.extraTreeChance = 0f;
-                decorator.treesPerChunk = 0;
-                this.baseBiome().decorate(rtgWorld.world(), rand, new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
-            }
+            disableVanillaVegetation();
+            this.baseBiome().decorate(rtgWorld.world(), rand,
+                    new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
         }
+    }
+
+    /** 当RTG已处理植被时，禁用原版装饰器中的对应项，避免双重生成 */
+    default void disableVanillaVegetation() {
+        if (this.allowVanillaTrees()) {
+            return;
+        }
+        BiomeDecorator decorator = this.baseBiome().decorator;
+        decorator.extraTreeChance = 0f;
+        decorator.treesPerChunk = 0;
+        decorator.grassPerChunk = 0;
+        decorator.flowersPerChunk = 0;
+        decorator.deadBushPerChunk = 0;
+        decorator.reedsPerChunk = 0;
+        decorator.cactiPerChunk = 0;
+        decorator.mushroomsPerChunk = 0;
+        decorator.bigMushroomsPerChunk = 0;
+        decorator.waterlilyPerChunk = 0;
+        decorator.generateFalls = false;
     }
 
     /**

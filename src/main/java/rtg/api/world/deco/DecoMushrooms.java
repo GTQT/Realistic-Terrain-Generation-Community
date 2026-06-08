@@ -58,15 +58,18 @@ public class DecoMushrooms extends DecoBase {
                     break;
             }
 
+            // ====== 复用WorldGenBush对象 ======
+            final WorldGenBush brownMushroomGen = new WorldGenBush(Blocks.BROWN_MUSHROOM);
+            final WorldGenBush redMushroomGen = new WorldGenBush(Blocks.RED_MUSHROOM);
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount; i++) {
                 if (rand.nextInt(this.chance) == 0) {
                     BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), rand.nextInt(this.maxY), rand.nextInt(16));
                     if (rand.nextBoolean()) {
-                        new WorldGenBush(Blocks.BROWN_MUSHROOM).generate(rtgWorld.world(), rand, pos);
+                        brownMushroomGen.generate(rtgWorld.world(), rand, pos);
                     }
                     else {
-                        new WorldGenBush(Blocks.RED_MUSHROOM).generate(rtgWorld.world(), rand, pos);
+                        redMushroomGen.generate(rtgWorld.world(), rand, pos);
                     }
                 }
             }

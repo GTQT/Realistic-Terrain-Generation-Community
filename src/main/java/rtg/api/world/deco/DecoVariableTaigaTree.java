@@ -100,7 +100,10 @@ public class DecoVariableTaigaTree extends DecoTree {
             }
 
             // TODO: [1.12] This should be done in #setLeavesBlock.
-            DecoBase.tweakTreeLeaves(this, false, true);
+            if (!leavesTweaked) {
+                DecoBase.tweakTreeLeaves(this, false, true);
+                leavesTweaked = true;
+            }
 
             int tries = 0;
             TreeDensityLimiter treesRemaining = new TreeDensityLimiter(loopCount);

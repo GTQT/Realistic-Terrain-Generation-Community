@@ -80,6 +80,12 @@ public class DecoFlowersRTG extends DecoBase {
 
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.FLOWERS)) {
 
+            // ====== 复用生成器对象，避免循环内频繁new造成的GC压力 ======
+            final WorldGenFlowersRTG flowerGen = (this.flowers != null && !this.flowers.isEmpty())
+                    ? new WorldGenFlowersRTG(this.flowers) : null;
+            final WorldGenDoublePlantRTG plantGen = (this.plants != null && !this.plants.isEmpty())
+                    ? new WorldGenDoublePlantRTG(Iterables.get(this.plants, 0)) : null;
+
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount * 16; i++) {
                 BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16));
@@ -99,28 +105,28 @@ public class DecoFlowersRTG extends DecoBase {
                         break;
                 }
 
-                if (this.flowers != null && !this.flowers.isEmpty()) {
-
+                if (flowerGen != null) {
                     if (this.notEqualsZeroChance > 1) {
                         if (rand.nextInt(this.notEqualsZeroChance) != 0) {
-                            new WorldGenFlowersRTG(this.flowers).generate(rtgWorld.world(), rand, pos.up(y));
+                            flowerGen.generate(rtgWorld.world(), rand, pos.up(y));
                         }
                     } else {
                         if (rand.nextInt(this.chance) == 0) {
-                            new WorldGenFlowersRTG(this.flowers).generate(rtgWorld.world(), rand, pos.up(y));
+                            flowerGen.generate(rtgWorld.world(), rand, pos.up(y));
                         }
                     }
                 }
 
-                if (this.plants != null && !this.plants.isEmpty()) {
-
+                if (plantGen != null) {
                     if (this.notEqualsZeroChance > 1) {
                         if (rand.nextInt(this.notEqualsZeroChance) != 0) {
-                            new WorldGenDoublePlantRTG(Iterables.get(this.plants, rand.nextInt(this.plants.size()))).generate(rtgWorld.world(), rand, pos.up(y));
+                            plantGen.setPlantType(Iterables.get(this.plants, rand.nextInt(this.plants.size())));
+                            plantGen.generate(rtgWorld.world(), rand, pos.up(y));
                         }
                     } else {
                         if (rand.nextInt(this.chance) == 0) {
-                            new WorldGenDoublePlantRTG(Iterables.get(this.plants, rand.nextInt(this.plants.size()))).generate(rtgWorld.world(), rand, pos.up(y));
+                            plantGen.setPlantType(Iterables.get(this.plants, rand.nextInt(this.plants.size())));
+                            plantGen.generate(rtgWorld.world(), rand, pos.up(y));
                         }
                     }
                 }

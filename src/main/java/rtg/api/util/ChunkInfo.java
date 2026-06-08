@@ -27,6 +27,23 @@ public class ChunkInfo {
         rtgWorld = _rtgWorld;
     }
 
+    public ChunkInfo(ChunkPos _pos, RTGWorld _rtgWorld, float[] noise) {
+        pos = _pos;
+        rtgWorld = _rtgWorld;
+        if (noise != null) {
+            setHeightsFromNoise(noise);
+        }
+    }
+
+    // ====== 直接从terrain noise构建高度缓存，避免256次world.getHeight()调用 ======
+    public void setHeightsFromNoise(float[] noise) {
+        heightCache = new int[256];
+        for (int i = 0; i < 256; i++) {
+            heightCache[i] = (int) noise[i];
+        }
+        heightCacheReady = true;
+    }
+
     // ====== 获取区块内(x,z)的地表高度（带缓存，仅首次调用时构建） ======
     public int getHeight(int x, int z) {
         if (!heightCacheReady) {

@@ -51,12 +51,13 @@ public class DecoCrop extends DecoBase {
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
 
         if (this.chance > 1 && rand.nextInt(this.chance) == 0 && TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.CUSTOM)) {
+            // ====== 复用WorldGenCrops对象 ======
+            final WorldGenCrops cropGen = new WorldGenCrops(type, size, density, height, water);
             for (int i = 0; i < this.strengthFactor; ++i) {
                 final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16));
                 int y = chunkInfo.getHeight(pos.getX(), pos.getZ());
                 if (y >= this.minY && y <= this.maxY) {
-                    new WorldGenCrops(type, size, density, height, water)
-                        .generate(rtgWorld.world(), rand, pos.up(y));
+                    cropGen.generate(rtgWorld.world(), rand, pos.up(y));
                 }
             }
         }

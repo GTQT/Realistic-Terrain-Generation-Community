@@ -59,12 +59,13 @@ public class DecoPumpkin extends DecoBase {
                     break;
             }
 
+            // ====== 复用WorldGenPumpkin对象 ======
+            final WorldGenPumpkin pumpkinGen = new WorldGenPumpkin();
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount; i++) {
                 if (rand.nextInt(this.chance) == 0) {
                     final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), rand.nextInt(this.maxY), rand.nextInt(16));
-                    new WorldGenPumpkin()
-                        .generate(rtgWorld.world(), rand, pos);
+                    pumpkinGen.generate(rtgWorld.world(), rand, pos);
                 }
             }
         }

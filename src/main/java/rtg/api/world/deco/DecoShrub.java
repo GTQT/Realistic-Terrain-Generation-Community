@@ -37,6 +37,7 @@ public class DecoShrub extends DecoBase {
     private int maxSize;
     private IBlockState logBlock;
     private IBlockState leavesBlock;
+    private boolean leavesTweaked = false; // 只在首次generate时调整叶子属性
 
     public DecoShrub() {
 
@@ -84,8 +85,11 @@ public class DecoShrub extends DecoBase {
             }
 
             // TODO: [1.12] This should be done in #setLeavesBlock.
-            // Only tweak the leaves after all calls to setLeavesBlock().
-            DecoBase.tweakShrubLeaves(this, false, true);
+            // Only tweak the leaves after all calls to setLeavesBlock() — 且只需执行一次
+            if (!leavesTweaked) {
+                DecoBase.tweakShrubLeaves(this, false, true);
+                leavesTweaked = true;
+            }
 
             final int loopCount = (int)((float)this.loops * this.loopMultiplier);
 

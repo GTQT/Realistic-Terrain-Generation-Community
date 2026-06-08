@@ -127,7 +127,10 @@ abstract public class DecoVariableTree extends DecoTree {
             if (loopCount < 1) { return; }
 
             // TODO: [1.12] This should be done in #setLeavesBlock.
-            DecoBase.tweakTreeLeaves(this, false, true);
+            if (!leavesTweaked) {
+                DecoBase.tweakTreeLeaves(this, false, true);
+                leavesTweaked = true;
+            }
 
             TreeDensityLimiter treesRemaining = new TreeDensityLimiter(loopCount);
             while (treesRemaining.notDone()) {

@@ -49,10 +49,11 @@ public class DecoCobwebs extends DecoBase {
     public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInot) {
 
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.CUSTOM)) {
+            // ====== 复用WorldGenBlock对象 ======
+            final WorldGenBlock webGen = new WorldGenBlock(WEB, AIR, this.adjacentBlock, this.minAdjacents);
             for (int i = 0; i < this.strengthFactor; ++i) {
                 if (rand.nextInt(this.chance) == 0) {
-                    new WorldGenBlock(WEB, AIR, this.adjacentBlock, this.minAdjacents)
-                        .generate(rtgWorld.world(), rand, getOffsetPos(chunkPos).add(rand.nextInt(16), getRangedRandom(rand, this.minY, this.maxY), rand.nextInt(16)));
+                    webGen.generate(rtgWorld.world(), rand, getOffsetPos(chunkPos).add(rand.nextInt(16), getRangedRandom(rand, this.minY, this.maxY), rand.nextInt(16)));
                 }
             }
         }

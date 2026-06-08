@@ -54,6 +54,7 @@ public class DecoTree extends DecoBase {
     protected int minCrownSize; // Min tree height (only used with certain tree presets)
     protected int maxCrownSize; // Max tree height (only used with certain tree presets)
     protected boolean noLeaves;
+    protected boolean leavesTweaked = false; // 只在首次generate时调整叶子属性
 
     public DecoTree() {
 
@@ -199,7 +200,11 @@ public class DecoTree extends DecoBase {
             loopCount = event.getModifiedAmount();
             if (loopCount < 1) { return; }
 
-            DecoBase.tweakTreeLeaves(this, false, true);
+            // ====== 只在首次generate时调整叶子属性，避免每区块重复withProperty() ======
+            if (!leavesTweaked) {
+                DecoBase.tweakTreeLeaves(this, false, true);
+                leavesTweaked = true;
+            }
 
             if (hasVillage) {
                 return;

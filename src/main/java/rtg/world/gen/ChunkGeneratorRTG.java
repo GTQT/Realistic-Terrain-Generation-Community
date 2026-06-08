@@ -356,6 +356,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         mpos.setPos(blockPos.getX() + 16, 0, blockPos.getZ() + 16);
         float river = -TerrainBase.getRiverStrength(mpos, rtgWorld, riverJitterData);
+        // ====== 获取landscape噪声数据，传递给ChunkInfo避免256次world.getHeight() ======
+        final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
             if (river > 0.8f) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
@@ -364,9 +366,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         } else {
             if (river > 0.8f) {
-                biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
+                biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
             } else {
-                biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage);
+                biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
             }
         }
 

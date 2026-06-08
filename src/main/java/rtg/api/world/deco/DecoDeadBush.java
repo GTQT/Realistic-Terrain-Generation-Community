@@ -41,12 +41,14 @@ public class DecoDeadBush extends DecoBase {
 
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.DEAD_BUSH)) {
 
+            // ====== 复用WorldGenDeadBush对象 ======
+            final WorldGenDeadBush bushGen = new WorldGenDeadBush();
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount; i++) {
                 final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), 0, rand.nextInt(16));
                 int y = rand.nextInt(this.maxY);
                 if (y <= this.maxY && rand.nextInt(this.chance) == 0) {
-                    new WorldGenDeadBush().generate(rtgWorld.world(), rand, pos.up(y));
+                    bushGen.generate(rtgWorld.world(), rand, pos.up(y));
                 }
             }
         }

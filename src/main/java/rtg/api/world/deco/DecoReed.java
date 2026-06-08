@@ -39,11 +39,12 @@ public class DecoReed extends DecoBase {
 
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.REED)) {
 
+            // ====== 复用WorldGenReed对象 ======
+            final WorldGenReed reedGen = new WorldGenReed();
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount; i++) {
                 final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), rand.nextInt(this.maxY), rand.nextInt(16));
-                new WorldGenReed()
-                    .generate(rtgWorld.world(), rand, pos);
+                reedGen.generate(rtgWorld.world(), rand, pos);
             }
         }
     }

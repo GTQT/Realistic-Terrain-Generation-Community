@@ -80,41 +80,25 @@ public class RealisticBiomeBOPMountainPeaks extends RealisticBiomeBase {
         this.addDeco(decoShrub);
     }
 
+    /**
+     * RWG-style grand mountain peaks — towering terrain with dramatic height.
+     */
     public static class TerrainBOPMountainPeaks extends TerrainBase {
 
-        private float width;
-        private float strength;
         private float terrainHeight;
-        private float spikeWidth = 30;
-        private float spikeHeight = 50;
-        private HeightEffect heightEffect;
 
         public TerrainBOPMountainPeaks(float mountainWidth, float mountainStrength) {
-
             this(mountainWidth, mountainStrength, 90f);
         }
 
         public TerrainBOPMountainPeaks(float mountainWidth, float mountainStrength, float height) {
-
-            width = mountainWidth;
-            strength = mountainStrength;
             terrainHeight = height;
-            MountainsWithPassesEffect mountainEffect = new MountainsWithPassesEffect();
-            mountainEffect.mountainHeight = strength;
-            mountainEffect.mountainWavelength = width;
-            mountainEffect.spikeHeight = this.spikeHeight;
-            mountainEffect.spikeWavelength = this.spikeWidth;
-
-
-            heightEffect = new JitterEffect(7f, 10f, mountainEffect);
-            heightEffect = new JitterEffect(3f, 6f, heightEffect);
-
+            base = 67f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return riverized(heightEffect.added(rtgWorld, x, y) + terrainHeight, river);
+            return terrainMountain(x, y, rtgWorld, river);
         }
     }
 

@@ -44,7 +44,7 @@ public class RealisticBiomeVanillaExtremeHillsEdge extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new RealisticBiomeVanillaExtremeHills.RidgedExtremeHills(155f, 67f, 280f);
+        return new TerrainVanillaExtremeHillsEdge();
     }
 
     @Override
@@ -111,25 +111,19 @@ public class RealisticBiomeVanillaExtremeHillsEdge extends RealisticBiomeBase {
         this.addDeco(decoPumpkin);
     }
 
+    /**
+     * RWG-style mountain river — gentler lower slopes for the transition zone
+     * between full mountains and plains. Perfect for Extreme Hills Edge.
+     */
     public static class TerrainVanillaExtremeHillsEdge extends TerrainBase {
 
-        private float start;
-        private float height;
-        private float base;
-        private float width;
-
-        public TerrainVanillaExtremeHillsEdge(float hillStart, float landHeight, float baseHeight, float hillWidth) {
-
-            start = hillStart;
-            height = landHeight;
-            base = baseHeight;
-            width = hillWidth;
+        public TerrainVanillaExtremeHillsEdge() {
+            base = 67f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainHighland(x, y, rtgWorld, river, start, width, height, 10f);
+            return terrainMountainRiver(x, y, rtgWorld, river);
         }
     }
 

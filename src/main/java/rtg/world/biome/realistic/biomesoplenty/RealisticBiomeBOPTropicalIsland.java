@@ -46,7 +46,7 @@ public class RealisticBiomeBOPTropicalIsland extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new RealisticBiomeVanillaExtremeHills.RidgedExtremeHills(84f, 65f, 200f);
+        return new RealisticBiomeVanillaExtremeHills.GrandMountain();
     }
 
     @Override

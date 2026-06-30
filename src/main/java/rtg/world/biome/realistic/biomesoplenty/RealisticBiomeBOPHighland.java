@@ -45,30 +45,18 @@ public class RealisticBiomeBOPHighland extends RealisticBiomeBase {
         return new SurfaceBOPHighland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock);
     }
 
+    /**
+     * RWG-style grassland mountains — wide, rolling peaks with carved valleys.
+     */
     public static class TerrainBOPHighland extends TerrainBase {
 
-        private float baseHeight = 120f;
-        private BumpyHillsEffect onTop = new BumpyHillsEffect();
-        private JitterEffect withJitter;
-
         public TerrainBOPHighland() {
-
-            onTop.hillHeight = 40;
-            onTop.hillWavelength = 90;
-            onTop.spikeHeight = 20;
-            onTop.spikeWavelength = 10;
-
-            withJitter = new JitterEffect();
-            withJitter.amplitude = 2;
-            withJitter.wavelength = 5;
-            withJitter.jittered = onTop;
+            base = 120f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return riverized(baseHeight + withJitter.added(rtgWorld, x, y) + groundNoise(x, y, 6, rtgWorld), river);
-            //return terrainGrasslandMountains(x, y, simplex, cell, river, 4f, 80f, 68f);
+            return terrainGrasslandMountains(x, y, rtgWorld, river);
         }
     }
 

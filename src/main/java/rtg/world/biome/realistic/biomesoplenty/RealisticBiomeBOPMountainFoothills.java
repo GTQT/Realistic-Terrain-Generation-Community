@@ -73,7 +73,7 @@ public class RealisticBiomeBOPMountainFoothills extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainBOPMountainPeaks(120f, 50f);
+        return new TerrainBOPMountainFoothills(300f, 100f);
     }
 
 
@@ -82,43 +82,20 @@ public class RealisticBiomeBOPMountainFoothills extends RealisticBiomeBase {
         return new SurfaceBOPMountainFoothills(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, BlockUtil.getStateDirt(BlockDirt.DirtType.COARSE_DIRT), baseBiome().fillerBlock, 80f, -0.15f, 10f, 0.5f );
     }
 
+    /**
+     * RWG-style mountain river — gentler lower slopes with sharp peaks above.
+     * Perfect for foothills transitioning between plains and full mountain ranges.
+     */
     public static class TerrainBOPMountainFoothills extends TerrainBase {
 
-        private float width;
-        private float strength;
-        private float terrainHeight;
-        private float spikeWidth = 30;
-        private float spikeHeight = 50;
-        private HeightEffect heightEffect;
-
         public TerrainBOPMountainFoothills(float mountainWidth, float mountainStrength) {
-
-            this(mountainWidth, mountainStrength, 75f);
-        }
-
-        public TerrainBOPMountainFoothills(float mountainWidth, float mountainStrength, float height) {
-
-            width = mountainWidth;
-            strength = mountainStrength;
-            terrainHeight = height;
-            MountainsWithPassesEffect mountainEffect = new MountainsWithPassesEffect();
-            mountainEffect.mountainHeight = strength;
-            mountainEffect.mountainWavelength = width;
-            mountainEffect.spikeHeight = this.spikeHeight;
-            mountainEffect.spikeWavelength = this.spikeWidth;
-
-
-            heightEffect = new JitterEffect(7f, 10f, mountainEffect);
-            heightEffect = new JitterEffect(3f, 6f, heightEffect);
-
+            base = 75f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return riverized(heightEffect.added(rtgWorld, x, y) + terrainHeight, river);
+            return terrainMountainRiver(x, y, rtgWorld, river);
         }
-        
     }
 
     public static class SurfaceBOPMountainFoothills extends SurfaceBase {

@@ -45,26 +45,22 @@ public class RealisticBiomeBOPAlpsFoothills extends RealisticBiomeBase {
         return new SurfaceBOPAlpsFoothills(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.DIRT.getDefaultState(), baseBiome().fillerBlock, 80f, -0.15f, 10f, 0.5f);
     }
 
+    /**
+     * RWG-style mountain river terrain — produces mountain peaks with gentler lower slopes
+     * for a smoother transition from valley floor to peak, ideal for foothills.
+     * The original RTG developer intended this function for this biome (was commented out).
+     */
     public static class TerrainBOPAlpsFoothills extends TerrainBase {
 
-    	    // same style as the full alps, but less high.
-            // the BoP version has steep slopes and a flat area on top. The RTG version will mimic that.
-            private float start = 0f;// this puts a minimum on "ruggedness" on the top. We want to allow flats
-            private float height = 30f; // sets the variability range
-            private float width = 80f; // width of irregularity noise on top. We want low, for a lot of features.
-
-            public TerrainBOPAlpsFoothills() {
-
-                base = 90f;
-            }
-
-            @Override
-            public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-                return terrainHighland(x, y, rtgWorld, river, start, width, height, base - 62f);
-                //return terrainMountainRiver(x, y, simplex, cell, river, 300f, 67f);
-            }
+        public TerrainBOPAlpsFoothills() {
+            base = 90f;
         }
+
+        @Override
+        public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
+            return terrainMountainRiver(x, y, rtgWorld, river);
+        }
+    }
 
     public static class SurfaceBOPAlpsFoothills extends SurfaceBase {
 

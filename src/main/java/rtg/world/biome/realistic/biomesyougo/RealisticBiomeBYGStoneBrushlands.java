@@ -37,7 +37,7 @@ public class RealisticBiomeBYGStoneBrushlands extends RealisticBiomeBYGBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new RealisticBiomeVanillaExtremeHills.RidgedExtremeHills(120f, 66f, 200f);
+        return new RealisticBiomeVanillaExtremeHills.GrandMountain();
     }
 
     @Override

@@ -43,22 +43,18 @@ public class RealisticBiomeBOPGlacier extends RealisticBiomeBase {
         return new SurfaceBOPGlacier(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, baseBiome().topBlock, baseBiome().fillerBlock, Blocks.PACKED_ICE.getDefaultState(), Blocks.ICE.getDefaultState(), 60f, -0.14f, 14f, 0.25f);
     }
 
+    /**
+     * RWG-style mountain spikes — jagged, dramatic ice peaks for glacial terrain.
+     */
     public static class TerrainBOPGlacier extends TerrainBase {
 
-        private float width;
-        private float strength;
-
         public TerrainBOPGlacier(float mountainWidth, float mountainStrength, float height) {
-
-            width = mountainWidth;
-            strength = mountainStrength;
             base = height;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainLonelyMountain(x, y, rtgWorld, river, strength, width, base);
+            return terrainMountainSpikes(x, y, rtgWorld, river);
         }
     }
 

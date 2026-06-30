@@ -71,7 +71,7 @@ public class RealisticBiomeVanillaBirchForestHillsM extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainHighland(x, y, rtgWorld, river, 10f, 68f, hillStrength, 10f);
+            return terrainGrasslandHills(x, y, rtgWorld, river, 70f, 180f, 7f, 100f, 38f, 260f, 68f);
         }
     }
 

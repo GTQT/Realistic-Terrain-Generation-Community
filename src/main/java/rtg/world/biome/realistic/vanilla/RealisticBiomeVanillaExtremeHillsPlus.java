@@ -15,9 +15,6 @@ import rtg.api.world.deco.collection.DecoCollectionExtremeHillsCommon;
 import rtg.api.world.deco.collection.DecoCollectionExtremeHillsPlus;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.api.world.terrain.heighteffect.HeightEffect;
-import rtg.api.world.terrain.heighteffect.JitterEffect;
-import rtg.api.world.terrain.heighteffect.MountainsWithPassesEffect;
 import rtg.api.world.biome.RealisticBiomeBase;
 
 
@@ -43,7 +40,7 @@ public class RealisticBiomeVanillaExtremeHillsPlus extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new RealisticBiomeVanillaExtremeHills.RidgedExtremeHills(160f, 67f, 240f);
+        return new TerrainVanillaExtremeHillsPlus(240f, 120f, 68f);
     }
 
     @Override
@@ -58,34 +55,24 @@ public class RealisticBiomeVanillaExtremeHillsPlus extends RealisticBiomeBase {
         this.addDecoCollection(new DecoCollectionExtremeHillsCommon(this.getConfig()));
     }
 
+    /**
+     * RWG-style hilly terrain — rolling mountains with lake basin carving.
+     * Uses the original RWG TerrainHilly formula for dramatic peaks and deep valleys.
+     */
     public static class TerrainVanillaExtremeHillsPlus extends TerrainBase {
 
         private float width;
         private float strength;
-        private float spikeWidth = 40;
-        private float spikeHeight = 70;
-        private HeightEffect heightEffect;
 
         public TerrainVanillaExtremeHillsPlus(float mountainWidth, float mountainStrength, float height) {
-
             width = mountainWidth;
             strength = mountainStrength;
             base = height;
-            MountainsWithPassesEffect mountainEffect = new MountainsWithPassesEffect();
-            mountainEffect.mountainHeight = strength;
-            mountainEffect.mountainWavelength = width;
-            mountainEffect.spikeHeight = this.spikeHeight;
-            mountainEffect.spikeWavelength = this.spikeWidth;
-
-            heightEffect = new JitterEffect(7f, 10f, mountainEffect);
-            heightEffect = new JitterEffect(3f, 6f, heightEffect);
-            //this(mountainWidth, mountainStrength, depthLake, 260f, 68f);
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return riverized(heightEffect.added(rtgWorld, x, y) + base, river);
+            return terrainHilly(x, y, rtgWorld, river, width, strength, 50f, 260f, base);
         }
     }
 

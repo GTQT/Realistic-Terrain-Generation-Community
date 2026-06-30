@@ -38,7 +38,7 @@ public class RealisticBiomeVanillaIceMountains extends RealisticBiomeBase {
     @Override
     public TerrainBase initTerrain() {
 
-        return new TerrainVanillaIceMountains(230f, 60f, 68f);
+        return new TerrainVanillaIceMountains();
     }
 
     @Override
@@ -56,23 +56,18 @@ public class RealisticBiomeVanillaIceMountains extends RealisticBiomeBase {
     public void initDecos() {
     }
 
+    /**
+     * RWG-style mountain spikes terrain — produces jagged, dramatic snowy peaks.
+     */
     public static class TerrainVanillaIceMountains extends TerrainBase {
 
-        private float width;
-        private float strength;
-        private float terrainHeight;
-
-        public TerrainVanillaIceMountains(float mountainWidth, float mountainStrength, float height) {
-
-            width = mountainWidth;
-            strength = mountainStrength;
-            terrainHeight = height;
+        public TerrainVanillaIceMountains() {
+            this.base = 68f;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainLonelyMountain(x, y, rtgWorld, river, strength, width, terrainHeight);
+            return terrainMountainSpikes(x, y, rtgWorld, river);
         }
     }
 

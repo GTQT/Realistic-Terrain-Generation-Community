@@ -43,6 +43,15 @@ public abstract class TerrainBase {
     private static final float INV_64 = 1f / 64f;
     private static final float INV_240 = 1f / 240f;
     private static final float INV_80 = 1f / 80f;
+    // Additional inverses for RWG-grand terrain functions
+    private static final float INV_35 = 1f / 35f;
+    private static final float INV_60 = 1f / 60f;
+    private static final float INV_28 = 1f / 28f;
+    private static final float INV_14 = 1f / 14f;
+    private static final float INV_260 = 1f / 260f;
+    private static final float INV_32 = 1f / 32f;
+    private static final float INV_200 = 1f / 200f;
+    private static final float INV_120 = 1f / 120f;
     // Pre-calculated constants
     private static final float BLENDED_HILL_NORMALIZATION = 1f / 0.45f;
     private static final float BLENDED_HILL_OFFSET = 4.5f;
@@ -158,10 +167,11 @@ public abstract class TerrainBase {
 
     public static float mountainCap(float m) {
         // heights can "blow through the ceiling" so pull more extreme values down a bit
-        if (m > 180) {
-            m = 180 + (m - 180f) * 0.9f;
-            if (m > 220) {
-                m = 220 + (m - 220f) * .75f;
+        // Relaxed from original RTG — allows higher peaks for grand terrain (inspired by RWG)
+        if (m > 140) {
+            m = 140 + (m - 140f) * 0.8f;
+            if (m > 200) {
+                m = 200 + (m - 200f) * 0.65f;
             }
         }
         return m;
@@ -590,6 +600,216 @@ public abstract class TerrainBase {
 
         return baseHeight + h * border;
     }
+
+    // ====================================================================
+    // RWG-GRAND TERRAIN FUNCTIONS
+    // Ported from Realistic World Gen (ted80) — produces dramatic,
+    // high-contrast terrain with sharp peaks and deep valleys.
+    // ====================================================================
+
+    /**
+     * RWG original — produces sharp isolated mountain peaks up to ~217.
+     * Uses quadratic height amplification (h²/32) for dramatic contrast.
+     */
+    public static float terrainMountain(int x, int y, RTGWorld rtgWorld, float river) {
+
+        SimplexNoise simplex = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float h = simplex.noise2f(x * INV_300, y * INV_300) * 135f * river;
+        h *= h * INV_32;  // quadratic amplification — small values collapse, large values explode
+        h = Math.min(h, 150f);
+
+        if (h > 10f) {
+            float d = Math.min((h - 10f) * 0.5f, 8f);  // /2
+            h += simplex.noise2f(x * INV_35, y * INV_35) * d;
+            h += simplex.noise2f(x * INV_60, y * INV_60) * d * 0.5f;
+            if (h > 35f) {
+                float d2 = Math.min((h - 35f) * 0.66666667f, 30f);  // /1.5
+                h += (float) cell.eval2D(x * 0.04f, y * 0.04f).getShortestDistance() * d2;  // /25
+            }
+        }
+
+        h += simplex.noise2f(x * INV_28, y * INV_28) * 4;
+        h += simplex.noise2f(x * INV_18, y * INV_18) * 2;
+        h += simplex.noise2f(x * INV_8, y * INV_8) * 2;
+
+        return mountainCap(h + 67f);
+    }
+
+    /**
+     * RWG original — mountain river variant with gentler low-elevation treatment.
+     * Peaks up to ~217, lower slopes smoothed by river influence.
+     */
+    public static float terrainMountainRiver(int x, int y, RTGWorld rtgWorld, float river) {
+
+        SimplexNoise simplex = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float h = simplex.noise2f(x * INV_300, y * INV_300) * 135f * river;
+        h *= h * INV_32;
+        h = Math.min(h, 150f);
+
+        if (h < 10f) {
+            h += simplex.noise2f(x * INV_14, y * INV_14) * (10f - h) * 0.2f;
+        }
+
+        if (h > 10f) {
+            float d = Math.min((h - 10f) * 0.5f, 8f);
+            h += simplex.noise2f(x * INV_35, y * INV_35) * d;
+            h += simplex.noise2f(x * INV_60, y * INV_60) * d * 0.5f;
+            if (h > 35f) {
+                float d2 = Math.min((h - 35f) * 0.66666667f, 30f);
+                h += (float) cell.eval2D(x * 0.04f, y * 0.04f).getShortestDistance() * d2;
+            }
+        }
+
+        if (h > 2f) {
+            float d = Math.min((h - 2f) * 0.5f, 4f);
+            h += simplex.noise2f(x * INV_28, y * INV_28) * d;
+            h += simplex.noise2f(x * INV_18, y * INV_18) * (d * 0.5f);
+            h += simplex.noise2f(x * INV_8, y * INV_8) * (d * 0.5f);
+        }
+
+        return mountainCap(h + 67f);
+    }
+
+    /**
+     * RWG original — hilly mountains with lake basin erosion.
+     * Creates dramatic peaks (up to ~250+) with deep carved valleys.
+     * Default params from RWG JungleHills: width=230, strength=120, lakeDepth=50
+     */
+    public static float terrainHilly(int x, int y, RTGWorld rtgWorld, float river,
+                                      float width, float strength, float lakeDepth,
+                                      float lakeWidth, float terrainHeight) {
+
+        SimplexNoise simplex0 = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float h = simplex0.noise2f(x * INV_20, y * INV_20) * 2;
+        h += simplex0.noise2f(x * INV_7, y * INV_7) * 0.8f;
+
+        float invWidth = 1f / width;
+        float m = simplex0.noise2f(x * invWidth, y * invWidth) * strength * river;
+        m *= m * INV_35;  // m²/35
+        m = m > 70f ? 70f + (m - 70f) * 0.4f : m;  // /2.5
+
+        float st = Math.min(m * 0.7f, 20f);
+        float c = (float) cell.eval2D(x * INV_30, y * INV_30).getShortestDistance() * (5f + st);
+
+        float sm = simplex0.noise2f(x * INV_30, y * INV_30) * 8f + simplex0.noise2f(x * INV_8, y * INV_8);
+        sm *= Math.min((m + 10f) * 0.05f, 2.5f);  // /20
+        m += sm + c;
+
+        // Lake basin carving — subtracts depth to create valleys
+        float invLakeWidth = 1f / lakeWidth;
+        float l = simplex0.noise2f(x * invLakeWidth, y * invLakeWidth) * lakeDepth;
+        l *= l * 0.04f;  // /25
+        l = Math.max(l, -8f);
+
+        return mountainCap(terrainHeight + h + m - l);
+    }
+
+    /**
+     * RWG original — grassland mountains with rolling peaks and lake basins.
+     * Peaks up to ~200, creates wide mountain ranges.
+     */
+    public static float terrainGrasslandMountains(int x, int y, RTGWorld rtgWorld, float river) {
+
+        SimplexNoise simplex0 = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float h = simplex0.noise2f(x * INV_100, y * INV_100) * 7;
+        h += simplex0.noise2f(x * INV_20, y * INV_20) * 2;
+
+        float m = simplex0.noise2f(x * INV_230, y * INV_230) * 120f * river;
+        m *= m * INV_35;
+        m = m > 70f ? 70f + (m - 70f) * 0.4f : m;  // /2.5
+
+        float c = (float) cell.eval2D(x * INV_30, y * INV_30).getShortestDistance() * (m * 0.30f);
+
+        float sm = simplex0.noise2f(x * INV_30, y * INV_30) * 8f + simplex0.noise2f(x * INV_8, y * INV_8);
+        sm *= Math.min(m * 0.05f, 2.5f);  // /20
+        m += sm + c;
+
+        float l = simplex0.noise2f(x * INV_260, y * INV_260) * 38f;
+        l *= l * 0.04f;  // /25
+        l = Math.max(l, -8f);
+
+        return mountainCap(68f + h + m - l);
+    }
+
+    /**
+     * RWG original — grassland hills with configurable parameters.
+     * Gentler than terrainHilly, produces rolling terrain.
+     */
+    public static float terrainGrasslandHills(int x, int y, RTGWorld rtgWorld, float river,
+                                               float hillHeight, float hillWidth,
+                                               float varHeight, float varWidth,
+                                               float lakeHeight, float lakeWidth,
+                                               float baseHeight) {
+
+        SimplexNoise simplex0 = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float h = simplex0.noise2f(x / varWidth, y / varWidth) * varHeight * river;
+        h += simplex0.noise2f(x * INV_20, y * INV_20) * 2;
+
+        float m = simplex0.noise2f(x / hillWidth, y / hillWidth) * hillHeight * river;
+        m *= m * 0.025f;  // /40
+
+        float sm = simplex0.noise2f(x * INV_30, y * INV_30) * 8f;
+        sm *= Math.min(m * 0.05f, 3.75f);  // /20
+        m += sm;
+
+        float cm = (float) cell.eval2D(x * 0.04f, y * 0.04f).getShortestDistance() * 12f;  // /25
+        cm *= Math.min(m * 0.05f, 3.75f);  // /20
+        m += cm;
+
+        float l = simplex0.noise2f(x / lakeWidth, y / lakeWidth) * lakeHeight;
+        l *= l * 0.04f;  // /25
+        l = Math.max(l, 8f);
+
+        h += simplex0.noise2f(x * INV_12, y * INV_12) * 3f;
+        h += simplex0.noise2f(x * INV_5, y * INV_5) * 1.5f;
+
+        return mountainCap(baseHeight + h + m - l);
+    }
+
+    /**
+     * RWG original — mountain spikes for snowy/alpine terrain.
+     * Creates extremely jagged peaks.
+     */
+    public static float terrainMountainSpikes(int x, int y, RTGWorld rtgWorld, float river) {
+
+        SimplexNoise simplex = rtgWorld.simplexInstance(0);
+        CellularNoise cell = rtgWorld.cellularInstance(0);
+
+        float b = (12f + (simplex.noise2f(x * INV_300, y * INV_300) * 6f));
+        float h = (float) cell.eval2D(x * 0.005f, y * 0.005f).getShortestDistance() * b * river;  // /200
+        h *= h * 1.5f;
+        h = Math.min(h, 155f);
+
+        if (h > 2f) {
+            float d = Math.min((h - 2f) * 0.5f, 8f);
+            h += simplex.noise2f(x * INV_30, y * INV_30) * d;
+            h += simplex.noise2f(x * INV_50, y * INV_50) * d * 0.5f;
+
+            if (h > 35f) {
+                float d2 = Math.min((h - 35f) * 0.66666667f, 30f);  // /1.5
+                h += (float) cell.eval2D(x * 0.04f, y * 0.04f).getShortestDistance() * d2;  // /25
+            }
+        }
+
+        h += simplex.noise2f(x * INV_18, y * INV_18) * 3;
+        h += simplex.noise2f(x * INV_8, y * INV_8) * 2;
+
+        return mountainCap(45f + h + (b * 2));
+    }
+
+    // ====================================================================
+    // END RWG-GRAND TERRAIN FUNCTIONS
+    // ====================================================================
 
     public static float getRiverStrength(final BlockPos blockPos, final RTGWorld rtgWorld) {
         return getRiverStrength(blockPos, rtgWorld, SimplexData2D.newDisk());

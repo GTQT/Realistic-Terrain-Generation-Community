@@ -45,40 +45,23 @@ public class RealisticBiomeBOPOvergrownCliffs extends RealisticBiomeBase {
         return new SurfaceBOPOvergrownCliffs(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, 0.95f);
     }
 
+    /**
+     * RWG-style mountain river — vertical cliffs with gentler river-level smoothing.
+     * Ideal for overgrown cliff biomes where water meets steep terrain.
+     */
     public static class TerrainBOPOvergrownCliffs extends TerrainBase {
 
-        private float width;
-        private float strength;
-        private float lakeDepth;
-        private float lakeWidth;
-        private float terrainHeight;
-
-	/*
-     * width = 230f
-	 * strength = 120f
-	 * lake = 50f;
-	 *
-	 * 230f, 120f, 50f
-	 */
-
         public TerrainBOPOvergrownCliffs(float mountainWidth, float mountainStrength, float depthLake) {
-
-            this(mountainWidth, mountainStrength, depthLake, 260f, 68f);
+            base = 68f;
         }
 
         public TerrainBOPOvergrownCliffs(float mountainWidth, float mountainStrength, float depthLake, float widthLake, float height) {
-
-            width = mountainWidth;
-            strength = mountainStrength;
-            lakeDepth = depthLake;
-            lakeWidth = widthLake;
-            terrainHeight = height;
+            base = height;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainLonelyMountain(x, y, rtgWorld, river, strength, width, terrainHeight);
+            return terrainMountainRiver(x, y, rtgWorld, river);
         }
     }
 

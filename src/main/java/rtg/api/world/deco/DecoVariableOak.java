@@ -25,8 +25,8 @@ public class DecoVariableOak extends DecoVariableTree {
 	     mediumTree = new TreeRTGQuercusFalcata();
 	     smallTree = new TreeRTGQuercusRobur();
 	     this.materials = this.materialsPicker.oak;
-	     this.averageHeightSqrt += 0.2f;
-	     this.heightNoiseVariability += 0.2f;
+	     this.averageHeightSqrt -= 1.2f;
+	     this.heightNoiseVariability -= 0.5f;
 		 this.mediumTreeMinimumHeight += 1;
 		 this.tallTreeMinimumHeight += 3;
 		 this.tallTreeMinimumVariability +=1;

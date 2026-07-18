@@ -42,7 +42,7 @@ public class DecoGrass extends DecoBase {
         if (TerrainGen.decorate(rtgWorld.world(), rand, chunkPos, Decorate.EventType.GRASS)) {
 
             // ====== 复用WorldGenDoublePlant对象，避免循环内每次new ======
-            final WorldGenDoublePlant grassGen = new WorldGenDoublePlant();
+            final WorldGenDoublePlant grassGen = new WorldGenDoublePlantRTG(BlockDoublePlant.EnumPlantType.GRASS);
             final int loopCount = (this.strengthFactor > 0f) ? (int) this.strengthFactor : this.loops;
             for (int i = 0; i < loopCount; i++) {
                 final BlockPos pos = getOffsetPos(chunkPos).add(rand.nextInt(16), rand.nextInt(this.maxY), rand.nextInt(16));

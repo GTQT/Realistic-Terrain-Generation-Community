@@ -9,6 +9,7 @@ import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.*;
 import rtg.api.world.deco.DecoTree.TreeCondition;
 import rtg.api.world.deco.DecoTree.TreeType;
+import rtg.api.world.deco.DecoGrass;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat.ChanceType;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
@@ -21,7 +22,8 @@ import rtg.api.world.gen.feature.tree.rtg.TreeRTGPiceaSitchensis;
  */
 public class DecoCollectionTaiga extends DecoCollectionBase {
 	
-    private Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 4.5f);
+    // Restored to Master-level: divisor 100 (was 837 global), factor 8 (was 2.5)
+    private Distribution treeFrequencyDistribution = new Distribution(100f, 8f, 0.8f);
     private final DecoVariableTaigaTree variableTrees;
     		
     private float tallMin = -1f;
@@ -204,6 +206,11 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
         decoBoulder.setStrengthFactor(2f);
         this.addDeco(decoBoulder);
 
+        DecoGrass decoGrass = new DecoGrass();
+        decoGrass.setMaxY(128);
+        decoGrass.setLoops(6);
+        this.addDeco(decoGrass);
+
         DecoPumpkin decoPumpkin = new DecoPumpkin();
         decoPumpkin.setMaxY(90);
         decoPumpkin.setRandomFloat(32f);
@@ -224,10 +231,10 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
     }
     
     private DecoVariableTaigaTree initVariableTrees(float noiseMin, float noiseMax) {
-    	
+
     	DecoVariableTaigaTree result = new DecoVariableTaigaTree();
-        
-            result.setStrengthFactorForLoops(5f)
+
+            result.setStrengthFactorForLoops(0f)           // Disabled — let noise drive loop count
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -235,8 +242,8 @@ public class DecoCollectionTaiga extends DecoCollectionBase {
             .setTreeConditionNoise2(noiseMax)
             .setTreeConditionChance(1)
             .setMaxY(120)
-            .setStrengthNoiseFactorForLoops(true)
-            .setStrengthNoiseFactorXForLoops(false)// just in case
+            .setStrengthNoiseFactorForLoops(true)          // Noise-based (now properly active)
+            .setStrengthNoiseFactorXForLoops(false)
             ;
             return result;
     }

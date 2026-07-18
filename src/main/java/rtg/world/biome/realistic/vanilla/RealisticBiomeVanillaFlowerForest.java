@@ -136,8 +136,8 @@ public class RealisticBiomeVanillaFlowerForest extends RealisticBiomeBase {
     }
     
     private DecoTree variableTrees(float noiseMin, float noiseMax) {
-        Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 1.5f, 2.5f); 
-        // about half as many as usual
+        Distribution treeFrequencyDistribution = new Distribution(100f, 1.5f, 2.5f);
+        // about half as many as usual (divisor 100 for local variation)
 
     	DecoTree result = new DecoVariableMaterialTree(TreeMaterials.inOakForest);
 

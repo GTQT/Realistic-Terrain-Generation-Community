@@ -168,10 +168,18 @@ public class DecoTree extends DecoBase {
 
         float noise = distribution.getValue(offsetPos, rtgWorld.treeDistributionNoise());
 
-        int loopCount = this.strengthFactorForLoops > 0f ? (int) this.strengthFactorForLoops :
-                this.strengthNoiseFactorForLoops ? (int) noise :
-                        this.strengthNoiseFactorXForLoops ? (int) (noise * this.strengthFactorForLoops) :
-                                this.loops;
+        // Cascading priority (matching Master's last-wins behavior):
+        // strengthNoiseFactorXForLoops > strengthNoiseFactorForLoops > strengthFactorForLoops > loops
+        int loopCount = this.loops;
+        if (this.strengthFactorForLoops > 0f) {
+            loopCount = (int) this.strengthFactorForLoops;
+        }
+        if (this.strengthNoiseFactorForLoops) {
+            loopCount = (int) noise;
+        }
+        if (this.strengthNoiseFactorXForLoops) {
+            loopCount = (int) (noise * this.strengthFactorForLoops);
+        }
 
         if (loopCount < 1) {
             return;

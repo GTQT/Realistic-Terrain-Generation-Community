@@ -1,6 +1,7 @@
 package rtg.api.world.deco.collection;
 
 import net.minecraft.block.BlockPlanks.EnumType;
+import net.minecraft.init.Blocks;
 import net.minecraft.world.gen.feature.WorldGenTrees;
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
@@ -22,36 +23,37 @@ import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
  */
 public class DecoCollectionBirchForest extends DecoCollectionBase {
 
-    protected Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 4.5f); 
+    // Restored tree distribution: divisor 100 (was 837), factor 8 (was 2.5) for Master-level density
+    protected Distribution treeFrequencyDistribution = new Distribution(100f, 8f, 0.8f);
     private float tallMin = -1f;
     private float tallMax = 3f;
-    
+
     public DecoCollectionBirchForest(BiomeConfig config) {
 
         super(config);
 
         this
             .addDeco(tallVariableTrees(tallMin, tallMax))
-            //.addDeco(randomTrees())
-            .addDeco(logs(), config.ALLOW_LOGS.get()) // Add some fallen birch trees.
-            .addDeco(shrubsOak()) // Oak shrubs to fill in the blanks.
-            .addDeco(flowers()) // Only 1-block tall flowers so we can see the trees better.
+            .addDeco(logs(), config.ALLOW_LOGS.get())
+            .addDeco(shrubsOak())
+            .addDeco(flowers())
+            .addDeco(grass())               // Restore grass — was missing entirely
         ;
     }
 
     protected DecoTree tallVariableTrees(float noiseMin, float noiseMax) {
-    	
+
         return new DecoVariableMaterialTree(TreeMaterials.inBirchForest)
-                .setStrengthFactorForLoops(5f)
+                .setStrengthFactorForLoops(0f)           // Disabled — let noise drive loop count
                 .setTreeType(DecoTree.TreeType.RTG_TREE)
                 .setDistribution(treeFrequencyDistribution)
                 .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
                 .setTreeConditionNoise(noiseMin)
                 .setTreeConditionNoise2(noiseMax)
                 .setTreeConditionChance(1)
-                .setStrengthNoiseFactorForLoops(true);
+                .setStrengthNoiseFactorForLoops(true);   // Noise-based loop count (now properly active)
     }
-    
+
     private DecoTree vanillaTrees() {
         return new DecoTree(new WorldGenTrees(false))
             .setTreeType(DecoTree.TreeType.WORLDGEN)
@@ -73,7 +75,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
     private DecoShrub shrubsOak() {
         return new DecoShrub()
             .setMaxY(120)
-            .setLoopMultiplier(1f);
+            .setLoopMultiplier(4f);  // Restored from 1f to match Master's strengthFactor=4f
     }
 
     private DecoFlowersRTG flowers() {
@@ -82,4 +84,11 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
             .setMaxY(128)
             .setStrengthFactor(12f);
     }
+
+    private DecoGrass grass() {
+        return new DecoGrass()
+            .setMaxY(128)
+            .setLoops(8);  // Restore grass — was completely missing
+    }
+
 }

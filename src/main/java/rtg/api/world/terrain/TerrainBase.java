@@ -167,12 +167,9 @@ public abstract class TerrainBase {
 
     public static float mountainCap(float m) {
         // heights can "blow through the ceiling" so pull more extreme values down a bit
-        // Relaxed from original RTG — allows higher peaks for grand terrain (inspired by RWG)
-        if (m > 140) {
-            m = 140 + (m - 140f) * 0.8f;
-            if (m > 200) {
-                m = 200 + (m - 200f) * 0.65f;
-            }
+        // Relaxed significantly — only soft-cap above 200 for truly dramatic peaks
+        if (m > 200) {
+            m = 200 + (m - 200f) * 0.75f;
         }
         return m;
     }
@@ -188,8 +185,27 @@ public abstract class TerrainBase {
         return 62.45f + (height - 62.45f) * river;
     }
 
+    public static float terrainBeach(int x, int y, RTGWorld rtgWorld, float river, float pitch1, float pitch2,
+        float baseHeight) {
+        // Restored Master-level beach complexity with multi-layered dune noise
+        SimplexNoise simplex = rtgWorld.simplexInstance(0);
+        float h = simplex.noise2f(x / pitch1, y / pitch1) * 40f * river;
+        h *= h / pitch2;
+
+        if (h < 1f) {
+            h = 1f;
+        }
+
+        if (h < 4f) {
+            h += (simplex.noise2f(x * INV_50, y * INV_50) + simplex.noise2f(x * INV_15, y * INV_15)) * (4f - h);
+        }
+
+        return baseHeight + h;
+    }
+
     public static float terrainBeach(int x, int y, RTGWorld rtgWorld, float river, float baseHeight) {
-        return riverized(baseHeight + TerrainBase.groundNoise(x, y, 4f, rtgWorld), river);
+        // Default simplified beach path (used by biomes that just pass baseHeight)
+        return terrainBeach(x, y, rtgWorld, river, 40f, 60f, baseHeight);
     }
 
     public static float terrainBryce(int x, int y, RTGWorld rtgWorld, float river, float height) {
@@ -417,10 +433,10 @@ public abstract class TerrainBase {
     public static float terrainOcean(int x, int y, RTGWorld rtgWorld, float river, float averageFloor) {
 
         SimplexNoise simplex = rtgWorld.simplexInstance(0);
-        float h = simplex.noise2f(x * INV_300, y * INV_300) * 8f * river;
-        //h = h > 3f ? 3f : h;
-        h += simplex.noise2f(x * INV_50, y * INV_50) * 2f;
-        h += simplex.noise2f(x * INV_15, y * INV_15);
+        float h = simplex.noise2f(x * INV_300, y * INV_300) * 40f * river;  // Restored from 8f to Master's 40f
+        h = h > 3f ? 3f : h;
+        h += simplex.noise2f(x * INV_50, y * INV_50) * (12f - h) * 0.4f;
+        h += simplex.noise2f(x * INV_15, y * INV_15) * (12f - h) * 0.15f;
 
         float floNoise = averageFloor + h;
         floNoise = Math.max(floNoise, minimumOceanFloor);
@@ -839,7 +855,8 @@ public abstract class TerrainBase {
         double riverFactor = rtgWorld.cellularInstance(0).eval2D(pX, pZ).interiorValue();
 
         // the output is a curved function of relative distance from the center, so adjust to make it flatter
-        riverFactor = bayesianAdjustment((float) riverFactor, 0.5f);
+        // Reduced from 0.5 to 0.85 — sharper river edges like Master's original border2()
+        riverFactor = bayesianAdjustment((float) riverFactor, 0.85f);
         double riverValleyLevel = rtgWorld.getRiverValleyLevel();
         if (riverFactor > riverValleyLevel) {
             return 0;

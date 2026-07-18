@@ -7,6 +7,7 @@ import net.minecraft.world.gen.feature.WorldGenMegaJungle;
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.world.deco.*;
+import rtg.api.world.deco.DecoGrass;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGCocosNucifera;
@@ -109,5 +110,11 @@ public class DecoCollectionJungle extends DecoCollectionBase {
         decoBoulder.setMaxY(95);
         decoBoulder.setStrengthFactor(2f);
         this.addDeco(decoBoulder);
+
+        // Ground grass for lush jungle undergrowth.
+        DecoGrass decoGrass = new DecoGrass();
+        decoGrass.setMaxY(128);
+        decoGrass.setLoops(12);  // Dense grass for jungle
+        this.addDeco(decoGrass);
     }
 }

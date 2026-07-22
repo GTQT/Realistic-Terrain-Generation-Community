@@ -167,14 +167,18 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     }
 
     public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
+        // river is [0,1] where 1 = strongest river
+        // Convert to internal convention: 0 = water, 1 = land
+        final float riverAmount = 1f - river;
+
         final boolean allowRivers = this.getConfig().ALLOW_RIVERS.get();
         final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
         final float riverFlatteningAddend = RTGWorld.RIVER_FLATTENING_ADDEND;
 
         if (!allowRivers) {
             float borderForRiver = Math.min(border * 2f, 1f);
-            river = 1f - (1f - borderForRiver) * (1f - river);
-            return terrain.generateNoise(rtgWorld, x, y, border, river);
+            float weakened = 1f - (1f - borderForRiver) * (1f - riverAmount);
+            return terrain.generateNoise(rtgWorld, x, y, border, weakened);
         }
 
         float lakeStrength = lakePressure(rtgWorld, x, y, border,
@@ -187,20 +191,20 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
                 rtgWorld.getLakeShoreLevel(),
                 rtgWorld.getLakeDepressionLevel());
 
-        river = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(river));
+        float riverVal = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(riverAmount));
 
         if (adjustedLake < actualRiverProportion) {
             adjustedLake = Math.max(0f, (adjustedLake - actualRiverProportion) * 2f + actualRiverProportion);
         }
 
         float combinedRiver;
-        if (river < 1f && adjustedLake < 1f) {
-            float leastLowering = Math.min(adjustedLake, river);
-            float denominator = (1f - river) / river + (1f - adjustedLake) / adjustedLake;
+        if (riverVal < 1f && adjustedLake < 1f) {
+            float leastLowering = Math.min(adjustedLake, riverVal);
+            float denominator = (1f - riverVal) / riverVal + (1f - adjustedLake) / adjustedLake;
             combinedRiver = 1f / (denominator + 1f);
             combinedRiver = (combinedRiver + leastLowering) * 0.5f;
         } else {
-            combinedRiver = Math.min(adjustedLake, river);
+            combinedRiver = Math.min(adjustedLake, riverVal);
         }
 
         float invertedRiver = 1f - combinedRiver;
@@ -214,28 +218,24 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     }
 
     public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
         final float lakeBottom = RTGWorld.LAKE_BOTTOM;
+        final float erosionThreshold = 0.3f;
 
-        // 早期返回检查
         float riverFlattening = 1f - river;
-        riverFlattening -= (1f - actualRiverProportion);
+        riverFlattening -= (1f - erosionThreshold);
 
         if (riverFlattening < 0f || biomeHeight <= lakeBottom) {
             return biomeHeight;
         }
 
-        // 标准化河流平坦化值
-        riverFlattening /= actualRiverProportion;
+        riverFlattening /= erosionThreshold;
         float r = 1f - riverFlattening;
 
         if (r < 1f) {
-            // 预计算噪声参数
             SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float irregularity = simplex.noise2f(x * 0.083333f, y * 0.083333f) * 2f + // 1/12
-                    simplex.noise2f(x * 0.125f, y * 0.125f); // 1/8
+            float irregularity = simplex.noise2f(x * 0.083333f, y * 0.083333f) * 2f +
+                    simplex.noise2f(x * 0.125f, y * 0.125f);
 
-            // 优化插值计算
             irregularity *= (1f + r);
             float lakeBottomWithIrregularity = lakeBottom + irregularity;
 

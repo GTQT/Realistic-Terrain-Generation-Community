@@ -16,7 +16,7 @@ public class DecoCollectionBirchForestM extends DecoCollectionBirchForest {
     protected DecoTree tallVariableTrees(float noiseMin, float noiseMax) {
 
     	DecoVariableMaterialTree result =  new DecoVariableMaterialTree(TreeMaterials.inBirchForest);
-                result.setStrengthFactorForLoops(0f)  // Disabled — let noise drive loop count
+                result.setStrengthFactorForLoops(5f)
                 .setTreeType(DecoTree.TreeType.RTG_TREE)
                 .setDistribution(treeFrequencyDistribution)
                 .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)

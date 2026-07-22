@@ -98,14 +98,36 @@ public final class BiomeAnalyzer {
         int realisticBiomeId;
 
         // 处理河流
+        // Find a fallback land biome for overriding vanilla River biomes on dry terrain
+        IRealisticBiome fallbackLand = null;
+        for (int j = 0; j < genLayerBiomes.length; j++) {
+            int fbId = Biome.getIdForBiome(genLayerBiomes[j]);
+            int fbFlags = biomeIDs.get(fbId);
+            if ((fbFlags & RIVER_FLAG) == 0 && (fbFlags & OCEAN_FLAG) == 0) {
+                fallbackLand = RTGAPI.getRTGBiome(genLayerBiomes[j]);
+                break;
+            }
+        }
+        if (fallbackLand == null) {
+            fallbackLand = RTGAPI.getRTGBiome(Biomes.PLAINS);
+        }
+
         for (int i = 0; i < genLayerBiomes.length; i++) {
             realisticBiome = RTGAPI.getRTGBiome(genLayerBiomes[i]);
             realisticBiomeId = realisticBiome.baseBiomeId();
-            boolean canBeRiver = riverStrength[i] > 0.7;
+            final int biomeFlags = biomeIDs.get(realisticBiomeId);
+            final boolean isVanillaRiver = (biomeFlags & RIVER_FLAG) != 0;
+            boolean canBeRiver = riverStrength[i] > RTGWorld.RIVER_BIOME_THRESHOLD;
             if (noise[i] > 61.5) {
-                jitteredBiomes[i] = realisticBiome;
+                // Above water: if vanilla assigned River but RTG detects no river,
+                // replace with land biome to prevent dry stone "river" paths
+                if (isVanillaRiver && !canBeRiver) {
+                    jitteredBiomes[i] = fallbackLand;
+                } else {
+                    jitteredBiomes[i] = realisticBiome;
+                }
             } else {
-                final int biomeFlags = biomeIDs.get(realisticBiomeId);
+                // Below water: assign River biome if RTG detects a strong river
                 if (canBeRiver && (biomeFlags & OCEAN_FLAG) == 0 && (biomeFlags & SWAMP_FLAG) == 0) {
                     jitteredBiomes[i] = realisticBiome.getRiverBiome();
                 } else {
@@ -236,11 +258,10 @@ public final class BiomeAnalyzer {
     }
 
     private float riverAdjusted(float top, float river) {
-        if (river >= 1.0f) {
+        if (river <= 0f) {
             return top;
         }
-        float adjustedRiver = Math.min(river, RTGWorld.ACTUAL_RIVER_PROPORTION);
-        return top * (1.0f - adjustedRiver) + 62.0f * adjustedRiver;
+        return top * (1f - river) + 62f * river;
     }
 
     private static final class SmoothingSearchStatus {

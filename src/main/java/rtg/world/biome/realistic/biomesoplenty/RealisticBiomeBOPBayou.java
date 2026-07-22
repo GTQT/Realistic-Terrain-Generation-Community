@@ -88,17 +88,14 @@ public class RealisticBiomeBOPBayou extends RealisticBiomeBase {
 
     @Override
     public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        // Bayou has a higher river bottom
+        final float erosionThreshold = 0.3f;
         float r;
-        // river of actualRiverProportions now maps to 1; TODO
         float riverFlattening = 1f - river;
-        riverFlattening = riverFlattening - (1 - RTGWorld.ACTUAL_RIVER_PROPORTION);
-        // return biomeHeight if no river effect
+        riverFlattening = riverFlattening - (1f - erosionThreshold);
         if (riverFlattening < 0) {
             return biomeHeight;
         }
-        // what was 1 set back to 1;
-        riverFlattening /= (RTGWorld.ACTUAL_RIVER_PROPORTION);
+        riverFlattening /= erosionThreshold;
 
         // back to usual meanings: 1 = no river 0 = river
         r = 1f - riverFlattening;

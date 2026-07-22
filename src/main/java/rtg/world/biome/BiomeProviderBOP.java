@@ -168,7 +168,6 @@ public class BiomeProviderBOP extends BiomeProvider {
     public static GenLayer[] setupRTGGenLayers(long worldSeed, BOPWorldSettings settings) {
 
         int biomeSize = getBiomeSize();
-        int riverSize = getRiverSize();
 
         // first few layers just create areas of land and sea, continents and islands
         GenLayer mainBranch = initialLandAndSeaLayer();
@@ -200,21 +199,13 @@ public class BiomeProviderBOP extends BiomeProvider {
         }
         mainBranch = new GenLayerSmooth(1000L, mainBranch);
 
-        // develop the rivers branch
-        GenLayer riversBranch = GenLayerZoom.magnify(1000L, riversAndSubBiomesInit, 2);
-        riversBranch = GenLayerZoom.magnify(1000L, riversBranch, riverSize);
-        riversBranch = new GenLayerRiver(1L, riversBranch);
-        riversBranch = new GenLayerSmooth(1000L, riversBranch);
+        // RTG uses its own Voronoi-based river system — skip BOP's GenLayer river branch entirely
+        GenLayer biomesFinal = new GenLayerVoronoiZoom(10L, mainBranch);
 
-        // mix rivers into main branch
-        GenLayer riverMixFinal = new GenLayerRiverMixBOP(100L, mainBranch, riversBranch);
-
-        // finish biomes with Voronoi zoom
-        GenLayer biomesFinal = new GenLayerVoronoiZoom(10L, riverMixFinal);
-
-        riverMixFinal.initWorldGenSeed(worldSeed);
+        mainBranch.initWorldGenSeed(worldSeed);
         biomesFinal.initWorldGenSeed(worldSeed);
-        return new GenLayer[]{riverMixFinal, biomesFinal, riverMixFinal};
+        return new GenLayer[]{mainBranch, biomesFinal, mainBranch};
 
     }
+
 }

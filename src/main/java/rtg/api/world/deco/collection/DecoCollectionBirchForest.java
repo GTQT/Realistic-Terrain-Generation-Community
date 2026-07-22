@@ -23,8 +23,7 @@ import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
  */
 public class DecoCollectionBirchForest extends DecoCollectionBase {
 
-    // Restored tree distribution: divisor 100 (was 837), factor 8 (was 2.5) for Master-level density
-    protected Distribution treeFrequencyDistribution = new Distribution(100f, 8f, 0.8f);
+    protected Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 4.5f);
     private float tallMin = -1f;
     private float tallMax = 3f;
 
@@ -37,14 +36,13 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
             .addDeco(logs(), config.ALLOW_LOGS.get())
             .addDeco(shrubsOak())
             .addDeco(flowers())
-            .addDeco(grass())               // Restore grass — was missing entirely
         ;
     }
 
     protected DecoTree tallVariableTrees(float noiseMin, float noiseMax) {
 
         return new DecoVariableMaterialTree(TreeMaterials.inBirchForest)
-                .setStrengthFactorForLoops(0f)           // Disabled — let noise drive loop count
+                .setStrengthFactorForLoops(5f)
                 .setTreeType(DecoTree.TreeType.RTG_TREE)
                 .setDistribution(treeFrequencyDistribution)
                 .setTreeCondition(DecoTree.TreeCondition.ALWAYS_GENERATE)
@@ -75,7 +73,7 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
     private DecoShrub shrubsOak() {
         return new DecoShrub()
             .setMaxY(120)
-            .setLoopMultiplier(4f);  // Restored from 1f to match Master's strengthFactor=4f
+            .setLoopMultiplier(1f);
     }
 
     private DecoFlowersRTG flowers() {
@@ -83,12 +81,6 @@ public class DecoCollectionBirchForest extends DecoCollectionBase {
             .addFlowers(HOUSTONIA, WHITE_TULIP)
             .setMaxY(128)
             .setStrengthFactor(12f);
-    }
-
-    private DecoGrass grass() {
-        return new DecoGrass()
-            .setMaxY(128)
-            .setLoops(8);  // Restore grass — was completely missing
     }
 
 }

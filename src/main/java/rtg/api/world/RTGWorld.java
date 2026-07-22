@@ -48,6 +48,10 @@ public final class RTGWorld {
     private static final float LAKE_BEND_SIZE_LARGE = 80;
     private static final float LAKE_BEND_SIZE_MEDIUM = 30;
     private static final float LAKE_BEND_SIZE_SMALL = 12;
+
+    public static final float RIVER_BIOME_THRESHOLD = 0.7f;
+    public static final float RIVER_DECORATION_THRESHOLD = 0.8f;
+
     private static final int SIMPLEX_INSTANCE_COUNT = 10;
     private static final int CELLULAR_INSTANCE_COUNT = 5;
     private static final float TREE_FREQUENCY_DIVISOR = 837; // the noise divisor for tree frequency noise (repeats over this distance)

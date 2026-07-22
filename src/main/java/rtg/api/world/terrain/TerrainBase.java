@@ -175,14 +175,14 @@ public abstract class TerrainBase {
     }
 
     public static float riverized(float height, float river) {
+        final float riverSurface = 61.5f;
 
-        if (height < 62.45f) {
+        if (height < riverSurface) {
             return height;
         }
-        // experimental adjustment to make riverbanks more varied
-        float heightAdjust = (height - 62.45f) * 0.1f + .6f; // /10
+        float heightAdjust = (height - riverSurface) * 0.1f + .6f;
         river = bayesianAdjustment(river, heightAdjust);
-        return 62.45f + (height - 62.45f) * river;
+        return riverSurface + (height - riverSurface) * river;
     }
 
     public static float terrainBeach(int x, int y, RTGWorld rtgWorld, float river, float pitch1, float pitch2,
@@ -859,9 +859,9 @@ public abstract class TerrainBase {
         riverFactor = bayesianAdjustment((float) riverFactor, 0.85f);
         double riverValleyLevel = rtgWorld.getRiverValleyLevel();
         if (riverFactor > riverValleyLevel) {
-            return 0;
-        }// no river effect
-        return (float) (riverFactor / riverValleyLevel - 1d);
+            return 0f;
+        }
+        return (float) (1d - riverFactor / riverValleyLevel); // [0, 1] where 1 = strongest river
     }
 
     public static float calcCliff(int x, int z, float[] noise, float river) {
@@ -874,8 +874,8 @@ public abstract class TerrainBase {
         float currentNoise = noise[index];
         if (currentNoise < 64.5f && currentNoise > 61.5f) {
             // near water level
-            if (river + RTGWorld.ACTUAL_RIVER_PROPORTION > 0.97f) {
-                //near river (here near 1 means river)
+            if (river > 0.85f) {
+                //near river center — avoid cliff generation on river banks
                 float xUp = 0f;
                 float xDown = 0f;
                 float zUp = 0f;

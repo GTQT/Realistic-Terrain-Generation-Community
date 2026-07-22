@@ -239,7 +239,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
                     mpos.setPos(worldX + x, 0, worldZ + z);
-                    float river = -rivers[x * 16 + z];
+                    float river = rivers[x * 16 + z];
                     singleBiome.rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
                     primer.setBlockState(x, 0, z, BEDROCK);
                 }
@@ -252,7 +252,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 mpos.setPos(worldX + x, 0, worldZ + z);
-                float river = -rivers[x * 16 + z];
+                float river = rivers[x * 16 + z];
                 biomes[x * 16 + z].rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
                 primer.setBlockState(x, 0, z, BEDROCK);
             }
@@ -355,17 +355,16 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         mpos.setPos(blockPos.getX() + 16, 0, blockPos.getZ() + 16);
-        float river = -TerrainBase.getRiverStrength(mpos, rtgWorld, riverJitterData);
-        // ====== 获取landscape噪声数据，传递给ChunkInfo避免256次world.getHeight() ======
+        float river = TerrainBase.getRiverStrength(mpos, rtgWorld, riverJitterData);
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
-            if (river > 0.8f) {
+            if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
                 biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
             } else {
                 biome.baseBiome().decorate(this.world, this.rand, blockPos);
             }
         } else {
-            if (river > 0.8f) {
+            if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
                 biome.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
             } else {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
@@ -549,7 +548,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 int k = i * 16 + j;
                 int x = worldX + i;
                 int z = worldZ + j;
-                float height = singleBiome.rNoise(rtgWorld, x, z, 1.0f, riverValues[k] + 1f);
+                float height = singleBiome.rNoise(rtgWorld, x, z, 1.0f, riverValues[k]);
                 landscape.noise[k] = height;
             }
         }
@@ -727,7 +726,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
                 if (dominantBiome != null) {
                     landscape.biome[k] = dominantBiome;
-                    baseHeights[k] = dominantBiome.rNoise(rtgWorld, worldX, worldZ, 1.0f, riverValues[k] + 1f);
+                    baseHeights[k] = dominantBiome.rNoise(rtgWorld, worldX, worldZ, 1.0f, riverValues[k]);
                 } else {
                     float totalHeight = 0f;
                     for (int bid = 0; bid < 256; bid++) {
@@ -735,7 +734,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         if (weight <= 0f) continue;
                         IRealisticBiome biome = RTGAPI.getRTGBiome(bid);
                         if (biome != null) {
-                            totalHeight += biome.rNoise(rtgWorld, worldX, worldZ, weight, riverValues[k] + 1f) * weight;
+                            totalHeight += biome.rNoise(rtgWorld, worldX, worldZ, weight, riverValues[k]) * weight;
                         }
                     }
                     baseHeights[k] = totalHeight;

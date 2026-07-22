@@ -110,11 +110,5 @@ public class DecoCollectionJungle extends DecoCollectionBase {
         decoBoulder.setMaxY(95);
         decoBoulder.setStrengthFactor(2f);
         this.addDeco(decoBoulder);
-
-        // Ground grass for lush jungle undergrowth.
-        DecoGrass decoGrass = new DecoGrass();
-        decoGrass.setMaxY(128);
-        decoGrass.setLoops(12);  // Dense grass for jungle
-        this.addDeco(decoGrass);
     }
 }

@@ -52,9 +52,8 @@ import java.util.Random;
  */
 public class DecoCollectionForest extends DecoCollectionBase {
 
-    // Restored to Master-level: divisor 100 (was 837 global), factor 8 (was 2.5)
     private Distribution forestDistribution = new Distribution(100f, 6f, 0.8f);
-    private Distribution treeFrequencyDistribution = new Distribution(100f, 8f, 0.8f);
+    private Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 4.5f);
 
     private float tallMin = -1f;
     private float tallMax = 3f;
@@ -71,7 +70,6 @@ public class DecoCollectionForest extends DecoCollectionBase {
             .addDeco(shrubsOak()) // Shrubs to fill in the blanks.
             .addDeco(shrubsSpruce()) // Fewer spruce shrubs than oak.
             .addDeco(flowers()) // Only 1-block tall flowers so we can see the trees better.
-            .addDeco(grass())  // Restore grass — was missing entirely
         ;
 
     }
@@ -82,7 +80,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
         DecoTree result = new DecoVariableMaterialTree(TreeMaterials.inOakForest);
 
         return result
-            .setStrengthFactorForLoops(0f)           // Disabled — let noise drive loop count
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -98,7 +96,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     private DecoTree oakTrees(float noiseMin, float noiseMax) {
 
         return new DecoVariableOak()
-            .setStrengthFactorForLoops(0f)
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -114,7 +112,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     private DecoTree birchTrees(float noiseMin, float noiseMax) {
 
         return new DecoVariableBirch()
-            .setStrengthFactorForLoops(0f)
+            .setStrengthFactorForLoops(5f)
             .setTreeType(TreeType.RTG_TREE)
             .setDistribution(treeFrequencyDistribution)
             .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
@@ -158,7 +156,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
     private DecoShrub shrubsOak() {
         return new DecoShrub()
             .setMaxY(140)
-            .setLoopMultiplier(4f)  // Restored from 1f to match Master's strengthFactor=4f
+            .setLoopMultiplier(1f)
             .setChance(3);
     }
 
@@ -167,7 +165,7 @@ public class DecoCollectionForest extends DecoCollectionBase {
             .setLogBlock(BlockUtil.getStateLog(EnumType.SPRUCE))
             .setLeavesBlock(BlockUtil.getStateLeaf(EnumType.SPRUCE))
             .setMaxY(140)
-            .setLoopMultiplier(4f)  // Restored from 1f to match Master's strengthFactor=4f
+            .setLoopMultiplier(1f)
             .setChance(9);
     }
 
@@ -176,12 +174,6 @@ public class DecoCollectionForest extends DecoCollectionBase {
             .addFlowers(POPPY, BLUE_ORCHID, ALLIUM, HOUSTONIA, RED_TULIP, ORANGE_TULIP, WHITE_TULIP, PINK_TULIP, OXEYE_DAISY, DANDELION)
             .setMaxY(128)
             .setStrengthFactor(6f);
-    }
-
-    private DecoGrass grass() {
-        return new DecoGrass()
-            .setMaxY(128)
-            .setLoops(8);  // Restore grass — was completely missing
     }
 
 }

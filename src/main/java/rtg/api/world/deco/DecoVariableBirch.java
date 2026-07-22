@@ -12,7 +12,9 @@ public class DecoVariableBirch extends DecoVariableTree {
 		mediumTree = new TreeRTGBetulaNigra();
 		smallTree = new TreeRTGCupressusSempervirens();
 		this.materials = this.materialsPicker.birch;
-		this.averageHeightSqrt += 0f;
+		this.averageHeightSqrt -= 1.2f;
+		this.heightNoiseVariability -= 1.0f;
+		this.tallTreeMinimumHeight -= 4;
 	}
 
 }

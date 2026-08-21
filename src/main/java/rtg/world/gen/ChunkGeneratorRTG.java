@@ -28,6 +28,8 @@ import org.dimdev.jeid.INewChunk;
 import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
+import rtg.api.util.ChunkGenerationProfiler;
+import rtg.api.util.ChunkGenerationProfiler.Category;
 import rtg.api.util.Logger;
 import rtg.api.util.noise.ISimplexData2D;
 import rtg.api.util.noise.SimplexData2D;
@@ -148,13 +150,24 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     @Override
     public Chunk generateChunk(final int cx, final int cz) {
+        ChunkGenerationProfiler.beginChunk(cx, cz);
+        long tChunkGen = ChunkGenerationProfiler.start(Category.CHUNK_TOTAL);
+
         final ChunkPos chunkPos = new ChunkPos(cx, cz);
         final BlockPos blockPos = new BlockPos(cx * 16, 0, cz * 16);
         final BiomeProvider biomeProvider = this.world.getBiomeProvider();
         this.rand.setSeed(cx * 341873128712L + cz * 132897987541L);
         final ChunkPrimer primer = new ChunkPrimer();
+
+        // ---- Landscape ----
+        long tLandscape = ChunkGenerationProfiler.start(Category.LANDSCAPE);
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
+        ChunkGenerationProfiler.end(Category.LANDSCAPE, tLandscape);
+
+        // ---- Terrain fill ----
+        long tTerrain = ChunkGenerationProfiler.start(Category.TERRAIN_FILL);
         generateTerrain(primer, landscape.noise);
+        ChunkGenerationProfiler.end(Category.TERRAIN_FILL, tTerrain);
 
         // 获取标准生物群系数据
         if (this.settings.useSingleBiome) {
@@ -166,6 +179,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
+        // ---- Surface jitter ----
+        long tJitter = ChunkGenerationProfiler.start(Category.SURFACE_JITTER);
         IRealisticBiome jitterbiome, actualbiome;
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
@@ -179,23 +194,39 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 jitteredBiomes[i * 16 + j] = (actualbiome.getConfig().SURFACE_BLEED_IN.get() && jitterbiome.getConfig().SURFACE_BLEED_OUT.get()) ? jitterbiome : actualbiome;
             }
         }
-        replaceBiomeBlocks(cx, cz, primer, jitteredBiomes, this.baseBiomesList, landscape.noise, landscape.river);
+        ChunkGenerationProfiler.end(Category.SURFACE_JITTER, tJitter);
 
+        // ---- Surface replace ----
+        long tReplace = ChunkGenerationProfiler.start(Category.SURFACE_REPLACE);
+        replaceBiomeBlocks(cx, cz, primer, jitteredBiomes, this.baseBiomesList, landscape.noise, landscape.river);
+        ChunkGenerationProfiler.end(Category.SURFACE_REPLACE, tReplace);
+
+        // ---- Caves ----
         if (this.settings.useCaves) {
+            long tCaves = ChunkGenerationProfiler.start(Category.CAVES);
             this.caveGenerator.generate(this.world, cx, cz, primer);
+            ChunkGenerationProfiler.end(Category.CAVES, tCaves);
         }
+        // ---- Ravines ----
         if (this.settings.useRavines) {
+            long tRavines = ChunkGenerationProfiler.start(Category.RAVINES);
             this.ravineGenerator.generate(this.world, cx, cz, primer);
+            ChunkGenerationProfiler.end(Category.RAVINES, tRavines);
         }
+        // ---- Structures ----
         if (this.mapFeaturesEnabled) {
+            long tStructures = ChunkGenerationProfiler.start(Category.STRUCTURES_GEN);
             if (settings.useMineShafts) this.mineshaftGenerator.generate(this.world, cx, cz, primer);
             if (settings.useStrongholds) this.strongholdGenerator.generate(this.world, cx, cz, primer);
             if (settings.useVillages) this.villageGenerator.generate(this.world, cx, cz, primer);
             if (settings.useTemples) this.scatteredFeatureGenerator.generate(this.world, cx, cz, primer);
             if (settings.useMonuments) this.oceanMonumentGenerator.generate(this.world, cx, cz, primer);
             if (settings.useMansions) this.woodlandMansionGenerator.generate(this.world, cx, cz, primer);
+            ChunkGenerationProfiler.end(Category.STRUCTURES_GEN, tStructures);
         }
 
+        // ---- Chunk finalize ----
+        long tFinalize = ChunkGenerationProfiler.start(Category.CHUNK_FINALIZE);
         Chunk chunk = new Chunk(this.world, primer, cx, cz);
         for (int i = 0; i < 256; ++i) {
             int value = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
@@ -208,6 +239,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             chunk.setBiomeArray(this.byteBiomeArray);
         }
         chunk.generateSkylightMap();
+        ChunkGenerationProfiler.end(Category.CHUNK_FINALIZE, tFinalize);
+
+        ChunkGenerationProfiler.end(Category.CHUNK_TOTAL, tChunkGen);
         return chunk;
     }
 
@@ -278,6 +312,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     @Override
     public void populate(int chunkX, int chunkZ) {
+        long tPopTotal = ChunkGenerationProfiler.start(Category.POP_TOTAL);
         BlockFalling.fallInstantly = true;
         final BiomeProvider biomeProvider = this.world.getBiomeProvider();
         final ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
@@ -296,6 +331,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         boolean hasVillage = false;
         ForgeEventFactory.onChunkPopulate(true, this, this.world, this.rand, chunkX, chunkZ, false);
 
+        // ---- Pop: structures ----
+        long tPopStruct = ChunkGenerationProfiler.start(Category.POP_STRUCTURES);
         if (this.mapFeaturesEnabled) {
             byte flags = 0;
             if (settings.useMineShafts) flags |= 1;
@@ -311,7 +348,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             if ((flags & 16) != 0) oceanMonumentGenerator.generateStructure(world, rand, chunkPos);
             if ((flags & 32) != 0) woodlandMansionGenerator.generateStructure(world, rand, chunkPos);
         }
+        ChunkGenerationProfiler.end(Category.POP_STRUCTURES, tPopStruct);
 
+        // ---- Pop: lakes ----
+        long tPopLakes = ChunkGenerationProfiler.start(Category.POP_LAKES);
         if (settings.useWaterLakes && settings.waterLakeChance > 0 && !hasVillage) {
             long nextChance = rand.nextLong();
             int surfaceChance = settings.getSurfaceWaterLakeChance(biome.waterLakeMult());
@@ -345,7 +385,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_LAKES, tPopLakes);
 
+        // ---- Pop: dungeons ----
+        long tPopDungeons = ChunkGenerationProfiler.start(Category.POP_DUNGEONS);
         if (settings.useDungeons && TerrainGen.populate(this, world, rand, chunkX, chunkZ,
                 hasVillage, PopulateChunkEvent.Populate.EventType.DUNGEON)) {
             for (int i = 0; i < settings.dungeonChance; i++) {
@@ -353,7 +396,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         offsetPos.add(rand.nextInt(16), rand.nextInt(256), rand.nextInt(16)));
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_DUNGEONS, tPopDungeons);
 
+        // ---- Pop: decoration ----
+        long tPopDeco = ChunkGenerationProfiler.start(Category.POP_DECORATION);
         mpos.setPos(blockPos.getX() + 16, 0, blockPos.getZ() + 16);
         float river = TerrainBase.getRiverStrength(mpos, rtgWorld, riverJitterData);
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
@@ -370,13 +416,19 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 biome.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_DECORATION, tPopDeco);
 
+        // ---- Pop: animals ----
+        long tPopAnimals = ChunkGenerationProfiler.start(Category.POP_ANIMALS);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ANIMALS)) {
             WorldEntitySpawner.performWorldGenSpawning(this.world, biome.baseBiome(),
                     blockPos.getX() + 8, blockPos.getZ() + 8, 16, 16, this.rand);
         }
+        ChunkGenerationProfiler.end(Category.POP_ANIMALS, tPopAnimals);
 
+        // ---- Pop: snow & ice ----
+        long tPopSnow = ChunkGenerationProfiler.start(Category.POP_SNOW_ICE);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ICE)) {
             float snowTempThreshold = settings.getClampedSnowLayerTemp();
@@ -407,8 +459,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_SNOW_ICE, tPopSnow);
+
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
         BlockFalling.fallInstantly = false;
+
+        ChunkGenerationProfiler.end(Category.POP_TOTAL, tPopTotal);
+        ChunkGenerationProfiler.endChunk(chunkX, chunkZ);
     }
 
     @Override

@@ -67,6 +67,13 @@ public class RTG {
         RTGAPI.setConfigPath(Paths.get(event.getModConfigurationDirectory().getPath(), RTG.MODID.toUpperCase()));
         RTGConfig.init(event);
 
+        // 初始化区块生成性能分析器
+        if (RTGConfig.enableProfiling()) {
+            rtg.api.util.ChunkGenerationProfiler.setEnabled(true);
+            rtg.api.util.ChunkGenerationProfiler.setLogInterval(RTGConfig.profilerLogInterval());
+            rtg.api.util.ChunkGenerationProfiler.setSlowThresholdMs(RTGConfig.profilerSlowThresholdMs());
+        }
+
         RTGAPI.addAllowedDimensionType(DimensionType.OVERWORLD);
 
         WorldTypeRTG.init();

@@ -35,7 +35,7 @@ public class ChunkLandscape {
     /**
      * 该列是否被开凿了山间河洞，以及洞顶高度。
      * <p>
-     * {@code 0} = 无隧道；否则是**洞顶 y**。由 {@code ChunkGeneratorRTG.carveRiverTunnels}
+     * {@code 0} = 无隧道；否则是**洞顶 y**。由 {@link UndergroundRiver#carve}
      * 在开凿时写入，供装饰期的 {@code RiverCaveVines} 直接读取 ——
      * 这样挂藤蔓不需要在装饰期把隧道门控（干高度 + 上覆岩层 + Voronoi）再算一遍。
      */
@@ -46,7 +46,7 @@ public class ChunkLandscape {
      * 由 {@code ChunkGeneratorRTG.getNewerNoise} 在混合时写入。
      *
      * <p><b>必须存在这里，不能放生成器字段</b>：{@code landscape} 可能是
-     * {@code landscapeCache} 里的对象，而 {@code carveRiverTunnels} 是**稍后**才跑的。
+     * {@code landscapeCache} 里的对象，而 {@code UndergroundRiver.carve} 是**稍后**才跑的。
      * 若放生成器字段，缓存命中时读到的会是**上一个区块**的值。
      * （{@link #riverCaveCeiling} 当初放进本类也是同一个原因。）
      */
@@ -57,4 +57,17 @@ public class ChunkLandscape {
      * 山地链内地下河隧道与洞厅的门控就看它。同上，必须随区块保存。
      */
     public float[] mountainChainRiverHost = new float[256];
+
+    /**
+     * 该列**未受河道雕刻**的地形高度（俗称"干高度"）。
+     *
+     * <p>为什么必须有它：地下河隧道带**完全落在河网带内部**，而河网带里的地表已经被河流压到
+     * 河床附近（≈59）。要用"这座山有多高"来开门控，就必须看**雕刻之前**的高度 —— 用已雕刻的
+     * {@link #noise} 永远不成立（F-39 那条死路就是这么来的，见
+     * {@link UndergroundRiver#MIN_SURFACE} 的注释）。
+     *
+     * <p>由 {@code ChunkGeneratorRTG} 在施加河道雕刻**之前**写入；没写的路径（例如将来新增的）
+     * 使用方一律按 {@code <= 0} 回退到 {@link #noise}。
+     */
+    public float[] dryHeight = new float[256];
 }

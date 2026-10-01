@@ -612,6 +612,11 @@ public final class RtgBiomeLayout {
 
     /** RWG 硬编码的河床基准：{@code 59f}。 */
     private static final float RIVER_BED = 59f;
+    /**
+     * 地下河隧道带的宽度（格）。RWG 是 {@code 9}；rtgc 按用户要求放宽到 {@code 25}
+     * （实测覆盖率 2.93% → 8.1%，见 {@link #getRiverTunnelStrength}）。
+     */
+    private static final double TUNNEL_BAND_WIDTH = 25D;
     /** RWG 的河道扭曲尺度（{@code noise1(y / 240f) * 220f}）。 */
     private static final float RIVER_WARP_DIVISOR = 240f;
     private static final float RIVER_WARP_STRENGTH = 220f;
@@ -640,11 +645,20 @@ public final class RtgBiomeLayout {
         return getRiverStrength(x, y, pX, pY);
     }
 
-    /** RWG L901-905：地下河隧道强度 {@code [0,1]}，宽度 {@code 9/1250} 单元。 */
+    /**
+     * RWG L901-905：地下河隧道强度 {@code [0,1]}。
+     *
+     * <p>⚠ <b>带宽是 rtgc 调过的</b>：RWG 用 {@code 9/1250}（9 格），实测只有 **2.93%** 的列落在
+     * 隧道带内 ⇒ 一座山里绝大多数地方离河网边界太远，表现就是"很多山没有暗河"。
+     * 按用户要求放宽到 {@code 25/1250}（25 格）⇒ 实测 **8.1%**（同一份标定：
+     * {@code gradlew calibrateRiverTunnels}）。带更宽 = 暗河是一条明显的管道而不是细缝，
+     * 走向仍严格贴在同一张河网上（见类注释里四个宽度参数的对照）。
+     */
     public float getRiverTunnelStrength(final int x, final int y) {
         final float warpedX = x + perlin.noise1(y / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH;
         final float warpedY = y + perlin.noise1(x / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH;
-        return -cell.border(warpedX / RIVER_SEPARATION, warpedY / RIVER_SEPARATION, 9D / RIVER_SEPARATION, 1f);
+        return -cell.border(warpedX / RIVER_SEPARATION, warpedY / RIVER_SEPARATION,
+                TUNNEL_BAND_WIDTH / RIVER_SEPARATION, 1f);
     }
 
     /** RWG L907-911：交汇洞厅强度 {@code [0,1]}，半径 {@code 60/1250} 单元。 */

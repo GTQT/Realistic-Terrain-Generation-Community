@@ -420,7 +420,8 @@ public final class CellularNoiseCalibration {
 
         // ---- 决定性检验：隧道带内的「河流强度」----
         //
-        // carveRiverTunnels 的门控是 `surface >= 76`（TUNNEL_MIN_SURFACE），
+        // 当时的 carveRiverTunnels（今 {@code UndergroundRiver.carve}）门控是 `surface >= 76`
+        //（当时的 TUNNEL_MIN_SURFACE，今 {@code UndergroundRiver.MIN_SURFACE}），
         // 而 surface 就是 TerrainBase.getRiverStrength 压平之后的实际地形高度。
         // 若隧道带内 riverStrength 恒为接近 1，则地表必然被压到河面附近（约 63），
         // 门控**永不成立** —— 地下河从不下凿。
@@ -468,7 +469,7 @@ public final class CellularNoiseCalibration {
         System.out.printf("河网带占全图比例：%.2f%%（riverValleyLevel=%.4f）%n",
                 100.0 * riverBandColumns / n, riverValleyLevel);
         System.out.println();
-        System.out.println("  ⚠ 由此得出 F-39：carveRiverTunnels 的门控 `surface >= TUNNEL_MIN_SURFACE(76)`");
+        System.out.println("  ⚠ 由此得出 F-39：当时 carveRiverTunnels 的门控 `surface >= 76`（TUNNEL_MIN_SURFACE）");
         System.out.println("     在隧道带内**永不成立** —— 带内 riverStrength ≈ 1，地表被压平到河面附近（约 63）。");
         System.out.println("     地下河入口是死路径（profiler 实测 RIVER_TUNNELS 仅 0.01 ms/区块，与之吻合）。");
     }

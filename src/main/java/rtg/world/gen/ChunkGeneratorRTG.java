@@ -59,35 +59,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private static final IBlockState WATER = Blocks.WATER.getDefaultState();
     private static final IBlockState BEDROCK = Blocks.BEDROCK.getDefaultState();
 
-    /**
-     * 洞厅（天窗连通口）的**地表高度权重**基准，RWG {@code ChunkGeneratorRealistic:602}
-     * 的 {@code overheadHost = smoothstep((surface - 76f) / 24f)}。
-     *
-     * <p>⚠ 它**只是权重，不是门控**。真正的硬门控是 {@link #MOUNTAIN_CHAIN_RIVER_HOST_MIN}
-     * （山地链宿主强度），见 {@link #carveRiverTunnels}。
-     *
-     * <p><b>历史（F-39，勿重犯）</b>：还没有山地链的时候，这里曾被当作硬门控
-     * {@code 干高度 >= 76} 使用，而隧道带完全落在河网带内部、地表被河流压平到河面附近（约 63），
-     * 于是 {@code surface >= 76} **永不成立**，整段开凿代码是死路径
-     * （profiler 实测 {@code RIVER_TUNNELS} 仅 0.01 ms/区块，与之一致）。
-     * 1.0.10 先改成"去掉河流后的干高度"，1.0.13 才换成 RWG 原本的山地链宿主门控。
-     */
-    private static final float TUNNEL_MIN_SURFACE = 76f;
-
-    /** 隧道的中心高度与上/下起伏量（格）。RWG 原值：中心 62、上 +11、下 −4。 */
-    private static final int TUNNEL_CENTER_Y = 62;
-    private static final int TUNNEL_ROOF_RISE = 11;
-    private static final int TUNNEL_FLOOR_DROP = 4;
-
-    /**
-     * 洞顶之上必须保留的岩层厚度（格）。
-     * <p>
-     * 当实际地表低于 {@code TUNNEL_CENTER_Y + TUNNEL_ROOF_RISE}（即 73）时，整条隧道**整体下移**，
-     * 使洞顶始终留在地表以下。在山地（地表 ≥ 84）时该约束不起作用，
-     * 隧道自动回到 RWG 的原始高度 58–73 —— 即"地形够高就照原版，不够高就沉下去"。
-     */
-    private static final int TUNNEL_ROOF_CLEARANCE = 10;
-
     /** 山地链邻域影响的半径（格）。RWG {@code MOUNTAIN_CHAIN_INFLUENCE_RADIUS = 48f}。 */
     private static final int MOUNTAIN_CHAIN_INFLUENCE_RADIUS = 48;
 
@@ -98,9 +69,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      */
     private static final float MOUNTAIN_CHAIN_FADE_START = 0.35f;
     private static final float MOUNTAIN_CHAIN_FADE_WIDTH = 0.65f;
-    /** 隧道/洞厅要求的最小山地链宿主强度（RWG {@code ChunkGeneratorRealistic:586}）。 */
-    private static final float MOUNTAIN_CHAIN_RIVER_HOST_MIN = 0.10f;
-
     /**
      * 装饰阶段超过该值就打印一行归因（{@code [RTG-DECOPROF]}）。
      * 200ms 远高于平均的 ~17ms，正常游玩不会出现。
@@ -136,12 +104,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final float[][] smallRender;
     private final float parabolicFieldTotalInv;
     private final Map<ChunkPos, ChunkLandscape> landscapeCache;
-    /**
-     * {@code carveRiverTunnels} 用的临时数组：{@code [0]} = 隧道强度，{@code [1]} = 洞厅强度。
-     * 两者共用同一个 Voronoi，故一次性求出，避免每列算两遍 {@code warpedRiverVoronoi}。
-     */
-    private final float[] riverStrengths = new float[2];
-
     /**
      * 本区块里"把原版装饰推迟到冰雪之后"的海洋群系 → 其混合权重
      * （RWG {@code ChunkGeneratorRealistic:998} 的 {@code deferredOceanDecorations}）。
@@ -373,8 +335,11 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ChunkGenerationProfiler.end(Category.SURFACE_REPLACE, tReplace);
 
         // ---- Underground river tunnels & junction chambers (WP-3) ----
+        // 门控、断面几何、守卫、天窗全部在 UndergroundRiver（要改暗河只进那个文件）。
+        // ⚠ 调用位置**必须**在地表替换之后：地表替换按 depth 计数涂刷，先开凿的话隧道内的空气
+        //   会把 depth 重置，隧道底会被误刷上草/沙。
         long tTunnels = ChunkGenerationProfiler.start(Category.RIVER_TUNNELS);
-        carveRiverTunnels(primer, cx, cz, landscape);
+        UndergroundRiver.carve(primer, cx, cz, landscape);
         ChunkGenerationProfiler.end(Category.RIVER_TUNNELS, tTunnels);
 
         // ---- Caves ----
@@ -516,143 +481,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         h *= 0x5bd1e995;
         h ^= (h >>> 15);
         return h & 0x7fffffff;
-    }
-
-    /**
-     * 开凿**地下河隧道与交汇洞厅**（WP-3）。
-     * <p>
-     * 几何取自 RWG（{@code ChunkGeneratorRealistic.carveRiverColumn} 一带）：
-     * <ul>
-     *   <li>隧道：沿河网（Voronoi 单元边界）延伸，全宽约 13 格；底部到 y=62 填水、以上填空气，
-     *       形成"下为暗河、上为气道"的管状结构</li>
-     *   <li>洞厅：位于河网交汇点（Voronoi 顶点），强度足够时向上开天窗</li>
-     *   <li>洞顶恒被压到 {@code surface - 10} 以下，保证不破地表</li>
-     * </ul>
-     * <p>
-     * <b>与 RWG 的差异</b>：RWG 用"山地链权重"（{@code mountainChainRiverHost > 0.10}）作门控，
-     * rtgc 尚无山地链概念（属 WP-4/WP-5），因此改用**海拔门控**——只在 {@code surface ≥ 76}
-     * 的地形下方开凿，语义上等价于"山区河道"。
-     * <p>
-     * <b>必须放在 {@code replaceBiomeBlocks} 之后</b>：地表替换按 {@code depth} 计数涂刷，
-     * 若先开凿，隧道内的空气会把 {@code depth} 重置，导致隧道底被误刷上草/沙。
-     */
-    private void carveRiverTunnels(ChunkPrimer primer, int cx, int cz, ChunkLandscape landscape) {
-        final RtgBiomeLayout layout = RtgLayoutAccess.current();
-        if (layout == null) {
-            return;
-        }
-        final float[] heights = landscape.noise;
-        final IBlockState air = Blocks.AIR.getDefaultState();
-        final MutableBlockPos pos = this.mpos;
-        final int baseX = cx * 16;
-        final int baseZ = cz * 16;
-        final float[] strengths = this.riverStrengths;
-
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                final int k = x * 16 + z;
-                final int surface = Math.min(255, (int) heights[k]);
-
-                // ⓪ 最便宜的一道前置过滤，**必须放在 Voronoi 计算之前**。
-                //
-                // 隧道带（距河网边界 < 6.5 格）完全落在「强河流」带内：离线实测该带内
-                // riverStrength 的**最小值是 0.637**（5 万样本）。这里取 0.25 作阈值，
-                // 留 2.5 倍余量，因此不会把隧道带排除掉，却能挡掉世界上绝大多数列。
-                //
-                // 教训：修 F-39 时我把 fillRiverStrengths（2 次 simplex + 1 次 cellular）
-                // 提到了所有门控之前，等于**让每一列都白算一遍 Voronoi**——而那些列
-                // 在旧代码里连噪声都不会碰。这是一次自己造成的性能退化。
-                // RWG 的门控就是「在河网带内」= strength < 0，即 landscape.river[k] > 0。
-                // 这是**精确**条件而非启发式：隧道带宽 9/1250 ≈ 0.0072 严格小于河网带宽
-                // 50/300 ≈ 0.1667，故「隧道带 ⊂ 河网带」。旧实现的 0.25 阈值是为了配旧量纲。
-                if (landscape.river[k] <= 0f) {
-                    continue;
-                }
-
-                // ① 是否落在河网边界 / 顶点附近。
-                //    隧道与洞厅共用同一个 warpedRiverVoronoi，故一次求出两者。
-                pos.setPos(baseX + x, 0, baseZ + z);
-                strengths[0] = layout.getRiverTunnelStrength(baseX + x, baseZ + z);
-                strengths[1] = layout.getRiverJunctionStrength(baseX + x, baseZ + z);
-                final float tunnel = strengths[0];
-                final float junction = strengths[1];
-                if (tunnel <= 0f && junction <= 0f) {
-                    continue;
-                }
-
-                // ② 山地链宿主门控（B5 / RWG {@code ChunkGeneratorRealistic:585-602}）。
-                //
-                // 原实现用「去掉河流后的**干高度** ≥ 76」当门控 —— 那是在还没有山地链时
-                // 用来替代 RWG 门控的权宜之计（F-39）。RWG 的真正门控是**山地链宿主强度**：
-                //     mountainChainRiverHost = max(链权重, 邻域链影响)
-                // 也就是说：地下河与洞厅是**山地链专有**的地貌，不是"任何够高的地形都会有"。
-                final float chainHost = landscape.mountainChainRiverHost[k];
-                if (chainHost <= MOUNTAIN_CHAIN_RIVER_HOST_MIN) {
-                    continue;
-                }
-
-                // RWG:601-602 —— 链宿主与地表高度各做一次 smoothstep：
-                // 前者决定"这属于链的哪一部分"，后者保证洞厅上方有足够岩层（天窗只在地表够高时开）。
-                final float mountainHost = smoothstep(
-                        (chainHost - MOUNTAIN_CHAIN_RIVER_HOST_MIN) / 0.40f);
-                final float overheadHost = smoothstep((surface - TUNNEL_MIN_SURFACE) / 24f);
-
-                // ③ 高度带：以 TUNNEL_CENTER_Y 为基准，但整条隧道可**整体下移**，
-                //    保证洞顶留在实际地表以下 TUNNEL_ROOF_CLEARANCE 格。
-                //    地表 ≥ 84 时不触发下移 ⇒ 与 RWG 原值（58–73）逐位一致。
-                final int center = Math.min(TUNNEL_CENTER_Y,
-                        surface - TUNNEL_ROOF_CLEARANCE - TUNNEL_ROOF_RISE);
-
-                final float tunnelCurve = (float) Math.sqrt(tunnel);
-                int floor = center - Math.round(tunnelCurve * TUNNEL_FLOOR_DROP);
-                int ceiling = center + Math.round(tunnelCurve * TUNNEL_ROOF_RISE);
-
-                final float chamberStrength = junction * mountainHost * overheadHost;
-                if (chamberStrength > 0f) {
-                    final float chamberCurve = (float) Math.sqrt(chamberStrength);
-                    floor = Math.min(floor, center + 1 - Math.round(chamberCurve * 23f));
-                    ceiling = Math.max(ceiling, center + 1 + Math.round(chamberCurve * 42f));
-                    // 注意：必须在 max() **之后**再钳，否则 max() 会把钳制结果顶回去
-                    //（原实现的顺序反了，导致洞顶从未真正受 surface − 10 约束）。
-                    ceiling = Math.min(ceiling, surface - TUNNEL_ROOF_CLEARANCE);
-                    ceiling = Math.max(ceiling, center + Math.round(tunnelCurve * TUNNEL_ROOF_RISE));
-                    ceiling = Math.max(ceiling, floor + 1);
-                }
-                if (ceiling <= floor) {
-                    continue;
-                }
-
-                final int lavaFreeWaterTop = center;
-                for (int y = Math.max(1, floor); y <= Math.min(255, ceiling); y++) {
-                    primer.setBlockState(x, y, z, y <= lavaFreeWaterTop ? WATER : air);
-                }
-
-                // 记录洞顶，供装饰期挂洞穴藤蔓（RiverCaveVines）——避免在装饰期重算隧道门控
-                landscape.riverCaveCeiling[k] = ceiling;
-
-                // 天窗：洞厅足够强时自洞顶向上打通，形成与地表的连通口
-                if (chamberStrength > 0.70f && surface > ceiling) {
-                    final int openingBottom = Math.max(ceiling + 1, center + 1);
-                    for (int y = openingBottom; y <= surface; y++) {
-                        final float fraction = (y - openingBottom) / (float) Math.max(1, surface - openingBottom);
-                        if (chamberStrength >= 0.70f + fraction * 0.15f) {
-                            primer.setBlockState(x, y, z, air);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** RWG 的 smoothstep 等价物，用于把海拔/强度映射成 0–1 的门控权重。 */
-    private static float smoothstep(final float value) {
-        if (value <= 0f) {
-            return 0f;
-        }
-        if (value >= 1f) {
-            return 1f;
-        }
-        return value * value * (3f - 2f * value);
     }
 
     private IRealisticBiome getSingleBiomeTarget() {
@@ -903,7 +731,14 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // **本区块装饰超过阈值**时打印，把"谁的几秒"直接写出来：
         // 被装饰到的群系、rtgc 自己的 deco 总耗时、原版 Biome.decorate 总耗时、最慢的前 5 个装饰器。
         // 阈值 200ms 远高于平均值（~17ms），所以正常游玩不会刷屏。
-        if (RTG.decoDebug() || (System.nanoTime() - tPopDeco) > DECO_REPORT_THRESHOLD_NS) {
+        //
+        // ⚠⚠ `isEnabled()` 这道守卫**必须有**：`ChunkGenerationProfiler.start()` 在计时关闭时返回
+        // **0**，于是 `System.nanoTime() - tPopDeco` 变成一个**绝对值**（JVM 启动以来的纳秒，
+        // 实测约 2.84e13 ns = 28420861 "ms"），永远 > 200ms ⇒ **每个区块刷一行**。
+        // 用户实测日志 3560 行里有 3287 行是它（冒烟里的 `decoBiomes=[] rtgDecos=0.00ms` 就是
+        // 因为累加那半边本来就被 `isEnabled()` 挡住了）。这就是"游戏在刷日志"的根因。
+        if (RTG.decoDebug() || (ChunkGenerationProfiler.isEnabled()
+                && (System.nanoTime() - tPopDeco) > DECO_REPORT_THRESHOLD_NS)) {
             Logger.info("[RTG-DECOPROF] chunk({},{}) {}ms {}",
                     chunkX, chunkZ, (System.nanoTime() - tPopDeco) / 1_000_000L, ChunkInfo.decoReport());
         }
@@ -1081,18 +916,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     }
 
     /**
-     * {@code /rtg tunnels} 用：**只读**地取缓存里的 landscape，未缓存返回 {@code null}。
-     *
-     * <p>与 {@link #getLandscape} 的区别是**绝不新建**：不生成、不插缓存。
-     * 于是定位器只能观测"已经走到过的区块"—— 这正是我们要的语义
-     *（未生成的区块本来也无从谈起"有没有挖过"），且不会因为一条命令污染 LRU。
-     */
-    public ChunkLandscape cachedLandscape(final int chunkX, final int chunkZ) {
-        return landscapeCache.get(new ChunkPos(chunkX, chunkZ));
-    }
-
-    /**
-     * {@code /rtg probe} 用：读出该列决定「地下河隧道 / 洞厅」生死的三个值。
+     * {@code /rtg probe} 用：读出该列决定「地下河隧道 / 洞厅」生死的各个值。
      *
      * <p>存在的理由：隧道门控（{@code mountainChainRiverHost > 0.10}）与"是否真的开凿了"
      * 都只存在于 {@link ChunkLandscape} 里，此前**没有任何办法在游戏内观察**，
@@ -1102,7 +926,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      * {@code landscapeCache}（否则一条诊断命令会顶掉别的区块的缓存项）。
      *
      * @return {@code [0]=山地链权重 [1]=山地链宿主 [2]=洞顶 y（0 = 该列没被开凿）
-     *         [3]=1 表示布局来自缓存（此时 [2] 可信）}
+     *         [3]=1 表示布局来自缓存（此时 [2] 可信） [4]=干高度 [5]=山体门控权重（链与海拔取大）}
      */
     public float[] probeTunnelColumn(final BiomeProvider biomeProvider, final int x, final int z) {
 
@@ -1112,11 +936,16 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 ? cached
                 : generateLandscape(biomeProvider, new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
         final int k = (x & 15) * 16 + (z & 15);
+        final float dry = landscape.dryHeight[k] > 0f ? landscape.dryHeight[k] : landscape.noise[k];
+        final float chainHost = landscape.mountainChainRiverHost[k];
+        final float host = UndergroundRiver.mountainHostAt(landscape, k);   // 与开凿共用同一函数
         return new float[] {
                 landscape.mountainChainWeight[k],
-                landscape.mountainChainRiverHost[k],
+                chainHost,
                 landscape.riverCaveCeiling[k],
-                cached != null ? 1f : 0f };
+                cached != null ? 1f : 0f,
+                dry,
+                host };
     }
 
     private ChunkLandscape generateLandscape(BiomeProvider biomeProvider, BlockPos blockPos) {
@@ -1172,6 +1001,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 //（0 = 河心，1 = 内陆）。
                 float height = singleBiome.rNoise(rtgWorld, x, z, 1.0f, riverValues[k] + 1f);
                 landscape.noise[k] = height;
+                landscape.dryHeight[k] = height;        // 与主路径同源：雕刻前的"干高度"
             }
         }
 
@@ -1473,6 +1303,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         for (int k = 0; k < 256; k++) {
             landscape.noise[k] = baseHeights[k];
+            landscape.dryHeight[k] = baseHeights[k];   // 河道雕刻**之前**的"干高度"（见 ChunkLandscape）
             landscape.river[k] = -riverValues[k];       // 转回 rtgc 的「1 = 河心」约定
         }
 
@@ -1484,7 +1315,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         //     fade = smoothstep((mountainChainWeight − 0.35) / 0.65)
         //     testHeight = carved + (uncarved − carved) × fade
         // 链内的河道因此在**地表**上消失，改以地下隧道＋洞厅的形式出现
-        // （见 carveRiverTunnels 的 mountainChainRiverHost 门控）。
+        // （见 UndergroundRiver 的 mountainChainRiverHost 门控）。
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
                 final int k = i * 16 + j;

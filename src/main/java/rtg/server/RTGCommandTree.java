@@ -42,7 +42,7 @@ public final class RTGCommandTree extends CommandTreeBase
         Logger.debug("Created /{} command", CMD_ROOT);
         this.addSubcommand(new CommandGetWhereAmI(this.getName()));
         this.addSubcommand(new CommandProbe());
-        this.addSubcommand(new CommandTunnels());
+        // `/rtg tunnels` 已按用户要求移除（1.0.33 同版本追加）：定位地下河改回"顺着山里的河找"。
     }
     @Override public int getRequiredPermissionLevel() { return ACCESS_ALL; }
     @Override public String getName() { return CMD_ROOT; }
@@ -197,18 +197,18 @@ public final class RTGCommandTree extends CommandTreeBase
                 final float[] t = ((rtg.world.gen.ChunkGeneratorRTG) generator)
                         .probeTunnelColumn(world.getBiomeProvider(), x, z);
                 final boolean cached = t[3] > 0.5f;
-                line(sender, "[tunnel] 链权重=%.3f 链宿主=%.3f 洞顶=%d",
-                        t[0], t[1], (int) t[2]);
+                line(sender, "[tunnel] 链权重=%.3f 链宿主=%.3f 山体门控=%.3f 干高度=%.0f 洞顶=%d",
+                        t[0], t[1], t[5], t[4], (int) t[2]);
                 if (!cached) {
                     line(sender, "  ⚠ 该区块的 layout 已被 LRU 缓存淘汰，此处是**重算**结果："
-                            + "链权重/链宿主可信，洞顶不可信（重算不会开凿）。");
+                            + "门控数值可信，洞顶不可信（重算不会开凿）。");
                 } else if (t[2] > 0f) {
                     line(sender, "  ✅ 该列**确实开凿过**地下河隧道/洞厅，洞顶 y=%d。", (int) t[2]);
                 } else {
                     line(sender, "  ✗ 该列**没有**被开凿：%s",
-                            t[1] <= 0.10f
-                                    ? "链宿主不足 ⇒ 这里不是山地链（地下河只在山地链内出现）"
-                                    : "链宿主够，但不在河网边界/顶点上（隧道沿河网走）");
+                            t[5] <= 0.10f
+                                    ? "山体门控不足 ⇒ 既不是山地链、附近干高度也没到约 73（暗河只在山里出现）"
+                                    : "山体门控够，但不在河网边界/顶点上（隧道沿河网走）");
                 }
             } else {
                 line(sender, "[tunnel] 该维度的区块生成器不是 ChunkGeneratorRTG，无法读取隧道门控。");
@@ -235,123 +235,5 @@ public final class RTGCommandTree extends CommandTreeBase
         }
     }
 
-    /**
-     * {@code /rtg tunnels [半径]} —— **地下河/洞厅定位器**。
-     *
-     * <p>存在的理由：隧道只在**山地链**内的河网边界/顶点开凿，且洞顶被压在地表以下 ≥10 格，
-     * 所以"走进世界找一条地下河"基本靠运气，验收只能靠肉眼扫 —— 那是本项目反复吃过亏的方式。
-     * 本命令改为**直接查已生成区块的 layout 缓存**，把附近**真的被开凿过**的列报出来，
-     * 玩家照着坐标往下挖即可。
-     *
-     * <p><b>只读</b>：只读 {@code landscapeCache} 里**已有**的条目，不新建、不生成、不污染缓存。
-     * 因此它是"对已生成区域的观测"，没走到的地方不会出现（会在输出里说明）。
-     *
-     * <p>用法：{@code /rtg tunnels} 或 {@code /rtg tunnels 12}（单位：区块，默认 8，上限 24）。
-     */
-    static final class CommandTunnels extends CommandBase
-    {
-        private static final String NAME = "tunnels";
-
-        @Override public int getRequiredPermissionLevel() { return ACCESS_ALL; }
-        @Override public String getName() { return NAME; }
-        @Override public String getUsage(ICommandSender sender) {
-            return new TextComponentString("/rtg tunnels [半径(区块, 默认8)]").getFormattedText();
-        }
-
-        @Override public void execute(MinecraftServer server, ICommandSender sender, String[] args) {
-            final World world = sender.getEntityWorld();
-            final BlockPos pos;
-            if (sender instanceof EntityPlayerMP) {
-                pos = ((EntityPlayerMP) sender).getPosition();
-            } else if (args.length >= 2) {
-                try {
-                    pos = new BlockPos(CommandBase.parseInt(args[0]), 0, CommandBase.parseInt(args[1]));
-                } catch (Exception ex) {
-                    line(sender, "[rtg] 坐标解析失败，用法：/rtg tunnels [半径]");
-                    return;
-                }
-            } else {
-                line(sender, "[rtg] tunnels 需由玩家执行（它按你的位置扫附近缓存）");
-                return;
-            }
-
-            int radius = 8;
-            if (args.length >= 1) {
-                try {
-                    radius = Math.max(1, Math.min(24, CommandBase.parseInt(args[0])));
-                } catch (Exception ex) {
-                    line(sender, "[rtg] 半径解析失败，用默认 8 区块");
-                }
-            }
-
-            final net.minecraft.world.chunk.IChunkProvider cp = world.getChunkProvider();
-            final net.minecraft.world.gen.IChunkGenerator generator =
-                    cp instanceof net.minecraft.world.gen.ChunkProviderServer
-                            ? ((net.minecraft.world.gen.ChunkProviderServer) cp).chunkGenerator
-                            : null;
-            if (!(generator instanceof rtg.world.gen.ChunkGeneratorRTG)) {
-                line(sender, "[rtg] 该维度的区块生成器不是 ChunkGeneratorRTG，无法读取隧道数据。");
-                return;
-            }
-            final rtg.world.gen.ChunkGeneratorRTG gen = (rtg.world.gen.ChunkGeneratorRTG) generator;
-
-            final int centerCX = pos.getX() >> 4;
-            final int centerCZ = pos.getZ() >> 4;
-            int cachedChunks = 0;
-            int carvedColumns = 0;
-            // 只留最近的前几个（按切比雪夫距离排序）
-            final java.util.List<int[]> hits = new java.util.ArrayList<>();   // {dist, x, z, ceiling}
-
-            for (int dcx = -radius; dcx <= radius; dcx++) {
-                for (int dcz = -radius; dcz <= radius; dcz++) {
-                    final rtg.world.gen.ChunkLandscape ls = gen.cachedLandscape(centerCX + dcx, centerCZ + dcz);
-                    if (ls == null) {
-                        continue;                        // 未生成/已被 LRU 淘汰：跳过（只读，不新建）
-                    }
-                    cachedChunks++;
-                    for (int k = 0; k < 256; k++) {
-                        final int ceiling = ls.riverCaveCeiling[k];
-                        if (ceiling <= 0) {
-                            continue;                    // 该列没被开凿
-                        }
-                        carvedColumns++;
-                        final int lx = k >> 4;
-                        final int lz = k & 15;
-                        final int wx = (centerCX + dcx) * 16 + lx;
-                        final int wz = (centerCZ + dcz) * 16 + lz;
-                        hits.add(new int[] {
-                                Math.max(Math.abs(dcx), Math.abs(dcz)),
-                                wx, wz, ceiling,
-                                Math.max(Math.abs(wx - pos.getX()), Math.abs(wz - pos.getZ())) });
-                    }
-                }
-            }
-
-            line(sender, "=== /rtg tunnels @ %d,%d  半径 %d 区块 ===", pos.getX(), pos.getZ(), radius);
-            line(sender, "[cache] 半径内已缓存的区块 %d 个（未生成的区块不在其中 —— 先在附近走走再执行）",
-                    cachedChunks);
-            line(sender, "[result] 被开凿过的列：%d 个", carvedColumns);
-
-            if (carvedColumns == 0) {
-                line(sender, "  ✗ 半径内没有一条地下河/洞厅。两种可能：");
-                line(sender, "    ① 这里不是**山地链**（隧道是链专有地貌：极端气候交界带，约占陆地 11%%）；");
-                line(sender, "    ② 是山地链但还没走到隧道带上（隧道沿**河网边界**走、洞厅在**河网交汇点**）。");
-                line(sender, "    建议：往气候交界的大山方向走，让区块生成，再执行一次。");
-                return;
-            }
-
-            hits.sort((a, b) -> a[4] != b[4] ? Integer.compare(a[4], b[4]) : a[0] - b[0]);
-            line(sender, "[最近的地下河/洞厅（挖掘目标）]");
-            final int shown = Math.min(8, hits.size());
-            for (int i = 0; i < shown; i++) {
-                final int[] h = hits.get(i);
-                line(sender, "  %d) x=%d z=%d 洞顶 y=%d  直线距离 %d 格%s",
-                        i + 1, h[1], h[2], h[3], h[4],
-                        h[4] < 40 ? " ← 就在脚下附近" : "");
-            }
-            line(sender, "  挖法：站在目标点往下挖到 **洞顶 y** 就是了；洞顶以下是气道/暗河（%s）。",
-                    "下层是水、上层是空气，与 RWG 一致");
-        }
-    }
 
 }

@@ -76,6 +76,10 @@
 | 海滩的**方块与名字不符** | 无对应（RWG 只有一个不区分材质的 `CoastDunes`） | 5 个海滩（含 `BOPWhiteBeach`）都用 `SurfaceCoastDunes` ⇒ `Stone Beach` 脚下是沙/砂岩/圆石、`Gravel Beach` 脚下是沙 | 这是"给 MC 海滩群系配 RWG 地形"的必然结果，**不是 bug**：RWG 的暖海岸地表本来就只有一种配方（沙），`topBlock`/`fillerBlock` 在 rtgc 管线里根本不被读取 |
 | 海洋群系数量 | RWG 自己注册 `baseOceanIce/Cold/Temperate/Hot/Wet/Oasis` 6 个 | rtgc 注册 6 个 `RtgOceanBiome`（ICE/COLD/HOT/WET 各就位 + 深/浅两份包装） | RWG 的 `baseOcean*` 是**它自己的源码定义**，可照抄；此处是照抄而非发明 |
 | 崖壁判定 | `CliffCalculator.calc(x, y, noise)`（3 参，纯四邻高差取最大） | `TerrainBase.calcCliff(x, z, noise, river)`（4 参，**多一条**：高度落在海平面带内且 `river > 0.85` 时取四邻最小 ⇒ 河口岸边不出崖壁） | 这是 RTG 上游为解决"河口一圈全是崖"加的，rtgc 全线沿用（24+ 处调用点）；已在 `SurfaceGrassland` / `SurfaceMountainStoneMix1` 的 javadoc 记录 |
+| **暗河的适用范围** | **只有山地链**（`mountainChainRiverHost > 0.10`）—— 链只出现在气候交界，实测 7.7% 的列、8 个「气候×方向」里只有 3 个填得满 ⇒ 普通的山一滴暗河都没有 | 门控取大：`max(链宿主, 山体门控)`，山体门控 = `smoothstep((附近最大干高度 − 68)/24)` ⇒ 链内行为不变，链外的山也有暗河（有效阈值约 **73** 格；`UndergroundRiver.MIN_SURFACE=76` 只留给洞厅/天窗的"上方够不够厚"） | **用户明确要求**的增强，不是照抄（RWG 没有这条）。实现必须用**干高度**（河道雕刻前），否则重演 F-39：隧道带 ⊂ 河网带、地表被压到 ≈59，用已雕刻地表做高度门控永不成立 |
+| **暗河密度** | 隧道带宽 `9/1250`（9 格）⇒ 只有 2.93% 的列落在带内；山体阈值 76（有效 ≈81） | 带宽 **`25/1250`（25 格）** ⇒ 8.06%；山体阈值 **68**（有效 ≈73）+ 同区块 3×3 ±8 格"最大干高度"（防侧翼断开） | 用户反馈"很多山里都没暗河"。联合命中（链∧河网∧隧道\|交汇）**0.230% → 0.611%**；复跑 `gradlew calibrateRiverTunnels` 可验 |
+| 暗河与地表水的联通 | **水面恒在水面高度 62**（`blockY <= 62 ? water : air`），洞体也以 62 为中心 ⇒ 地表低于洞顶（≈73）的列**洞顶天然冒出地表** = 河口/峡谷，从河面直接划船进山 | **已回到 RWG 原样**（1.0.33 追记）：中心写死 62、洞厅基准 63、水面恒 62 | 中途我加过"按地表整体下移"，造成三件事：水面接不上、河床被掏成深沟、永远只能潜水进 ⇒ 已撤销；自造的"显式联通口"也一并删掉（RWG 的机制本来就覆盖它） |
+| 洞顶藤蔓的长度 | RWG 只算到"洞顶那一格空气"，**摆放交给 EFR 的 `WorldGenCaveVines`**（`Et-Futurum-Requiem`，1.7.10 专属，本仓库**无从照抄**它的长度规则） | `RiverCaveVines.placeVine` 自己定：长度 = `1..可用空间` 随机，上限 = **水面之上那一格（y=63）** ⇒ 最长的一株正好垂到水面；干洞里则以洞底为上界 | 用户要求"让藤蔓长一点，最好最长能到水面，当然是随机长度"。隧道段可用 1–8 格（洞顶 = `62 + round(√tunnel × 8)` ≤ 70）⇒ 均值 ≈4.5 格、约 1/8 的藤触水；洞厅段洞顶可到 80–100 ⇒ 长藤帘。已核对原版 `BlockVine`：纯洞顶藤（只有 `UP`）既不会掉也不会自己变长 ⇒ **生成多长就是多长** |
 
 ### 0.5.3 已被**推翻 / 关闭**的旧结论（下文还在，但已作废）
 
@@ -88,6 +92,7 @@
 | "镜像核心池对群系选择是**恒等变换 / 逐点相同**" | §14.1 第 2 条 | 已由 `calibrateBorderPools` **实测推翻**：分布相同、**逐列 19.73% 不同**（§14.4 已改写） |
 | §8「有意的偏离汇总」第 1/2/5/8/9 行 | §8 | 全部已消或已改写，见 §8 的新表 |
 | "`BOPWhiteBeach` 属于冷海岸（用 RWG `coastIce` 的地形/地表）" | §13 落点表（本节上方） | **已推翻**：BOP `white_beach` 实测温度 **1.00**/雨量 0.95（热带白沙），按 RWG 自己的规则（`temperature < 0.15f` 才用 coastIce）它属于 **coastDunes**。此前接成 `terrainCoastIce + SurfaceGrassland(packed_ice×3, ice)` ⇒ **热带地表出现浮冰**；已改回 `terrainCoastDunes + SurfaceCoastDunes` |
+| "洞顶的 `surface-10` 钳制被 `max()` 顶回去 —— 这是**顺序 bug**，要修正" | 旧 CHANGELOG 条目与本类旧注释 | **已推翻**：那是有意的，正是 RWG 让地下河在地表低处与外界河**联通**的机制。连同"整条隧道按地表下移"一起撤回（§0.5.4 C13） |
 
 ### 0.5.4 本轮自检：接错排查（两遍：我的机械检查 + 一次独立审计）
 
@@ -121,6 +126,12 @@
 | C10 | `VanillaSavanna` | 地形已接 RWG Savanna、地表留在 `SurfaceGrassland` | `SurfaceGrasslandMix1(grass, dirt, sand, stone, cobble, 13f, 0.27f)` | `savanna/RealisticBiomeSavanna.java:35-42` —— 同一份配对**只接了地形那一半** |
 | C11 | `TCMagicalForest`（`magical_forest`） | `terrainSmallSupport`（那是 RWG 给 **Tainted Land** 的）＋ 表里没有它 ⇒ 落 CORE | `terrainSwampMountain(135f,300f)` ＋ `RWG_PLACEMENTS` 补 `magicalforest`/SNOW/SMALL_ISLAND | `SupportTC.java:38-50` |
 | C12 | 注释与实际不符（不算生成改动，但会误导审计） | `BOPAlps` 无标注、`BOPCrag` 说"改用 canyon 配方"、`BOPVolcanicIsland` 说"火山渣地表保持不变"、`TCEerie` 无标注 | 逐条改成与代码一致，并写明"推断/未移植/死类" | 独立审计 B-3/B-4/C3/C11 |
+| C13 | **地下河"变少 + 一格水线"**（用户实机反馈）：① RWG 把隧道中心**写死 62**，前提是"链一定很高（≥83）"，而 rtgc 的链是中低山地（地表 60–80）⇒ 洞体整段跑到地面之上、地下挖不到东西；② 我顺手删掉的 `ceiling <= floor` 守卫让"一格水在石头里"的退化列被记录，而**离玩家最近的往往正是这个最外侧薄边** | 隧道**按地表下移**（地下一定有）＋**显式联通口**（见 C14）＋两条守卫（退化列跳过**且不记录**） | 与 RWG 的关系：门控/走线/宽度/层高/洞厅/天窗**逐位一致**，只有"摆放方式"是适配。实测几何见 `gradlew calibrateRiverTunnels`；退化列占比 0.175% | 用户实机反馈（"逗我呢，暗河变少、水面只有一层"）→ 三条原因逐条定位 |
+| C14 | **"我要的是水面接通"**（用户实机反馈）：联通口此前把水灌到**地表**（河床 ≈59），而外面的水停在 **62** ⇒ 洞里水面比外面低 3 格，看着不连通。另有：`/rtg tunnels` 指令按用户要求**移除** | 联通口改为灌到 **`WaterLevel.waterSurfaceTop()`（默认 62）** 并把洞体凿到水面那一层 ⇒ **洞里与外面的水同一个水面平面**（顺河游进去即可）；触发条件仍是"地表已降到水面及以下"（= 本来就是水：河床/湖底/海底）。指令：删掉 `CommandTunnels` 与它专用的 `cachedLandscape()`（不留死码），`/rtg` 只剩 `whereami` / `probe` | 前者是**用户明确要求**的"水面"语义（RWG 靠"水面固定在 62"顺带做到）；后者是用户要求删命令 | 用户实机反馈 + 明确指令 |
+| C15 | **刷日志 + 河床变悬崖**（用户实机反馈）：① `[RTG-DECOPROF]` 用 `nanoTime() - start()` 算耗时，而 `start()` 在**计时关闭**时返回 0 ⇒ 算出绝对值（日志里 `28420861ms`）永远超阈值 ⇒ **每区块刷一行**（实测 3560 行里 3287 行）；② 联通口对整条 25 格宽的隧道带生效 ⇒ 河床被挖成两边垂直岩壁的深沟 | ① 加 `ChunkGenerationProfiler.isEnabled()` 守卫（注释写清为什么必须有）；② 新增 `CONNECT_MIN_TUNNEL_STRENGTH = 0.7f`，只有带中心线附近开口 ⇒ 变成几格宽的**落水洞** | 都是 rtgc 自己引入的缺陷（RWG 无 DECOPROF、也无联通口）。"水下接通"是几何本身：进水口在水面以下，气道仍在岩下 ⇒ 想在水面之上也有洞口需要"隧道抬升"，属发明，待定 | 用户实机反馈（"为什么我的游戏在刷日志 / 河床两边变成悬崖"）|
+| C16 | **"在河里划船，不就该直接划进山吗"**（用户实机反馈）：我把洞体"按地表整体下移"（`center = min(62, surface-21)`）—— 这是**三件坏事的共同根因**：① 水面跟着洞心掉（洞里 29–60，接不上外面 62）② 洞底被挖到 y≈34（**河床被掏成两边深沟**）③ 洞顶恒在地表下 10 格（**永远只能潜水进**） | **撤销下移、回到 RWG 原样**：`center` 写死 **62**、洞厅基准 **63**、水面恒 `y <= 62 ? water : air`；**删掉我自造的"显式联通口"与 `CONNECT_MIN_TUNNEL_STRENGTH`**（RWG 机制本来就覆盖它）。于是地表低于洞顶（≈73）的列**天然开口成河口/峡谷** ⇒ 从河面直接划船进山。两条守卫保留（只挡"一格水缝/悬空水"） | 与 RWG 的关系回到"几何逐行照抄"，只剩三处用户要求的差异：门控扩展（普通山）、隧道带 9→25、守卫 | 用户实机反馈（"难不成还得潜水进去"）+ `gradlew calibrateRiverTunnels` 的三列对照表 |
+| C17 | **"山外河与普通河接壤不自然：宽度不同、对河床的处理也不同"**（用户实机反馈）：隧道是 25 格宽、直壁、平底的**方块开挖**，地表河是 `50/1300` 的**平滑高度混合** + 噪声河床 59±3.5 ⇒ 门控一刀切处是一个 25 格宽、十几格深的**钝头** | 断面按门控权重**渐隐**：`taper = mountainHost`（边缘 0、内部 1），`tunnelCurve = √tunnel × taper` ⇒ 尾部逐格变浅、不足一格被守卫跳过，硬开挖平滑交回给地表河；水面仍恒 62 | **链内部 taper=1，与 RWG 逐位一致**，只有最外那圈过渡带改变。不动地表河（`calculateRiver` 一行未改） | 用户实机反馈（"其余都满意，就是接壤不太自然"）|
+| C18 | **"暗河会侧切山体（水面齐平处被侵蚀进去）…收一点点"**（用户实机反馈）：那个凹槽的高度就是**洞顶起伏**（`62 + round(√tunnel × 11)` = 水面以上最多 11 格）。它是 RWG 的规则（洞顶冒出地表 ⇒ 河口），也正是"能划船进山"的原因 | `UndergroundRiver.ROOF_RISE` **11 → 8**（咬痕 −27%，划船头顶仍 ≥6 格；河口上限 73 → 70）。`UndergroundRiver.FLOOR_DROP` 与**洞厅段的 `surface-10` 未动**（保留"暗河出口盆地"的观感） | 属 rtgc 微调（RWG 是 11）；已与断面渐隐（C17）一起，使侧切既保留现实感、又不过分 | 用户实机反馈（"虽然挺符合现实…收一点点"）|
 
 **这个工具的边界（别过度信任）**：只有 43 个群系在 RWG `Support*.java` 里有显式条目；
 其余约 88 个是"rtgc 用 RWG 的通用家族近似"（§12/§13 的落点表），
@@ -138,6 +149,39 @@
 | 5 | 有没有"写了但从未注册"的包装类 | `BiomeInit` 里的 `new RealisticBiome*` ↔ 磁盘类名互查 | 无缺；`MountainChain`（运行时合成）与 `RtgOcean`（`init_rtgc_oceans` 注册）属预期不在那份清单里 |
 | 6 | `RWG_PLACEMENTS` 每一行是否都有 RWG 出处 | `tools/rwg-placement-check.ps1 -RwgSupportDir … -TableFile … -RtgcSpecific …` | **PASS**：copied=22、rtgc-only=1、缺口=1（`fungiforest`/LARGE_ISLAND） |
 | 6 | `TerrainBase` 里还有没有不可达函数 | `tools/reachability.ps1` | 只剩 `terrainDunes`（§0.5.1 第 2 条，RWG 忠实移植待接线） |
+
+### 0.5.5 地下暗河：逻辑封装（1.0.33 追记，**不是行为变更**）
+
+起因是用户一句"封装一下地下暗河相关吧，别到时候写乱了"。暗河在 C13–C18 六轮修补里前后改了
+门控、断面、守卫、天窗，代码却一直摊在 `ChunkGeneratorRTG` 里（常量 + `carveRiverTunnels`
++ `dryHeightHost` + `smoothstep` + 探针读数），确实到了"再改一处要看五个地方"的程度。
+
+| 项目 | 现在在哪 |
+|---|---|
+| 常量（洞心 62 / 洞顶起伏 8 / 洞底下探 4 / 洞厅留厚 10 / 地表基准 76 / 门控下限 0.10 / 干高度 68 / 3×3 步长 8） | `UndergroundRiver`（`public static final`，带"RWG 原值是多少、哪几处是 rtgc 微调"的注释） |
+| 四级判定链 + 断面几何 + 两条守卫 + 天窗 + 灌水 | `UndergroundRiver.carve(ChunkPrimer, int, int, ChunkLandscape)` |
+| `dryHeightHost`（干高度门控）与 `smoothstep` | 同上（`private static`）；`smoothstep` 在全工程**只有暗河用**，故随之下移 |
+| 山体门控读数（`max(链宿主, 干高度门控)`） | `UndergroundRiver.mountainHostAt(...)`，**开凿与 `/rtg probe` 共用同一函数**（此前 `probeTunnelColumn` 抄了一份 `dryHeightHost` 调用，是"读数与实现漂移"的隐患） |
+| 调用点 | `ChunkGeneratorRTG.generate` 内 `UndergroundRiver.carve(...)`，仍**在地表替换之后**（顺序理由见该类 javadoc：地表替换按 `depth` 计数涂刷，先开凿会把隧道底刷成草/沙） |
+| 顺带清掉的死重量 | 生成器字段 `riverStrengths`（每列复用的小数组改为开凿内的局部变量）、`carveRiverTunnels` 里从未被读的 `mpos.setPos(...)` |
+
+**"没改行为"是怎么验的**（而不是嘴上说）：迁移是逐行搬移，只做了 4 处等价改写
+（`air` 局部变量 → 静态常量、`center` 局部变量 → `CENTER_Y`、`63` → `CHAMBER_BASE_Y`、
+`0.70f`/`24f`/`0.40f`/`0.15f` → 具名常量）；搬移后复跑全套：
+
+| 检查 | 结果 |
+|---|---|
+| `gradlew build` | BUILD SUCCESSFUL |
+| `gradlew calibrateRiverTunnels` | 河网带 56.373%、隧道带 8.0586%、交汇盘 2.4162%、合并 8.9170%、链列 7.686%、联合命中 **0.61118%**、天窗 0.00040%、退化 0.376%/1.547% —— **与本轮封装前逐个数字相同** |
+| `tools/surface-wiring-check.ps1` | `RULE2 PASS (12)` |
+| `tools/terrain-wiring-check.ps1` | 131/131 |
+| `tools/terrain-surface-audit.ps1` | `matched=43, mismatched=0` |
+| `tools/rwg-placement-check.ps1` | PASS（copied=22、rtgc-only=1、缺口=1 `fungiforest`） |
+| `tools/reachability.ps1` | 仍只有 `terrainDunes` DEAD |
+
+**给后来人的规矩**：要改暗河的密度/几何/守卫，**只进 `UndergroundRiver.java`**；
+`ChunkGeneratorRTG` 那边只有一行调用 + 一行"必须在地表替换之后"的注释。
+若新增"暗河专用的"读数或工具，请像 `mountainHostAt` 一样**复用**该类函数，不要另抄一份。
 
 ---
 
@@ -563,7 +607,7 @@ lakePressure → lakeToRiverProportions → riverAdjustedforDepthDifference → 
 | B2 | 合成群系编号空间 | `rtg/world/biome/RtgRealisticIndex.java` |
 | B3 | `mountainChainWeight` / `nearbyMountainChainInfluence` / `fade` | `ChunkGeneratorRTG.getNewerNoise` |
 | B4 | `rebuildExtremeBorderMountains(RealisticBiomeMountainChain::forBiome)` | `RtgLayoutAccess.forSeed` |
-| B5 | 隧道门控换成 `mountainChainRiverHost > 0.10` | `ChunkGeneratorRTG.carveRiverTunnels` |
+| B5 | 隧道门控换成 `mountainChainRiverHost > 0.10` | `rtg/world/gen/UndergroundRiver.java`（1.0.33 追记：从 `ChunkGeneratorRTG` 抽出） |
 
 #### B6 说明（未单独改动，已由构造满足）
 
@@ -603,7 +647,7 @@ rtgc 的 `RealisticBiomeMountainChain` 改为：
 ### 本轮修掉的一个自己造成的缺陷
 
 `mountainChainWeight` / `mountainChainRiverHost` 一开始被我放成**生成器字段**。
-但 `landscape` 可能是 `landscapeCache` 里的对象，而 `carveRiverTunnels` 是**稍后**才跑的 ——
+但 `landscape` 可能是 `landscapeCache` 里的对象，而 `UndergroundRiver.carve` 是**稍后**才跑的 ——
 缓存命中时读到的会是**上一个区块**的值。已改放进 `ChunkLandscape` 随区块保存
 （`riverCaveCeiling` 当初放进去也是同一个原因）。
 

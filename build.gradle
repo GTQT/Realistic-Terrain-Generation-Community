@@ -369,6 +369,18 @@ tasks.register('calibrateBorderPools', JavaExec) {
     jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
 }
 
+// 地下河/天窗的**频率**实测：四级门控（河网带 → 隧道/交汇带 → 山地链宿主 → 天窗三因子）
+// 各自的命中率与交集，用生产环境的池大小建桩跑真正的 RtgBiomeLayout。
+tasks.register('calibrateRiverTunnels', JavaExec) {
+    group = 'verification'
+    description = 'Measures how often each underground-river gate passes (why tunnels/skylights are rare)'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.world.biome.RiverTunnelFrequencyCalibration'
+    maxHeapSize = '2g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
 tasks.register('generateMixinJson') {
     group 'cleanroom helpers'
     def missingConfig = propertyStringList('mixin_configs').findAll(config -> !file("src/main/resources/mixins.${config}.json").exists())

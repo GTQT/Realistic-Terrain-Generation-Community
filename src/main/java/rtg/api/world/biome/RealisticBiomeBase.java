@@ -10,10 +10,6 @@ import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
 import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.ISimplexData2D;
-import rtg.api.util.noise.SimplexData2D;
-import rtg.api.util.noise.SimplexNoise;
-import rtg.api.util.noise.VoronoiResult;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.DecoBase;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
@@ -31,8 +27,6 @@ import java.util.Objects;
 
 public abstract class RealisticBiomeBase implements IRealisticBiome {
 
-    private static final float INV_12 = 1f / 12f;
-    private static final float INV_8 = 1f / 8f;
     private static final double INV_240 = 1.0 / 240.0;
     private static final double INV_80 = 1.0 / 80.0;
     private static final double INV_30 = 1.0 / 30.0;
@@ -161,162 +155,37 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         return this.baseBiomeId;
     }
 
+    /**
+     * RWG 的 {@code RealisticBiomeBase.rNoise} 是**原样透传**：
+     * {@code return terrain.generateNoise(perlin, cell, x, y, ocean, border, river);}
+     * —— 对 {@code border} / {@code river} 不做任何再加工。
+     *
+     * <p><b>rtgc 原先在此挂了一整套 RTG 时代的河道／湖泊变换（{@code newrNoise}）：
+     * {@code lakePressure} → {@code lakeToRiverProportions} →
+     * {@code riverAdjustedforDepthDifference} → {@code riverFlattening}。
+     * 默认配置下该变换实测把 RWG 的 {@code river} <b>反相</b>：</b>
+     *
+     * <pre>
+     *   RWG 输入（0 = 河心，1 = 内陆）   地形函数实收
+     *            0.00                      1.00
+     *            0.50                      0.52
+     *            1.00                      0.04
+     * </pre>
+     *
+     * 而所有已移植的地形函数都按 RWG 约定写作 {@code m = noise * strength * river}
+     * （陆地 = 1）：于是陆地上山体项被削到 4%、世界被压成平板，河心反而拿到满幅山体
+     * （沿每条河长出山墙）。<b>这正是"公式照抄了却不像 RWG"的根因</b>，故整套变换已删除。
+     *
+     * <p>本方法现在与 RWG 逐字同构。唯一保留的 rtgc 配置项是关掉本群系的河流
+     * （{@code ALLOW_RIVERS}）；RWG 无此开关，而它的默认值为 {@code true}，
+     * 因此默认行为与 RWG 完全一致。
+     */
     @Override
     public float rNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        return newrNoise(rtgWorld, x, y, border, river);
-    }
 
-    public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        // river is [0,1] where 1 = strongest river
-        // Convert to internal convention: 0 = water, 1 = land
-        final float riverAmount = 1f - river;
+        final float effectiveRiver = this.getConfig().ALLOW_RIVERS.get() ? river : 1f;
 
-        final boolean allowRivers = this.getConfig().ALLOW_RIVERS.get();
-        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
-        final float riverFlatteningAddend = RTGWorld.RIVER_FLATTENING_ADDEND;
-
-        if (!allowRivers) {
-            float borderForRiver = Math.min(border * 2f, 1f);
-            float weakened = 1f - (1f - borderForRiver) * (1f - riverAmount);
-            return terrain.generateNoise(rtgWorld, x, y, border, weakened);
-        }
-
-        float lakeStrength = lakePressure(rtgWorld, x, y, border,
-                rtgWorld.getLakeFrequency(),
-                rtgWorld.getLakeBendSizeLarge(),
-                rtgWorld.getLakeBendSizeMedium(),
-                rtgWorld.getLakeBendSizeSmall());
-
-        float adjustedLake = lakeToRiverProportions(lakeStrength,
-                rtgWorld.getLakeShoreLevel(),
-                rtgWorld.getLakeDepressionLevel());
-
-        float riverVal = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(riverAmount));
-
-        if (adjustedLake < actualRiverProportion) {
-            adjustedLake = Math.max(0f, (adjustedLake - actualRiverProportion) * 2f + actualRiverProportion);
-        }
-
-        float combinedRiver;
-        if (riverVal < 1f && adjustedLake < 1f) {
-            float leastLowering = Math.min(adjustedLake, riverVal);
-            float denominator = (1f - riverVal) / riverVal + (1f - adjustedLake) / adjustedLake;
-            combinedRiver = 1f / (denominator + 1f);
-            combinedRiver = (combinedRiver + leastLowering) * 0.5f;
-        } else {
-            combinedRiver = Math.min(adjustedLake, riverVal);
-        }
-
-        float invertedRiver = 1f - combinedRiver;
-        invertedRiver = invertedRiver * (invertedRiver / (invertedRiver + 0.05f) * 1.05f);
-        combinedRiver = 1f - invertedRiver;
-
-        float riverFlattening = Math.max(0f, combinedRiver * (1f + riverFlatteningAddend) - riverFlatteningAddend);
-
-        float terrainNoise = terrain.generateNoise(rtgWorld, x, y, border, riverFlattening);
-        return erodedNoise(rtgWorld, x, y, combinedRiver, border, terrainNoise);
-    }
-
-    public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        final float lakeBottom = RTGWorld.LAKE_BOTTOM;
-        final float erosionThreshold = 0.3f;
-
-        float riverFlattening = 1f - river;
-        riverFlattening -= (1f - erosionThreshold);
-
-        if (riverFlattening < 0f || biomeHeight <= lakeBottom) {
-            return biomeHeight;
-        }
-
-        riverFlattening /= erosionThreshold;
-        float r = 1f - riverFlattening;
-
-        if (r < 1f) {
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float irregularity = simplex.noise2f(x * 0.083333f, y * 0.083333f) * 2f +
-                    simplex.noise2f(x * 0.125f, y * 0.125f);
-
-            irregularity *= (1f + r);
-            float lakeBottomWithIrregularity = lakeBottom + irregularity;
-
-            return biomeHeight * r + lakeBottomWithIrregularity * (1f - r);
-        }
-
-        return biomeHeight;
-    }
-
-    public float oldErodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        float r;
-        // river of actualRiverProportions now maps to 1;
-        float riverFlattening = 1f - river;
-        riverFlattening = riverFlattening - (1 - RTGWorld.ACTUAL_RIVER_PROPORTION);
-        // return biomeHeight if no river effect
-        if (riverFlattening < 0) {
-            return biomeHeight;
-        }
-        // what was 1 set back to 1;
-        riverFlattening /= RTGWorld.ACTUAL_RIVER_PROPORTION;
-
-        // back to usual meanings: 1 = no river 0 = river
-        r = 1f - riverFlattening;
-
-        if ((r < 1f && biomeHeight > 55f)) {
-            float irregularity = rtgWorld.simplexInstance(0).noise2f(x * INV_12, y * INV_12) * 2f + rtgWorld.simplexInstance(0).noise2f(x * INV_8, y * INV_8);
-            // less on the bottom and more on the sides
-            irregularity = irregularity * (1 + r);
-            return (biomeHeight * (r)) + ((55f + irregularity)) * (1f - r);
-        } else {
-            return biomeHeight;
-        }
-    }
-
-    @Override
-    public float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval,
-                              float largeBendSize, float mediumBendSize, float smallBendSize) {
-
-        if (!this.getConfig().ALLOW_SCENIC_LAKES.get()) {
-            return 1f;
-        }
-
-        final double invLakeInterval = 1.0 / lakeInterval;
-
-        double pX = x;
-        double pY = y;
-        ISimplexData2D jitterData = SimplexData2D.newDisk();
-
-        // 使用预计算的倒数
-        rtgWorld.simplexInstance(1).multiEval2D(x * INV_240, y * INV_240, jitterData);
-        pX += jitterData.getDeltaX() * largeBendSize;
-        pY += jitterData.getDeltaY() * largeBendSize;
-
-        rtgWorld.simplexInstance(0).multiEval2D(x * INV_80, y * INV_80, jitterData);
-        pX += jitterData.getDeltaX() * mediumBendSize;
-        pY += jitterData.getDeltaY() * mediumBendSize;
-
-        rtgWorld.simplexInstance(4).multiEval2D(x * INV_30, y * INV_30, jitterData);
-        pX += jitterData.getDeltaX() * smallBendSize;
-        pY += jitterData.getDeltaY() * smallBendSize;
-
-        VoronoiResult lakeResults = rtgWorld.cellularInstance(0).eval2D(pX * invLakeInterval, pY * invLakeInterval);
-        return (float) (1.0d - lakeResults.interiorValue());
-    }
-
-    public float lakeToRiverProportions(float pressure, float shoreLevel, float topLevel) {
-        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
-
-        if (pressure > topLevel) {
-            return 1f;
-        }
-
-        if (pressure < shoreLevel) {
-            return (pressure / shoreLevel) * actualRiverProportion;
-        }
-
-        // 预计算分母倒数，用乘法代替除法
-        float invRange = 1f / (topLevel - shoreLevel);
-        float proportion = (pressure - shoreLevel) * invRange;
-
-        return actualRiverProportion + proportion * (1f - actualRiverProportion);
+        return terrain.generateNoise(rtgWorld, x, y, border, effectiveRiver);
     }
 
     @Override

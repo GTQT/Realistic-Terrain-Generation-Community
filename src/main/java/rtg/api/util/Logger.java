@@ -3,7 +3,6 @@ package rtg.api.util;
 
 import rtg.RTG;
 import rtg.RTGConfig;
-import rtg.api.RTGAPI;
 
 @UtilityClass
 public final class Logger {

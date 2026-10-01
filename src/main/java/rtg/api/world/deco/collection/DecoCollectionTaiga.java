@@ -9,7 +9,6 @@ import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.*;
 import rtg.api.world.deco.DecoTree.TreeCondition;
 import rtg.api.world.deco.DecoTree.TreeType;
-import rtg.api.world.deco.DecoGrass;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat.ChanceType;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;

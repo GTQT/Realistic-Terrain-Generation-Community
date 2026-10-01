@@ -1,19 +1,14 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
 
-import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.api.world.surface.SurfaceIslandMountainStone;
 
 
 public class RealisticBiomeBOPVolcanicIsland extends RealisticBiomeBase {
@@ -37,9 +32,24 @@ public class RealisticBiomeBOPVolcanicIsland extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPVolcanicIsland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, baseBiome().topBlock, baseBiome().fillerBlock, 80f, -0.15f, 10f, 0.5f);
+        return new SurfaceIslandMountainStone(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, 67, Blocks.SAND.getDefaultState(), 0f);
     }
 
+    /**
+     * 火山地貌已按用户要求**移除**（原实现调用 {@code TerrainBase.terrainVolcano(..., 70f)}）。
+     * <p>
+     * 保留本群系类本身是必须的：BOP 装了 {@code biomesoplenty:volcanic_island} 时，
+     * 若没有对应的 {@code RealisticBiome} 包装，该群系会走 {@code RTGAPI} 的兜底解析，
+     * 拿不到本仓库的配置项与地表规则。因此这里改为**普通低缓丘陵**，只是不再生成锥体与火山口。
+     *
+     * <p>⚠ <b>地表与 RWG 不一致（未移植）</b>：RWG 的
+     * {@code RealisticBiomeIslandVolcano} 用的是 {@code SurfaceVolcanoAsh(ash, ashStone)}
+     * —— rtgc **没有**这个类（全仓 grep 0 命中），本类当前返回的是岛屿地表
+     * {@code SurfaceIslandMountainStone(top, filler, 67, sand, 0f)}。
+     * 本文件里那个 {@code SurfaceBOPVolcanicIsland} 是 RTG 时代的旧内层实现，**当前零调用**。
+     * 之所以不接它：火山内容整体是用户要求删除的，重新给它配火山渣地表等于半途把火山捡回来。
+     * 这一条记在 {@code docs/rwg-port-gaps.md} §0.5.1（未移植 + 死类）。
+     */
     public static class TerrainBOPVolcanicIsland extends TerrainBase {
 
         public TerrainBOPVolcanicIsland() {
@@ -49,88 +59,10 @@ public class RealisticBiomeBOPVolcanicIsland extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainVolcano(x, y, rtgWorld, border, 70f);
+            // 低缓起伏的岛屿：基准 68，丘陵强度与地表噪声幅度都取小值，避免变成山地
+            // 推断：RWG 的 IslandVolcano 已按用户要求删除，热带岛地形是最近亲
+            return terrainIslandTropical(x, y, rtgWorld, border);
         }
     }
 
-    public static class SurfaceBOPVolcanicIsland extends SurfaceBase {
-
-        private IBlockState blockMixTop;
-        private IBlockState blockMixFiller;
-        private float floMixWidth;
-        private float floMixHeight;
-        private float floSmallWidth;
-        private float floSmallStrength;
-
-        public SurfaceBOPVolcanicIsland(BiomeConfig config, IBlockState top, IBlockState filler, IBlockState mixTop, IBlockState mixFiller,
-                                        float mixWidth, float mixHeight, float smallWidth, float smallStrength) {
-
-            super(config, top, filler);
-
-            blockMixTop = mixTop;
-            blockMixFiller = mixFiller;
-
-            floMixWidth = mixWidth;
-            floMixHeight = mixHeight;
-            floSmallWidth = smallWidth;
-            floSmallStrength = smallStrength;
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            boolean cliff = c > 1.4f;
-            boolean mix = false;
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (cliff) {
-                        if (depth > -1 && depth < 2) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (depth < 10) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                    }
-                    else {
-                        if (depth == 0 && k > 61) {
-                            if (simplex.noise2f(i / floMixWidth, j / floMixWidth) + simplex.noise2f(i / floSmallWidth, j / floSmallWidth)
-                                * floSmallStrength > floMixHeight) {
-                                primer.setBlockState(x, k, z, blockMixTop);
-
-                                mix = true;
-                            }
-                            else {
-                                primer.setBlockState(x, k, z, topBlock);
-                            }
-                        }
-                        else if (depth < 4) {
-                            if (mix) {
-                                primer.setBlockState(x, k, z, blockMixFiller);
-                            }
-                            else {
-                                primer.setBlockState(x, k, z, fillerBlock);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

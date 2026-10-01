@@ -8,8 +8,6 @@ import rtg.api.util.ChunkInfo;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
 

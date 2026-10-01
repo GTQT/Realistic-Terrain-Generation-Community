@@ -6,19 +6,16 @@ import net.minecraftforge.common.BiomeDictionary;
 import net.minecraftforge.common.BiomeDictionary.Type;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import rtg.api.RTGAPI;
-import rtg.api.util.CircularSearchCreator;
 import rtg.api.util.Logger;
 import rtg.api.util.storage.SparseList;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.world.gen.ChunkLandscape;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public final class BiomeAnalyzer {
-    private static final int NO_BIOME = -1;
     private static final int RIVER_FLAG = 1;
     private static final int OCEAN_FLAG = 2;
     private static final int SWAMP_FLAG = 4;
@@ -26,19 +23,10 @@ public final class BiomeAnalyzer {
     private static final int LAND_FLAG = 16;
 
     private final List<Integer> biomeIDs = new SparseList<>();
-    private final List<Integer> preferredBeach = new SparseList<>();
-    private final ConcurrentMap<Integer, List<Boolean>> flagCache = new ConcurrentHashMap<>();
 
-    private final IRealisticBiome scenicLakeBiome = RTGAPI.getRTGBiome(Biomes.RIVER);
-    private final IRealisticBiome scenicFrozenLakeBiome = RTGAPI.getRTGBiome(Biomes.FROZEN_RIVER);
-    private SmoothingSearchStatus beachSearch;
-    private SmoothingSearchStatus landSearch;
-    private SmoothingSearchStatus oceanSearch;
 
     public BiomeAnalyzer() {
         initBiomes();
-        setupBeachesForBiomes();
-        setSearches();
     }
 
     public int[] xyinverted() {
@@ -77,18 +65,6 @@ public final class BiomeAnalyzer {
         }
     }
 
-    private void setupBeachesForBiomes() {
-        for (Biome biome : ForgeRegistries.BIOMES.getValuesCollection()) {
-            if (biome != null) {
-                final int id = Biome.getIdForBiome(biome);
-                final Map.Entry<Biome, IRealisticBiome> realisticBiome = RTGAPI.RTG_BIOMES.get(id);
-                if (realisticBiome != null) {
-                    preferredBeach.set(id, realisticBiome.getValue().getBeachBiome().baseBiomeId());
-                }
-            }
-        }
-    }
-
     public void newRepair(final Biome[] genLayerBiomes, final int[] biomeNeighborhood, final ChunkLandscape landscape) {
         final IRealisticBiome[] jitteredBiomes = landscape.biome;
         final float[] noise = landscape.noise;
@@ -118,313 +94,65 @@ public final class BiomeAnalyzer {
             final int biomeFlags = biomeIDs.get(realisticBiomeId);
             final boolean isVanillaRiver = (biomeFlags & RIVER_FLAG) != 0;
             boolean canBeRiver = riverStrength[i] > RTGWorld.RIVER_BIOME_THRESHOLD;
-            if (noise[i] > 61.5) {
+            // 这一步是否**替换**掉了 provider 给的群系（河流/回落）。
+            // 只有替换掉的列，地表才必须跟着走 —— 见下方 surfaceBiome 的处理。
+            boolean substituted;
+            if (noise[i] > WaterLevel.current().cliffBandLow()) {
                 // Above water: if vanilla assigned River but RTG detects no river,
                 // replace with land biome to prevent dry stone "river" paths
                 if (isVanillaRiver && !canBeRiver) {
                     jitteredBiomes[i] = fallbackLand;
+                    substituted = true;
                 } else {
                     jitteredBiomes[i] = realisticBiome;
+                    substituted = false;
                 }
             } else {
                 // Below water: assign River biome if RTG detects a strong river
                 if (canBeRiver && (biomeFlags & OCEAN_FLAG) == 0 && (biomeFlags & SWAMP_FLAG) == 0) {
                     jitteredBiomes[i] = realisticBiome.getRiverBiome();
+                    substituted = true;
                 } else {
                     jitteredBiomes[i] = realisticBiome;
+                    substituted = false;
                 }
+            }
+
+            // ---- 地表数组（RWG `randBiome` 的产物）----
+            //
+            // `landscape.surfaceBiome[]` 由 `ChunkGeneratorRTG.getNewerNoise` 按混合权重 + 15 格噪声
+            // 预先算好（抖动只在权重混合的过渡带里挑出**另一个**群系）。
+            // 但**被替换过的列**（河面下换成河流群系、或旱河回落陆地）必须跟随主群系：
+            // 河床的地表要按河流群系刷成沙/砾，不能拿过渡带抖出来的陆地群系去刷 —— 那是回归。
+            // 未替换的列保留抖动结果，于是过渡带内 F3（{@code biome[]}）与地表（本数组）不同，
+            // 这正是 RWG 的行为，用户已认可。
+            if (substituted || landscape.surfaceBiome[i] == null) {
+                landscape.surfaceBiome[i] = jitteredBiomes[i];
             }
         }
 
-        // 处理海滩
-        beachSearch.setNotHunted();
-        beachSearch.setAbsent();
-        float beachTop = 64.5f;
-        for (int i = 0; i < genLayerBiomes.length; i++) {
-            if (beachSearch.isAbsent()) {
-                break;
-            }
-            float beachBottom = 61.5f;
-            float adjustedBeachTop = riverAdjusted(beachTop, riverStrength[i]);
-            boolean isBeachLevel = (noise[i] >= beachBottom && noise[i] <= adjustedBeachTop);
-            int biomeID = Biome.getIdForBiome(jitteredBiomes[i].baseBiome());
-            boolean isSwamp = ((biomeIDs.get(biomeID) & SWAMP_FLAG) != 0);
-            if (!isBeachLevel || isSwamp) {
-                continue;
-            }
-            if (beachSearch.isNotHunted()) {
-                beachSearch.hunt(biomeNeighborhood);
-                landSearch.hunt(biomeNeighborhood);
-            }
-            int foundBiome = beachSearch.biomeIDs.get(i);
-            if (foundBiome != NO_BIOME) {
-                int nearestLandBiome = landSearch.biomeIDs.get(i);
-                if (nearestLandBiome > -1) {
-                    foundBiome = preferredBeach.get(nearestLandBiome);
-                }
-                jitteredBiomes[i] = RTGAPI.getRTGBiome(foundBiome);
-            }
-        }
-
-        // 处理陆地
-        landSearch.setAbsent();
-        landSearch.setNotHunted();
-        for (int i = 0; i < genLayerBiomes.length; i++) {
-            if (landSearch.isAbsent() && beachSearch.isAbsent()) {
-                break;
-            }
-            float adjustedBeachTop = riverAdjusted(64.5f, riverStrength[i]);
-            if (noise[i] < adjustedBeachTop) {
-                continue;
-            }
-            int biomeID = Biome.getIdForBiome(jitteredBiomes[i].baseBiome());
-            final int biomeFlags = biomeIDs.get(biomeID);
-            if (((biomeFlags & LAND_FLAG) != 0) || ((biomeFlags & SWAMP_FLAG) != 0)) {
-                continue;
-            }
-            if (landSearch.isNotHunted()) {
-                landSearch.hunt(biomeNeighborhood);
-            }
-            int foundBiome = landSearch.biomeIDs.get(i);
-            if (foundBiome == NO_BIOME && !beachSearch.isAbsent()) {
-                if (beachSearch.isNotHunted()) {
-                    beachSearch.hunt(biomeNeighborhood);
-                }
-                foundBiome = beachSearch.biomeIDs.get(i);
-            }
-            if (foundBiome != NO_BIOME) {
-                jitteredBiomes[i] = RTGAPI.getRTGBiome(foundBiome);
-            }
-        }
-
-        // 处理海洋
-        oceanSearch.setAbsent();
-        oceanSearch.setNotHunted();
-        for (int i = 0; i < genLayerBiomes.length; i++) {
-            if (oceanSearch.isAbsent()) {
-                break;
-            }
-            if (noise[i] > 61.5f) {
-                continue;
-            }
-            int biomeID = Biome.getIdForBiome(jitteredBiomes[i].baseBiome());
-            final int biomeFlags = biomeIDs.get(biomeID);
-            if (((biomeFlags & OCEAN_FLAG) != 0) ||
-                    ((biomeFlags & SWAMP_FLAG) != 0) ||
-                    ((biomeFlags & RIVER_FLAG) != 0)) {
-                continue;
-            }
-            if (oceanSearch.isNotHunted()) {
-                oceanSearch.hunt(biomeNeighborhood);
-            }
-            int foundBiome = oceanSearch.biomeIDs.get(i);
-            if (foundBiome != NO_BIOME) {
-                jitteredBiomes[i] = RTGAPI.getRTGBiome(foundBiome);
-            }
-        }
-
-        // 转换剩余低于海平面的区域为湖泊生物群系
-        for (int i = 0; i < genLayerBiomes.length; i++) {
-            int biomeID = Biome.getIdForBiome(jitteredBiomes[i].baseBiome());
-            final int biomeFlags = biomeIDs.get(biomeID);
-            if (noise[i] <= 61.5 && (biomeFlags & RIVER_FLAG) == 0) {
-                if ((biomeFlags & OCEAN_FLAG) == 0 &&
-                        (biomeFlags & SWAMP_FLAG) == 0 &&
-                        (biomeFlags & BEACH_FLAG) == 0) {
-                    int riverReplacementID = jitteredBiomes[i].getRiverBiome().baseBiomeId();
-                    jitteredBiomes[i] = (riverReplacementID == Biome.getIdForBiome(Biomes.FROZEN_RIVER)) ?
-                            scenicFrozenLakeBiome : scenicLakeBiome;
-                }
-            }
-        }
+        // ⚠ RWG 的群系布局**完全接管**群系选择，故这里原本的两步「事后改写」都已删除：
+        //
+        //   1) 三阶段群系修复（海滩 / 陆地 / 海洋，F-34）—— 这三件事现在由 RtgBiomeLayout
+        //      的海洋 / 岛屿 / 滨海 / 海岸分支负责；
+        //   2) 风景湖改写（把低于 cliffBandLow 的列换成 RIVER / 风景湖群系）—— **RWG 没有这一步**，
+        //      它是 RTG 时代的做法。RWG 的湖泊是**地形特征**：直接写在各群系自己的
+        //      `terrainXxx` 高度公式里（例如 `terrainGrasslandFlats` 的湖底项 `l`），
+        //      而不是替换群系。
+        //
+        // 上面已完成：biomeData（**现实主义群系编号**，见 RtgRealisticIndex）→
+        // jitteredBiomes（= landscape.biome，别名，非副本）。至此群系不再被本类改动。
+        //
+        // D2（1.0.14）：随三阶段修复一起留下的**整套死重量**已删除 ——
+        //   `SmoothingSearchStatus` 内部类（约 170 行）、`hunt` / `search` / `smoothBiomes` /
+        //   `smoothQuadrant` / `addBiome` / `addWeight` / `preferredBiome` / `biomeIndex` /
+        //   `clear` / `isAbsent` / `isNotHunted` / `setNotHunted`（都在那个类里）、
+        //   `filterForFlag` / `setSearches` / `setupBeachesForBiomes` / `riverAdjusted`，
+        //   以及只喂给它们的字段 `preferredBeach` / `flagCache` / `beachSearch` / `landSearch` /
+        //   `oceanSearch` 与常量 `NO_BIOME`。本类现在只剩 `initBiomes` + `newRepair` +
+        //   `xyinverted` 三个成员（355 → 139 行）。
+        //   `biomeNeighborhood` 参数也确认无人使用（其唯一消费者 `hunt` 已删），
+        //   保留形参只为不改调用点签名。
     }
 
-    private List<Boolean> filterForFlag(final int flag) {
-        return flagCache.computeIfAbsent(flag, f -> {
-            List<Boolean> result = new SparseList<>();
-            for (Integer biomeId : biomeIDs) {
-                if (biomeId != null) {
-                    result.set(biomeId, (biomeId & flag) != 0);
-                }
-            }
-            return result;
-        });
-    }
-
-    private void setSearches() {
-        beachSearch = new SmoothingSearchStatus(filterForFlag(BEACH_FLAG));
-        landSearch = new SmoothingSearchStatus(filterForFlag(LAND_FLAG));
-        oceanSearch = new SmoothingSearchStatus(filterForFlag(OCEAN_FLAG));
-    }
-
-    private float riverAdjusted(float top, float river) {
-        if (river <= 0f) {
-            return top;
-        }
-        return top * (1f - river) + 62f * river;
-    }
-
-    private static final class SmoothingSearchStatus {
-        private final int upperLeftFinding = 0;
-        private final int upperRightFinding = 3;
-        private final int lowerLeftFinding = 1;
-        private final int lowerRightFinding = 4;
-        private final int[] quadrantBiome = new int[4];
-        private final float[] quadrantBiomeWeighting = new float[4];
-        private final List<Boolean> desired;
-        private final int[] findings = new int[3 * 3];
-        private final float[] weightings = new float[3 * 3];
-        public List<Integer> biomeIDs = new SparseList<>();
-        private boolean absent = false;
-        private boolean notHunted;
-        private int arraySize;
-        private int[] pattern;
-        private int biomeCount;
-
-        private SmoothingSearchStatus(final List<Boolean> desired) {
-            this.desired = desired;
-        }
-
-        private int size() {
-            return 3;
-        }
-
-        private void hunt(int[] biomeNeighborhood) {
-            clear();
-            int oldArraySize = arraySize;
-            arraySize = (int) Math.sqrt(biomeNeighborhood.length);
-            if (arraySize * arraySize != biomeNeighborhood.length) {
-                throw new RuntimeException("non-square array");
-            }
-            if (arraySize != oldArraySize) {
-                pattern = new CircularSearchCreator().pattern(arraySize / 2f - 1, arraySize);
-            }
-            for (int xOffset = -1; xOffset <= 1; xOffset++) {
-                for (int zOffset = -1; zOffset <= 1; zOffset++) {
-                    search(xOffset, zOffset, biomeNeighborhood);
-                }
-            }
-            smoothBiomes();
-        }
-
-        private void search(int xOffset, int zOffset, int[] biomeNeighborhood) {
-            int offset = xOffset * arraySize + zOffset;
-            int location = (xOffset + 1) * size() + zOffset + 1;
-            findings[location] = NO_BIOME;
-            weightings[location] = 2.0f;
-            for (int i = 0; i < pattern.length; i++) {
-                int biome = biomeNeighborhood[pattern[i] + offset];
-                if (biome >= 0 && biome < desired.size() && Boolean.TRUE.equals(desired.get(biome))) {
-                    findings[location] = biome;
-                    weightings[location] = (float) Math.sqrt(pattern.length) - (float) Math.sqrt(i) + 2.0f;
-                    break;
-                }
-            }
-        }
-
-        private void smoothBiomes() {
-            smoothQuadrant(biomeIndex(0, 0), upperLeftFinding);
-            smoothQuadrant(biomeIndex(8, 0), upperRightFinding);
-            smoothQuadrant(biomeIndex(0, 8), lowerLeftFinding);
-            smoothQuadrant(biomeIndex(8, 8), lowerRightFinding);
-        }
-
-        private void smoothQuadrant(int biomesOffset, int findingsOffset) {
-            int upperLeft = findings[upperLeftFinding + findingsOffset];
-            int upperRight = findings[upperRightFinding + findingsOffset];
-            int lowerLeft = findings[lowerLeftFinding + findingsOffset];
-            int lowerRight = findings[lowerRightFinding + findingsOffset];
-
-            if (upperLeft == upperRight && upperLeft == lowerLeft && upperLeft == lowerRight) {
-                for (int x = 0; x < 8; x++) {
-                    for (int z = 0; z < 8; z++) {
-                        biomeIDs.set(biomeIndex(x, z) + biomesOffset, upperLeft);
-                    }
-                }
-                return;
-            }
-
-            float weightUL = weightings[upperLeftFinding + findingsOffset];
-            float weightUR = weightings[upperRightFinding + findingsOffset];
-            float weightLL = weightings[lowerLeftFinding + findingsOffset];
-            float weightLR = weightings[lowerRightFinding + findingsOffset];
-            biomeCount = 0;
-            addBiome(upperLeft);
-            addBiome(upperRight);
-            addBiome(lowerLeft);
-            addBiome(lowerRight);
-            for (int x = 0; x < 8; x++) {
-                float term1 = 7.0f - x;
-                for (int z = 0; z < 8; z++) {
-                    float term2 = 7.0f - z;
-                    for (int i = 0; i < 4; i++) {
-                        quadrantBiomeWeighting[i] = 0.0f;
-                    }
-                    addWeight(upperLeft, weightUL * term1 * term2);
-                    addWeight(upperRight, weightUR * x * term2);
-                    addWeight(lowerLeft, weightLL * term1 * z);
-                    addWeight(lowerRight, weightLR * x * z);
-                    biomeIDs.set(biomeIndex(x, z) + biomesOffset, preferredBiome());
-                }
-            }
-        }
-
-        private void addBiome(int biome) {
-            if (biome == NO_BIOME) return;
-            for (int i = 0; i < biomeCount; i++) {
-                if (biome == quadrantBiome[i]) {
-                    return;
-                }
-            }
-            if (biomeCount < 4) {
-                quadrantBiome[biomeCount++] = biome;
-            }
-        }
-
-        private void addWeight(int biome, float weight) {
-            if (biome == NO_BIOME || weight <= 0.0f) return;
-            for (int i = 0; i < biomeCount; i++) {
-                if (biome == quadrantBiome[i]) {
-                    quadrantBiomeWeighting[i] += weight;
-                    return;
-                }
-            }
-        }
-
-        private int preferredBiome() {
-            float bestWeight = -1.0f;
-            int result = NO_BIOME;
-            for (int i = 0; i < biomeCount; i++) {
-                if (quadrantBiomeWeighting[i] > bestWeight) {
-                    bestWeight = quadrantBiomeWeighting[i];
-                    result = quadrantBiome[i];
-                }
-            }
-            return result;
-        }
-
-        private int biomeIndex(int x, int z) {
-            return x * 16 + z;
-        }
-
-        private void clear() {
-            Arrays.fill(findings, NO_BIOME);
-        }
-
-        private boolean isAbsent() {
-            return absent;
-        }
-
-        private void setAbsent() {
-            this.absent = true;
-        }
-
-        private boolean isNotHunted() {
-            return notHunted;
-        }
-
-        private void setNotHunted() {
-            this.notHunted = true;
-        }
-    }
 }

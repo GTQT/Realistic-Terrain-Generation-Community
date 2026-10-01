@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.gen.ChunkProviderServer;
 
@@ -14,11 +12,9 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import rtg.RTG;
 import rtg.RTGConfig;
-import rtg.api.RTGAPI;
-import rtg.api.util.Distribution;
 import rtg.api.util.Logger;
 import rtg.api.util.noise.CellularNoise;
-import rtg.api.util.noise.OpenSimplexNoise;
+import rtg.api.util.noise.PerlinNoise;
 import rtg.api.util.noise.SimplexNoise;
 import rtg.api.util.noise.SpacedCellularNoise;
 import rtg.api.world.gen.RTGChunkGenSettings;
@@ -77,8 +73,13 @@ public final class RTGWorld {
         this.chunkSeedX = chunkSeedRand.nextLong() / 2L * 2L + 1L;
         this.chunkSeedZ = chunkSeedRand.nextLong() / 2L * 2L + 1L;
 
+        // 噪声后端 = RWG 的经典 Perlin。RWG 的实际默认就是它：
+        // RwgWorldSavedData.noiseImplementation 字段初值 = UNKNOWN，
+        // NoiseSelector 把 UNKNOWN / DYNAMICPERLIN 都映射为 useOpenSimplex = false，
+        // 于是 NoiseGeneratorWrapper.noise2() 转发给 PerlinNoise.noise2()。
+        // 地形常数是照 RWG 抄的，而 RWG 那套常数调的是经典 Perlin 场 —— 后端一致才谈得上"照抄"。
         for (int i = 0; i < SIMPLEX_INSTANCE_COUNT; i++) {
-            this.simplexNoiseInstances[i] = new OpenSimplexNoise(this.seed() + i);
+            this.simplexNoiseInstances[i] = new PerlinNoise(this.seed() + i);
         }
         for (int i = 0; i < CELLULAR_INSTANCE_COUNT; i++) {
             this.cellularNoiseInstances[i] = new SpacedCellularNoise(this.seed() + i);
@@ -227,7 +228,8 @@ public final class RTGWorld {
      * @since 1.0.0
      */
     public double getRiverValleyLevel() {
-        return RIVER_VALLEY_LEVEL_BASE * generatorSettings.riverSizeMult * generatorSettings.riverFrequency;
+        return RIVER_VALLEY_LEVEL_BASE * generatorSettings.riverSizeMult * generatorSettings.riverFrequency
+                * RTGConfig.riverSizeFactor();
     }
 
     public float getLakeFrequency() {
@@ -258,7 +260,7 @@ public final class RTGWorld {
     	if (river > ACTUAL_RIVER_PROPORTION) return river;// no adjustment for land area.
     	// otherwise adjust the amount below 
     	river -= ACTUAL_RIVER_PROPORTION;
-    	river = river * (63F-RTGWorld.RIVER_BOTTOM)/(63F-RTGWorld.LAKE_BOTTOM);
+    	river = river * (WaterLevel.current().seaLevel()-RTGWorld.RIVER_BOTTOM)/(WaterLevel.current().seaLevel()-RTGWorld.LAKE_BOTTOM);
     	river += ACTUAL_RIVER_PROPORTION;
     	return river;
     }

@@ -17,16 +17,10 @@ import rtg.api.util.ChunkInfo;
 import rtg.api.util.BlockUtil.MatchType;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
-import rtg.api.world.gen.feature.WorldGenShrubRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGAcaciaAbyssinica;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGAcaciaAbyssinicaMega;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGAcaciaBucheri;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusFalcata;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusNigra;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusRobur;
 
 /**
  * Variable Trees

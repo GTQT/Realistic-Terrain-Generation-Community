@@ -1,19 +1,14 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
 import biomesoplenty.api.biome.BOPBiomes;
 
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
 
-import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoBoulder;
@@ -26,8 +21,7 @@ import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPapyrifera;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPiceaSitchensis;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.api.world.terrain.heighteffect.HeightVariation;
-import rtg.api.world.terrain.heighteffect.JitterEffect;
+import rtg.api.world.surface.SurfaceGrassland;
 
 
 public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
@@ -53,8 +47,7 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-
-        return new SurfaceBOPLandOfLakes(getConfig(), Blocks.GRASS.getDefaultState(), Blocks.DIRT.getDefaultState(), 0f, 1.5f, 60f, 65f, 1.5f, Blocks.GRASS.getDefaultState(), 0.10f);
+        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
     }
 
     @Override
@@ -125,152 +118,24 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
         this.addDeco(decoBoulder);
     }
 
+    /**
+     * 依据：RWG {@code SupportBOP.java:461-470} 的 {@code landOfLakesMarsh} 条目 ——
+     * {@code HOT_BORDER}，地形 {@code new TerrainGrasslandHills(90f, 180f, 13f, 100f, 38f, 260f, 71f)}。
+     * <p>
+     * <b>近亲推断</b>：RWG 只收了 BOP 的 {@code landOfLakesMarsh}（沼泽变体），
+     * rtgc 这个群系对应的是 BOP 的 {@code landOfLakes}。两者同族，取同值。
+     */
     public static class TerrainBOPLandOfLakes extends TerrainBase {
 
-        private float minHeight;
-        private float maxHeight;
-        private float hillStrength;
-        private HeightVariation small;
-        private HeightVariation large;
-        private JitterEffect largeJitter;
-        private JitterEffect smallJitter;
-
-
         public TerrainBOPLandOfLakes() {
-            super(63f);
-            small = new HeightVariation();
-            small.height = 2.5f;
-            small.octave = 1;
-            small.wavelength = 10;
 
-            large = new HeightVariation();
-            large.height = 5;
-            large.octave = 2;
-            large.wavelength = 20;
-
-            smallJitter = new JitterEffect();
-            smallJitter.amplitude = 2;
-            smallJitter.wavelength = 9;
-            smallJitter.jittered = large.plus(small);
-
-            largeJitter = new JitterEffect();
-            largeJitter.amplitude = 4;
-            largeJitter.wavelength = 18;
-            largeJitter.jittered = smallJitter;
-
-        }
-
-        public TerrainBOPLandOfLakes(float minHeight, float maxHeight, float hillStrength) {
-
-            this.minHeight = minHeight;
-            this.maxHeight = (maxHeight > rollingHillsMaxHeight) ? rollingHillsMaxHeight : ((maxHeight < this.minHeight) ? rollingHillsMaxHeight : maxHeight);
-            this.hillStrength = hillStrength;
         }
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-            return riverized(largeJitter.added(rtgWorld, x, y) + this.base, river);
-            //return terrainRollingHills(x, y, rtgWorld.simplex, river, hillStrength, maxHeight, groundNoise, groundNoiseAmplitudeHills, 0f);
+
+            return terrainGrasslandHills(x, y, rtgWorld, river, 90f, 180f, 13f, 100f, 38f, 260f, 71f);
         }
     }
 
-    public static class SurfaceBOPLandOfLakes extends SurfaceBase {
-
-        private float min;
-
-        private float sCliff = 1.5f;
-        private float sHeight = 60f;
-        private float sStrength = 65f;
-        private float cCliff = 1.5f;
-
-        private IBlockState mix;
-        private float mixHeight;
-
-        public SurfaceBOPLandOfLakes(BiomeConfig config, IBlockState top, IBlockState fill, float minCliff, float stoneCliff,
-                                     float stoneHeight, float stoneStrength, float clayCliff, IBlockState mixBlock, float mixSize) {
-
-            super(config, top, fill);
-            min = minCliff;
-
-            sCliff = stoneCliff;
-            sHeight = stoneHeight;
-            sStrength = stoneStrength;
-            cCliff = clayCliff;
-
-            mix = mixBlock;
-            mixHeight = mixSize;
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            int cliff = 0;
-            boolean m = false;
-
-            Block b;
-            for (int k = 255; k > -1; k--) {
-                b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (depth == 0) {
-
-                        float p = simplex.noise3f(i / 8f, j / 8f, k / 8f) * 0.5f;
-                        if (c > min && c > sCliff - ((k - sHeight) / sStrength) + p) {
-                            cliff = 1;
-                        }
-                        if (c > cCliff) {
-                            cliff = 2;
-                        }
-
-                        if (cliff == 1) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (cliff == 2) {
-                            primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else if (k < 63) {
-                            if (k < 62) {
-                                primer.setBlockState(x, k, z, fillerBlock);
-                            }
-                            else {
-                                primer.setBlockState(x, k, z, topBlock);
-                            }
-                        }
-                        else if (simplex.noise2f(i / 12f, j / 12f) > mixHeight) {
-                            primer.setBlockState(x, k, z, mix);
-                            m = true;
-                        }
-                        else {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                    }
-                    else if (depth < 6) {
-                        if (cliff == 1) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                        else if (cliff == 2) {
-                            primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

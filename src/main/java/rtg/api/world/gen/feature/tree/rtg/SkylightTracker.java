@@ -5,6 +5,8 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
+import rtg.api.world.WaterLevel;
+
 class SkylightTracker {
 	
 	private final int distance;
@@ -571,7 +573,7 @@ class SkylightTracker {
 				boolean looking = true; 
 				int y = lowest[localX][localZ] - 1;
 				if (y>=254) continue; // this tree didn't place any blocks there
-				while (y>62) {
+				while (y>WaterLevel.current().waterSurfaceTop()) {
 					BlockPos position = new BlockPos(base.getX()-distance + localX, y,base.getZ()-distance + localZ);
 					if (world.getBlockState(position).getLightOpacity()>10) {
 						if (looking) {

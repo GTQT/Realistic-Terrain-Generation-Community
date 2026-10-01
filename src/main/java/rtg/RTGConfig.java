@@ -61,34 +61,41 @@ public final class RTGConfig {
             config.save();
         }
 
+        // 按类型回读**所有**设置。
+        //
+        // 原实现是一个只列出少数枚举常量的 switch，且没有 default 分支，于是：
+        //   · 所有 INTEGER 设置（islandScheme / tempScheme / rainScheme /
+        //     riverSize / biomeSize / surfaceBlendRadius）**永远**停留在硬编码默认值；
+        //   · 未列出的 DOUBLE 同样永不生效；
+        //   · 未列出的 BOOLEAN 同样永不生效；
+        //   · STRING 数组（blacklistMods）从未被读取。
+        // 表现就是：配置文件里明明写着用户设的值，代码读到的却始终是默认值
+        // （当时实测：rtgc.cfg 里 landScheme=2，代码读到的却是 1）。
         Arrays.stream(Setting.values()).forEach(setting -> {
-            switch (setting) {
-                case worldTypeNotification:
-                case defaultWorldType:
-                case enableDebugging:
-                case additionalBiomeInfo:
-                case lushRiverbanksInDesert:
-                case rtgTreesFromSaplings:
-                case treesCanGenerateOnSand:
-                case shrubsBelowSurface:
-                case barkCoveredLogs:
-                    setting.setCurVal(getProperty(setting).getBoolean());
+            final Property property = getProperty(setting);
+            switch (setting.getType()) {
+                case BOOLEAN:
+                    setting.setCurVal(property.getBoolean());
                     break;
-                case patchBiome:
-                case shadowStoneBlock:
-                case shadowDesertBlock:
-                    setting.setCurVal(getProperty(setting).getString());
+                case INTEGER:
+                    setting.setCurVal(property.getInt());
                     break;
-                case surfaceBlendRadius:
+                case DOUBLE:
+                    setting.setCurVal(property.getDouble());
                     break;
-                case riverDepth:
-                    setting.setCurVal(getProperty(setting).getDouble());
+                case STRING:
+                    if (setting.isArray()) {
+                        setting.setCurVal(property.getStringList());
+                    } else {
+                        setting.setCurVal(property.getString());
+                    }
                     break;
-                case waterFeatureWidthMultiplier:
-                    setting.setCurVal(getProperty(setting).getDouble());
-                    break;
-                case treeDensityMultiplier:
-                    setting.setCurVal(getProperty(setting).getDouble());
+                case MOD_ID:
+                case COLOR:
+                default:
+                    // 本配置未使用 COLOR；defaultWorldType（MOD_ID）的属性实际以字符串存储，
+                    // 沿用历史上 getBoolean() 的语义以保持行为不变。
+                    setting.setCurVal(property.getBoolean());
                     break;
             }
         });
@@ -161,8 +168,18 @@ public final class RTGConfig {
         return (Integer) Setting.riverSize.getCurVal();
     }
 
-    public static int getLandScheme() {
-        return (Integer) Setting.landScheme.getCurVal();
+    /**
+     * 把 {@code geography.riverSize}（1–10，默认 4）映射为河谷阈值的缩放系数。
+     * 默认值 4 对应系数 1.0（行为不变）；值越大，被判定为河谷的范围越宽、河网越密。
+     * <p>
+     * 这是在 WP-6 中为原先**无任何调用者**的 {@code getRiverSize()} 接上的实际用途（决策 D-4）。
+     */
+    public static float riverSizeFactor() {
+        return 1f + (getRiverSize() - 4) * 0.1f;
+    }
+
+    private static double dbl(Setting setting) {
+        return ((Double) setting.getCurVal()).doubleValue();
     }
 
     public static int getIslandScheme() {
@@ -307,7 +324,9 @@ public final class RTGConfig {
 
         biomeSize(Type.INTEGER, Category.geography,
                 "Number of times biomes are scaled and refined.\n" +
-                        "!Smaller values result in smaller, more fragmented biomes with more frequent terrain transitions!",
+                        "!Smaller values result in smaller, more fragmented biomes with more frequent terrain transitions!\n" +
+                        "!仅装 Biomes O' Plenty 时生效（它驱动的是 BOP 自己的 GenLayer 栈；!\n" +
+                        "!本仓库的基础群系来自原版 GenLayer，没有对应机制可接）。!",
                 5, 1, 10),
 
         riverSize(Type.INTEGER, Category.geography,
@@ -315,24 +334,22 @@ public final class RTGConfig {
                         "!Larger values lead to denser and more intricate river systems!",
                 4, 1, 10),
 
-        landScheme(Type.INTEGER, Category.geography,
-                "Global land and sea distribution.\n" +
-                        "!1: Vanilla distribution (no clear preference) 2: Continents 3: Archipelagos!",
-                1, 1, 3),
-
         islandScheme(Type.INTEGER, Category.geography,
                 "Global island and ocean distribution.\n" +
-                        "!1: Vanilla distribution (no clear preference) 2: Continents 3: Archipelagos!",
+                        "!1: Vanilla distribution (no clear preference) 2: Continents 3: Archipelagos!\n" +
+                        "!仅装 Biomes O' Plenty 时生效（同上）。本项控制的是 BOP 的「小岛」层。!",
                 1, 1, 3),
 
         tempScheme(Type.INTEGER, Category.geography,
                 "Temperature distribution patterns.\n" +
-                        "!1: Latitude-based 2: Small areas 3: Medium areas 4: Large areas 5: Random!",
+                        "!1: Latitude-based 2: Small areas 3: Medium areas 4: Large areas 5: Random!\n" +
+                        "!仅装 Biomes O' Plenty 时生效（同上）。!",
                 3, 1, 5),
 
         rainScheme(Type.INTEGER, Category.geography,
                 "Precipitation distribution patterns.\n" +
-                        "!1: Small areas 2: Medium areas 3: Large areas 4: Random!",
+                        "!1: Small areas 2: Medium areas 3: Large areas 4: Random!\n" +
+                        "!仅装 Biomes O' Plenty 时生效（同上）。!",
                 3, 1, 4),
 
         enableDebugging(Type.BOOLEAN, Category.debug,
@@ -521,19 +538,25 @@ public final class RTGConfig {
     }
 
     // ========== 性能分析器配置 ==========
+    //
+    // 注意：这三个方法此前是**空壳**（写死 return false / 0），完全无视 JVM 参数，
+    // 导致 gradle.properties 里的 extra_jvm_args 毫无作用、ChunkGenerationProfiler
+    // 从未运行过——"世界生成卡顿"因此长期无法定位。现改为真正读取系统属性。
+    // 与 F-18（sync 未回读配置）属于同一类问题：文档声称的能力与实现不符。
+
     /** 是否启用区块生成性能分析。通过 JVM 参数 {@code -Drtg.enableProfiling=true} 启用。 */
     public static boolean enableProfiling() {
-        return false;
+        return Boolean.getBoolean("rtg.enableProfiling");
     }
 
     /** 性能分析器每 N 个区块打印一次汇总报告，0 禁用自动打印。通过 {@code -Drtg.profilerLogInterval=N} 设置。 */
     public static int profilerLogInterval() {
-        return 0;
+        return Integer.getInteger("rtg.profilerLogInterval", 0);
     }
 
     /** 慢区块阈值（毫秒），超过此阈值的区块将单独输出耗时分解。通过 {@code -Drtg.profilerSlowThresholdMs=N} 设置。 */
     public static int profilerSlowThresholdMs() {
-        return 0;
+        return Integer.getInteger("rtg.profilerSlowThresholdMs", 0);
     }
 
     // ==========

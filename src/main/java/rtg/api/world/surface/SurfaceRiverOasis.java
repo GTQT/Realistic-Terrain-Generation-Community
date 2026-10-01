@@ -7,6 +7,7 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.WaterLevel;
 
 
 public class SurfaceRiverOasis extends SurfaceBase {
@@ -38,8 +39,8 @@ public class SurfaceRiverOasis extends SurfaceBase {
         noiseValue -= noiseNeg;
 
         // Height cut-off
-        if (highestY > 62) {
-            noiseValue -= (highestY - 62) * (1 / 12f);
+        if (highestY > WaterLevel.current().waterSurfaceTop()) {
+            noiseValue -= (highestY - WaterLevel.current().waterSurfaceTop()) * (1 / 12f);
         }
 
         if (river > 0.70 && river + noiseValue > 0.85) {
@@ -51,7 +52,7 @@ public class SurfaceRiverOasis extends SurfaceBase {
                 else if (blockState.getMaterial() != Material.WATER) {
                     depth++;
 
-                    if (depth == 0 && k > 61) {
+                    if (depth == 0 && k > WaterLevel.current().surfaceTopMin()) {
                         primer.setBlockState(x, k, z, Blocks.GRASS.getDefaultState());
                     }
                     else if (depth < 4) {

@@ -3,7 +3,6 @@ package rtg.api.world.gen.feature.tree.rtg;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.Logger;
 import rtg.api.world.deco.DecoVariableAcacia;
 import rtg.api.world.deco.DecoVariableBirch;
 import rtg.api.world.deco.DecoVariableOak;

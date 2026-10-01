@@ -1,19 +1,15 @@
 package rtg.world.biome.realistic.vanilla;
 
-import java.util.Random;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
-import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.DecoTree;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGCocosNucifera;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceCoastDunes;
 import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
 
@@ -44,8 +40,7 @@ public class RealisticBiomeVanillaBeach extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-
-        return new SurfaceVanillaBeach(getConfig(), biome.topBlock, biome.fillerBlock);
+        return new SurfaceCoastDunes(getConfig());
     }
 
     @Override
@@ -79,44 +74,9 @@ public class RealisticBiomeVanillaBeach extends RealisticBiomeBase {
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-            return terrainBeach(x, y, rtgWorld, river, 63f);
+            // 照抄 RWG coast\RealisticBiomeCoastDunes.java:43-63（手写 rNoise，已提为 TerrainBase.terrainCoastDunes）
+            return terrainCoastDunes(x, y, rtgWorld, river);
         }
     }
 
-    public static class SurfaceVanillaBeach extends SurfaceBase {
-
-        private IBlockState mixBlockFill;
-
-        public SurfaceVanillaBeach(BiomeConfig config, IBlockState top, IBlockState filler) {
-
-            super(config, top, filler);
-
-            mixBlockFill = this.getConfigBlock(config.SURFACE_MIX_FILLER_BLOCK.get(), Blocks.SANDSTONE.getDefaultState());
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (depth == 0 && k > 61) {
-                        primer.setBlockState(x, k, z, topBlock);
-                    }
-                    else if (k > 63 && depth > 3 && depth < 6) {
-                        primer.setBlockState(x, k, z, mixBlockFill);
-                    }
-                    else if (depth < 4) {
-                        primer.setBlockState(x, k, z, fillerBlock);
-                    }
-                }
-            }
-        }
-    }
 }

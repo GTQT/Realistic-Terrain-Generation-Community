@@ -47,6 +47,8 @@ public final class ChunkGenerationProfiler {
         SURFACE_JITTER("Surface jitter calc", false),
         /** 生物群系地表方块替换 */
         SURFACE_REPLACE("Biome surface replace", false),
+        /** 地下河隧道与交汇洞厅（WP-3） */
+        RIVER_TUNNELS("River tunnels + chambers", false),
         /** 洞穴生成 */
         CAVES("Cave generation", false),
         /** 峡谷生成 */
@@ -65,6 +67,17 @@ public final class ChunkGenerationProfiler {
         POP_DUNGEONS("Pop: dungeons", false),
         /** 生物群系装饰（树木、花草等） */
         POP_DECORATION("Pop: decoration", false),
+        /**
+         * {@code DecorateBiomeEvent.Pre} 的发出耗时 —— **主要是别的模组的事件处理器**。
+         *
+         * <p>为什么要单列：这两个事件是**本轮才补上发出**的（此前 rtgc 的 populate 取代了
+         * 原版的 {@code ChunkProviderServer#populate}，于是它们是全仓唯一发出点却没发），
+         * 所以"某些模组的装饰处理器现在才开始跑"。一旦装饰阶段出现秒级尖峰，
+         * 单靠"Pop: decoration"这一格分不清是 rtgc 自己的 {@code rDecorate} 还是别人的处理器。
+         */
+        POP_DECO_PRE_EVENT("Pop: deco PreEvent", false),
+        /** {@code DecorateBiomeEvent.Post} 的发出耗时（同理：别人的处理器）。 */
+        POP_DECO_POST_EVENT("Pop: deco PostEvent", false),
         /** 动物生成 */
         POP_ANIMALS("Pop: animals", false),
         /** 雪和冰放置 */

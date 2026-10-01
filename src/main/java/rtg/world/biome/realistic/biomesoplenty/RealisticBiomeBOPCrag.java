@@ -1,19 +1,14 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
 
-import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.api.world.surface.SurfaceCanyon;
 
 
 public class RealisticBiomeBOPCrag extends RealisticBiomeBase {
@@ -38,12 +33,20 @@ public class RealisticBiomeBOPCrag extends RealisticBiomeBase {
 
     @Override
     public TerrainBase initTerrain() {
-        return new TerrainBOPCrag(false, new float[] {2.0f, 0.5f, 6.5f, 0.5f, 14.0f, 0.5f, 19.0f, 0.5f, 23.0f, 0.5f}, 35f, 80f, 60f, 40f, 69f);
+        // 依据：RWG SupportBOP.java:231-237 的 **crag** 条目（该作者以 /* */ 注释掉，属"作者原意"）：
+        //   new TerrainCanyon(false, new float[]{2.0f, 0.5f, 6.5f, 0.5f, 14.0f, 0.5f, 19.0f, 0.5f},
+        //                     35f, 80f, 60f, 40f, 69f)
+        // 注意不要与 L164 那条**未注释**的 `new TerrainCanyon(true, 35f, 160f, 60f, 40f, 69f)` 混淆
+        // —— 那是 `BOPCBiomes.canyon`（峡谷），而 rtgc 没有 canyon 群系。
+        //
+        // 原先的 height 数组多了一对 `23.0f, 0.5f`（RTG 时代添加的第 5 级阶地），
+        // RWG 的参照只有 4 级，已按参照去掉。
+        return new TerrainBOPCrag(false, new float[] {2.0f, 0.5f, 6.5f, 0.5f, 14.0f, 0.5f, 19.0f, 0.5f}, 35f, 80f, 60f, 40f, 69f);
     }
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPCrag(getConfig(), Blocks.STONE.getDefaultState(), Blocks.STONE.getDefaultState(), 0f, 1.5f, 60f, 65f, 1.8f, Blocks.GRASS.getDefaultState(), 1.9f, Blocks.GRAVEL.getDefaultState(), -0.4f);
+        return new SurfaceCanyon(getConfig(), Blocks.SAND.getDefaultState(), Blocks.SAND.getDefaultState(), (byte) 1, 0);
     }
 
     public static class TerrainBOPCrag extends TerrainBase {
@@ -93,177 +96,23 @@ public class RealisticBiomeBOPCrag extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            //float b = simplex.noise2(x / cWidth, y / cWidth) * cHeigth * river;
-            //b *= b / cStrength;
-            river *= 1.3f;
-            river = river > 1f ? 1f : river;
-            float r = simplex.noise2f(x / 100f, y / 100f) * 50f;
-            r = r < -7.4f ? -7.4f : r > 7.4f ? 7.4f : r;
-            float b = (17f + r) * river;
-
-            float hn = simplex.noise2f(x / 12f, y / 12f) * 0.5f;
-            float sb = 0f;
-            if (b > 0f) {
-                sb = b;
-                sb = sb < 0f ? 0f : sb > 7f ? 7f : sb;
-                sb = hn * sb;
-            }
-            b += sb;
-
-            float cTotal = 0f;
-            float cTemp = 0f;
-
-            for (int i = 0; i < heightLength; i += 2) {
-                cTemp = 0;
-                if (b > height[i] && border > 0.6f + (height[i] * 0.015f) + hn * 0.2f) {
-                    cTemp = b > height[i] + height[i + 1] ? height[i + 1] : b - height[i];
-                    cTemp *= strength;
-                }
-                cTotal += cTemp;
-            }
-
-
-            float bn = 0f;
-            if (booRiver) {
-                if (b < 5f) {
-                    bn = 5f - b;
-                    for (int i = 0; i < 3; i++) {
-                        bn *= bn / 4.5f;
-                    }
-                }
-            }
-            else if (b < 5f) {
-                bn = (simplex.noise2f(x / 7f, y / 7f) * 1.3f + simplex.noise2f(x / 15f, y / 15f) * 2f) * (5f - b) * 0.2f;
-            }
-
-            b += cTotal - bn;
-
-            return base + b;
+            // 原先这里内联了一整份 RWG 的 TerrainCanyon.generateNoise（约 50 行）。
+            // 那段内联代码是**忠实**的，而 TerrainBase.terrainCanyon 当时是一份有偏差的死副本
+            //（缺 river*=1.3 钳制、误给 r/sb 乘 river、基高用 getTerrainBase(river) 而非常量 69）。
+            // 现已把 TerrainBase.terrainCanyon 修成与 RWG 逐行一致，并让本群系复用它：
+            // 重复代码消除，且**世界生成结果与内联版完全相同**。
+            //
+            // 本方法的实际数值全部来自构造函数（见 `initTerrain()`）：**RWG 注释掉的 crag 条目原参数**
+            //（`false` + `{2.0,0.5,6.5,0.5,14.0,0.5,19.0,0.5}` + 35f/80f/60f/40f/69f）。
+            //
+            // ⚠ 这里与 `initSurface()` 是**有意混用两条 RWG 条目**，属选择性推断（不是照抄）：
+            //   · 地形：crag 注释条目（`SupportBOP.java:231-237`）；
+            //   · 地表：canyon 的 active 条目（`:157-165` → `SurfaceCanyon(sand, sand, 1, 0)`），
+            //     而 crag 注释行给的是 `SurfaceGrassland(crag.topBlock, crag.fillerBlock, stone, cobble)`。
+            //   理由：BOP 的 crag 是石质峭壁，峡谷地表比草原地表更接近它的观感。
+            return terrainCanyon(x, y, rtgWorld, river, height, border, strength, heightLength, booRiver, base);
         }
     }
 
 
-    public static class SurfaceBOPCrag extends SurfaceBase {
-
-        private float min;
-
-        private float sCliff = 1.5f;
-        private float sHeight = 60f;
-        private float sStrength = 65f;
-        private float cCliff = 1.5f;
-
-        private IBlockState mixBlock;
-        private float mixHeight;
-        private IBlockState mix2Block;
-        private float mix2Height;
-
-        public SurfaceBOPCrag(BiomeConfig config, IBlockState top, IBlockState fill, float minCliff, float stoneCliff,
-                                    float stoneHeight, float stoneStrength, float clayCliff, IBlockState mix, float mixHeight, IBlockState mix2, float mix2Height) {
-
-            super(config, top, fill);
-            min = minCliff;
-
-            sCliff = stoneCliff;
-            sHeight = stoneHeight;
-            sStrength = stoneStrength;
-            cCliff = clayCliff;
-
-            this.mixBlock = this.getConfigBlock(config.SURFACE_MIX_BLOCK.get(), mix);
-            this.mixHeight = mixHeight;
-            this.mix2Block = this.getConfigBlock(config.SURFACE_MIX_2_BLOCK.get(), mix2);
-            this.mix2Height = mix2Height;
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            int cliff = 0;
-            boolean m = false;
-
-            Block b;
-            for (int k = 255; k > -1; k--) {
-                b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (depth == 0) {
-
-                        float p = simplex.noise3f(i / 8f, j / 8f, k / 8f) * 0.5f;
-                        if (c > min && c > sCliff - ((k - sHeight) / sStrength) + p) {
-                            cliff = 1;
-                        }
-                        if (c > cCliff) {
-                            cliff = 2;
-                        }
-
-                        if (cliff == 1) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (cliff == 2) {
-                            primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else if (k < 63) {
-                            if (k < 62) {
-                                primer.setBlockState(x, k, z, fillerBlock);
-                            }
-                            else {
-                                primer.setBlockState(x, k, z, topBlock);
-                            }
-                        }
-                        else {
-                            float mixNoise = simplex.noise2f(i / 12f, j / 12f);
-
-                            if (mixNoise < mix2Height) {
-                                primer.setBlockState(x, k, z, mix2Block);
-                                m = true;
-                            }
-                            else if (mixNoise > mixHeight) {
-                                primer.setBlockState(x, k, z, mixBlock);
-                                m = true;
-                            }
-                            else {
-                                primer.setBlockState(x, k, z, topBlock);
-                            }
-                        }
-                    }
-                    else if (depth < 6) {
-                        if (cliff == 1) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                        else if (cliff == 2) {
-                            primer.setBlockState(x, k, z, getShadowStoneBlock());
-                        }
-                        else {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
-        }
-
-        @Override
-        protected IBlockState getShadowStoneBlock() {
-
-            return Blocks.COBBLESTONE.getDefaultState();
-        }
-
-        @Override
-        protected IBlockState hcCobble() {
-            return Blocks.STONE.getDefaultState();
-        }
-    }
 }

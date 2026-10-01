@@ -12,7 +12,6 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 import rtg.RTGConfig;
 import rtg.api.event.DecorateBiomeEventRTG;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.BlockUtil.MatchType;
 import rtg.api.util.ChunkInfo;
 import rtg.api.util.Distribution;
 import rtg.api.util.Logger;

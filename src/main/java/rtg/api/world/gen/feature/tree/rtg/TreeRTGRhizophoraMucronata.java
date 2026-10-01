@@ -3,7 +3,6 @@ package rtg.api.world.gen.feature.tree.rtg;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import rtg.api.util.Logger;
 import rtg.api.util.RTGTreeData;
 
 import java.util.Random;

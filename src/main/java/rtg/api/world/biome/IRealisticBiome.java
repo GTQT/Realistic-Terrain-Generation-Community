@@ -61,8 +61,6 @@ public interface IRealisticBiome {
 
     double lavaLakeMult();
 
-    float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval, float largeBendSize, float mediumBendSize, float smallBendSize);
-
     void initDecos();
 
     public boolean allowVanillaTrees();
@@ -172,20 +170,76 @@ public interface IRealisticBiome {
     default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, final float[] noise) {
         ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld, noise);
 
+        // 归因计时（只在 profiler 打开时累计；见 ChunkInfo 的装饰耗时说明）
+        ChunkInfo.noteDecoratedBiome(String.valueOf(this.baseBiomeResLoc()));
+        final long tOwn = System.nanoTime();
         for (DecoBase deco : this.getDecos()) {
             if (deco.preGenerate(river)) {
+                ChunkInfo.noteInvocation();      // D4 诊断：记录"实际被调用了几个 deco"
+                final long tDeco = System.nanoTime();
                 deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
+                ChunkInfo.noteDeco(deco.getClass().getSimpleName(), System.nanoTime() - tDeco);
             }
         }
+        ChunkInfo.noteOwnDecoNs(System.nanoTime() - tOwn);
 
+        // ⚠ 海洋群系把这一段**推迟到冰雪之后**（RWG 的 `rDecorateAfterIce`）——
+        // 见 defersVanillaDecorateUntilAfterIce() 的说明。
+        if (!defersVanillaDecorateUntilAfterIce()) {
+            vanillaDecorate(rtgWorld, rand, chunkPos);
+        }
+    }
+
+    /**
+     * 原版 / BOP 的装饰本体（{@code rDecorate} 的尾段抽出来，供**延迟路径**复用）。
+     *
+     * <p>抽出来的唯一理由：RWG 的海洋群系把这一步放到冰雪之后（{@code rDecorateAfterIce}），
+     * 而 {@code rDecorate} 与延迟路径必须跑**同一段**代码，不能各写一份（会漂移）。
+     */
+    default void vanillaDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos) {
+        final long tVanilla = System.nanoTime();
+        final BlockPos pos = new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16);
         if (overridesHardcoded()) {
-            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(),
-                    new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
+            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), pos);
         } else {
             disableVanillaVegetation();
-            this.baseBiome().decorate(rtgWorld.world(), rand,
-                    new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16));
+            this.baseBiome().decorate(rtgWorld.world(), rand, pos);
         }
+        ChunkInfo.noteVanillaDecoNs(System.nanoTime() - tVanilla);
+    }
+
+    /**
+     * 是否把原版装饰推迟到**冰雪之后** —— RWG 的 {@code RealisticBiomeOcean} 专用机制。
+     *
+     * <h2>RWG 为什么要这么做</h2>
+     *
+     * RWG 的海洋群系 {@code rDecorate} 是**空的**（RTG 不对海洋做装饰），它唯一的装饰是
+     * {@code rDecorateAfterIce}：把 {@code Biome.decorate}（原版/BOP 自己的装饰器，
+     * 在 BOP 的 {@code kelp_forest}/{@code coral_reef} 上放的就是珊瑚与海草）**推迟到
+     * RWG 自己的"水面结冰 + 铺雪层"pass 之后**再跑 —— 否则随后铺的冰会把刚放下的装饰压掉/盖住。
+     * 另外它还带一个门控：只有该海洋群系在本区块的**混合权重 > 0.3** 时才装饰
+     * （RWG {@code RealisticBiomeOcean:49}），即"只有占主导的那个海洋群系才动手"。
+     *
+     * <p>rtgc 侧只有 {@code BOPKelpForest} / {@code BOPCoralReef} 覆写为 {@code true}：
+     * RWG 里 {@code decorateBaseBiome} 为 true 的也**只有** BOP 那两个
+     * （原版海洋变体在 {@code Support.java:156-174} 里传的都是 {@code false}）。
+     * rtgc 的原版海洋群系保持原样 —— 它们的 {@code Biome.decorate} 里还带着**矿物生成**，
+     * 关掉会连矿一起没了，那是回归而不是移植。
+     */
+    default boolean defersVanillaDecorateUntilAfterIce() {
+        return false;
+    }
+
+    /**
+     * RWG {@code rDecorateAfterIce(world, rand, chunkX, chunkZ, strength)} 的等价物。
+     *
+     * @param chunkX 区块原点的**方块坐标**（与 RWG 的调用口径一致）
+     * @param chunkZ 同上
+     * @param strength 该海洋群系在本区块的混合权重；RWG 用它做 {@code > 0.3f} 的门控
+     */
+    default void rDecorateAfterIce(final RTGWorld rtgWorld, final Random rand,
+                                   final int chunkX, final int chunkZ, final float strength) {
+        // 默认什么都不做：只有推迟了装饰的群系才需要在这里补上
     }
 
     /** 当RTG已处理植被时，禁用原版装饰器中的对应项，避免双重生成 */

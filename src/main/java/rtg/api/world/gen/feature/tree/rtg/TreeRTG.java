@@ -14,7 +14,6 @@ import net.minecraft.world.gen.feature.WorldGenAbstractTree;
 import rtg.RTGConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.Logger;
-import rtg.api.util.RTGTreeData;
 import rtg.api.world.deco.DecoBase;
 
 import java.util.ArrayList;

@@ -46,24 +46,6 @@ public class ModCompat {
 
         List<Biome> invalidBiomes = Lists.newArrayList(Biomes.HELL, Biomes.SKY, Biomes.VOID);
 
-        if (Mods.abyssalcraft.isLoaded()) {
-            invalidBiomes.addAll(
-                    Stream.of(
-                                    Mods.abyssalcraft.getResourceLocation("abyssal_wastelands"),
-                                    Mods.abyssalcraft.getResourceLocation("dark_realm"),
-                                    Mods.abyssalcraft.getResourceLocation("dreadlands"),
-                                    Mods.abyssalcraft.getResourceLocation("dreadlands_forest"),
-                                    Mods.abyssalcraft.getResourceLocation("dreadlands_mountains"),
-                                    Mods.abyssalcraft.getResourceLocation("omothol"),
-                                    Mods.abyssalcraft.getResourceLocation("purified_dreadlands"),
-                                    Mods.abyssalcraft.getResourceLocation("purged")
-                            )
-                            .map(ForgeRegistries.BIOMES::getValue)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toList())
-            );
-        }
-
         if (Mods.biomesoplenty.isLoaded()) {
             invalidBiomes.addAll(
                     Stream.of(
@@ -74,32 +56,6 @@ public class ModCompat {
                                     Mods.biomesoplenty.getResourceLocation("visceral_heap")
                             )
                             .map(ForgeRegistries.BIOMES::getValue)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toList())
-            );
-        }
-
-        if (Mods.byg.isLoaded()) {
-            invalidBiomes.addAll(
-                    Stream.of(
-                                    Mods.byg.getResourceLocation("babyssalbog"),
-                                    Mods.byg.getResourceLocation("bastralisle"),
-                                    Mods.byg.getResourceLocation("bcosmicocean"),
-                                    Mods.byg.getResourceLocation("bshattereddesert")
-                            )
-                            .map(ForgeRegistries.BIOMES::getValue)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toList())
-            );
-        }
-
-        if (Mods.fyrecraft.isLoaded()) {
-            invalidBiomes.addAll(
-                    Stream.of(
-                                    Mods.fyrecraft.getResourceLocation("miner's caves"),
-                                    Mods.fyrecraft.getResourceLocation("waterfalls")
-                            )
-                            .map(Biome.REGISTRY::getObject)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toList())
             );
@@ -236,39 +192,24 @@ public class ModCompat {
     // enum entries must match mod ids
     // optional 'friendly name' used for configs
     public enum Mods {
-        abyssalcraft,
-        auxbiomes,
-        betteragriculture,
         biomesoplenty("biomesoplenty"),
-        byg("biomesyougo"),
-        bionisation3,
-        buildcraftenergy,
-        candymod,
-        defiledlands,
-        douglas_forest,
-        environs,
-        explorercraft,
-        floricraft,
-        fyrecraft,
         geographicraft,
-        gravityfalls,
         minecraft,
-        mistbiomes,
-        nt("novamterram"),
-        odioitamod,
-        plants2,
-        pvj("vibrantjourneys"),
-        realworld,
-        redwoods,
-        rockhounding_surface,
-        spookybiomes,
-        subaquatic,
-        sugiforest,
-        terscraft,
-        thaumcraft,
-        traverse,
-        vampirism,
-        valoegheses_be("zoesteria");
+        /**
+         * **rtgc 自己**。加这一项是因为 rtgc 现在会注册自己的生物群系
+         * （{@code rtgc:deep_*_ocean}，见 {@code BiomeInit#init_rtgc_oceans}）。
+         *
+         * <p>原先没有它时，{@code RealisticBiomeBase.getConfigFile()} 里的
+         * {@code Mods.get(namespace)} 会返回 null 并抛
+         * {@code "ModCompat.Mods does not have a value for the mod that added this biome."} ——
+         * 实测日志里就是这样被自己的兼容层挡下来的（注册本身是成功的）。
+         *
+         * <p>加这一项**没有副作用**：{@code Mods.values()} 只在 {@code init()} 里被遍历（用来标记
+         * loaded），别处都是按常量显式引用；{@code getPrettyName()} 取枚举名 → 配置目录
+         * {@code config/RTGC/rtgc/<群系>.cfg}，与原版走 {@code config/RTGC/minecraft/…} 同一套。
+         */
+        rtgc,
+        thaumcraft;
 
         private final String prettyName;
         private boolean loaded;

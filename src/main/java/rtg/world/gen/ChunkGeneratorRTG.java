@@ -1,5 +1,6 @@
 package rtg.world.gen;
 
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockFalling;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
@@ -30,24 +31,23 @@ import org.dimdev.jeid.INewChunk;
 import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
+import rtg.api.util.BlockUtil;
 import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.ChunkGenerationProfiler.Category;
 import rtg.api.util.ChunkInfo;
 import rtg.api.util.Logger;
-import rtg.api.util.noise.ISimplexData2D;
-import rtg.api.util.noise.SimplexData2D;
-import rtg.api.util.noise.SimplexNoise;
+import rtg.api.util.noise.*;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.RTGChunkGenSettings;
 import rtg.api.world.gen.feature.WorldGenPond;
-import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.BiomeAnalyzer;
 import rtg.world.biome.RtgBiomeLayout;
 import rtg.world.biome.RtgLayoutAccess;
 import rtg.world.biome.RtgRealisticIndex;
+import rtg.world.biome.realistic.land.RealisticBiomeIslandVolcano;
 import rtg.world.biome.realistic.land.RealisticBiomeMountainChain;
-import rtg.world.biome.BiomeAnalyzer;
 import rtg.world.gen.structure.WoodlandMansionRTG;
 
 import javax.annotation.Nullable;
@@ -159,6 +159,46 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final float[] riverBorders = new float[256];
     private final float[] baseHeights = new float[256];
     /**
+     * 该列火山地表的**火山灰层厚度**（RWG {@code ChunkGeneratorRealistic:102} 的
+     * {@code volcanoSurfaceDepth}）。
+     *
+     * <p>写于高度混合循环（RWG:536：{@code lavaBasin ? 6 : min(127, addedBlocks)}），
+     * 读于 {@code replaceBiomeBlocks}（RWG:704 的 {@code & 255}）。**每个区块的每一列都要清零**
+     * （RWG:475）—— 本字段是生成器级的复用数组，不清就会把上一个区块的厚度漏进本区块的地表。
+     */
+    private final byte[] volcanoSurfaceDepth = new byte[256];
+    /**
+     * RWG {@code ChunkGeneratorRealistic:149}：熔岩洞地标用的 cell 噪声。
+     *
+     * <p>RWG 在生成器里自己 {@code new CellNoise(seed, (short) 0)}，rtgc 的布局虽然也持有一个，
+     * 但那个是 {@code private} 且 {@code setUseDistance(true)}；{@code LavaCaveLandmark} 只用
+     * {@code sampleTwo2D}，而它**不读** {@code distanceMethod} ⇒ 这里自建一个与布局内部那个
+     * **逐位相同**的实例，省掉给布局加访问器。
+     */
+    private final RwgCellNoise landmarkCell;
+    /**
+     * RWG 的 {@code Support.lavaCaveSmolderingGrass}：熔岩洞岸边那种"冒烟的草"。
+     *
+     * <p>RWG 只在**装了 BOP** 时给它赋值（{@code SupportBOP:38} → {@code BOPCBlocks.bopGrass}），
+     * 否则为 {@code null}。1.12.2 的对应方块是 {@code biomesoplenty:grass}
+     *（BOP 的变种草方块，取默认状态）；没装 BOP 时同样是 {@code null} —— 与 RWG 逐字一致。
+     */
+    private final Block smolderingGrass;
+    /**
+     * RWG {@code ChunkGeneratorRealistic} 的 {@code mapRand}：给 {@code generateMapGen}（MapVolcano 等）
+     * 用的**生成器自有**随机源。
+     *
+     * <p>{@code generateMapGen} 开头就 {@code setSeed(worldSeed)}、每个候选中心再各自
+     * {@code setSeed(...)}，所以复用一个实例不会串状态；借用 {@code rtgWorld.rand()} 或
+     * {@code this.rand} 都会污染别处的序列。
+     */
+    private final Random mapRand;
+    /**
+     * {@code smallRender} 的**中心列**下标：金字塔是 25×25 个小格，区块中心 i=j=8 ⇒
+     * {@code (8 + 4) * 25 + (8 + 4) = 312}，正是 RWG {@code smallRender[312][k]} 用的那一列。
+     */
+    private static final int SMALL_RENDER_CENTER_INDEX = 312;
+    /**
      * RWG {@code ChunkGeneratorRealistic:971-1005}：装饰按 9×9 区块邻域**分摊**到各真实群系。
      *
      * <p>RWG 把 {@code borderNoise[realisticId] += 0.01234569f} 累加 81 次后，
@@ -180,12 +220,22 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         Logger.debug("Instantiating CPRTG using generator settings: {}", rtgWorld.world().getWorldInfo().getGeneratorOptions());
         this.world = rtgWorld.world();
         this.rtgWorld = rtgWorld;
+        // 把 RTGWorld 交给布局：火山的"火山锥基座高度 / 底层群系高度"要在这里算 rNoise
+        // （RWG 的 ChunkManagerRealistic 自带 perlin/cell，rtgc 的布局只按种子建立，拿不到世界噪声源）。
+        RtgLayoutAccess.setTerrainWorld(rtgWorld);
         this.settings = rtgWorld.getGeneratorSettings();
         this.world.setSeaLevel(this.settings.seaLevel);
         WaterLevel.setCurrent(this.settings.seaLevel);
         this.rand = new Random(rtgWorld.seed());
         this.rtgWorld.setRandom(this.rand);
         this.mapFeaturesEnabled = world.getWorldInfo().isMapFeaturesEnabled();
+        // RWG ChunkGeneratorRealistic:149/155/…：地标相关的初始化（照抄 RWG 的绑定顺序）。
+        // ⚠ RWG 的 `landmarkDecorations`（`LandmarkDecorations.create()`，产生深板岩柱/拼图大师/
+        // 暮色门/发光蘑菇四类可选装饰）**按用户裁定整体不移植** —— 用户原话：
+        // "就是彻底删掉，什么都没有，别判断模组行不行" ⇒ 那个类已删除，这里也不再有对应字段。
+        this.landmarkCell = new RwgCellNoise(rtgWorld.seed(), (short) 0);
+        this.smolderingGrass = BlockUtil.getBlock("biomesoplenty:grass", null);
+        this.mapRand = new Random(rtgWorld.seed());
         this.useIntBiomeArray = Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid");
 
         // 初始化结构生成器
@@ -264,6 +314,39 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         long tTerrain = ChunkGenerationProfiler.start(Category.TERRAIN_FILL);
         generateTerrain(primer, landscape.noise);
         ChunkGenerationProfiler.end(Category.TERRAIN_FILL, tTerrain);
+
+        // ---- 群系的地图生成钩子（RWG ChunkGeneratorRealistic:216-233）----
+        //
+        // RWG：`generateTerrain → carveMountainChainRivers → 【for k: if (mapGenBiomes[k] > 0f)
+        // getBiome(k).generateMapGen(...)】 → replaceBlocksForBiome`。rtgc 的位置一样：
+        // 在 `generateTerrain` 之后、地表替换（`replaceBiomeBlocks`）之前。
+        //
+        // 三处适配（语义不变）：
+        //   ① RWG 的 `mapGenBiomes[k] = smallRender[312][k]`（中心列混合权重）在 RWG 是**独立的
+        //      标记数组**、调完清 0；rtgc 不复用它（清掉会破坏金字塔），而是照同一判据读中心列
+        //      `smallRender[312]`，再用本区块的 `activeBiomeIds`（无重复）去重 ——
+        //      "每个出现的群系每区块最多一次"这条语义与 RWG 相同；
+        //   ② 传的高度数组是 `landscape.noise` **本身**（= RWG 的 `testHeight`），不能传副本：
+        //      `MapVolcano` 会就地抬高锥体侧翼（`noise[x*16+z]`），随后地表替换要读抬高后的值；
+        //   ③ `mapRand` 是生成器自有的复用 `Random`（RWG 亦然），不能借用别处的随机源。
+        //
+        // ⚠ 这条路径**不受** `RwgLayoutConfig.averageLandmarksPerTypeAndContinent` 控制
+        // （RWG 也不受地标开关控制）：热带岛上的小火山由 `RealisticBiomeBOPTropicalIsland.rMapGen`
+        // 自己门控（`baseX % 4 == 0 && baseY % 4 == 0 && mapRand.nextInt(6) == 0 && …`）。
+        // 目前只有那一个群系覆写了 `rMapGen`，其余群系是空实现（调用与否对随机数序列无影响）。
+        final float[] mapGenColumn = this.smallRender[SMALL_RENDER_CENTER_INDEX];
+        for (int activeIndex = 0; activeIndex < this.activeBiomeCount; activeIndex++) {
+            final int biomeId = this.activeBiomeIds[activeIndex];
+            if (biomeId < 0 || biomeId >= mapGenColumn.length || mapGenColumn[biomeId] <= 0f) {
+                continue;                       // RWG: `mapGenBiomes[k] > 0f`
+            }
+            final IRealisticBiome mapGenBiome = RtgRealisticIndex.biomeOf(biomeId);
+            if (mapGenBiome == null) {
+                continue;
+            }
+            mapGenBiome.generateMapGen(this.rtgWorld, primer, this.mapRand, this.world.getSeed(), cx, cz,
+                    landscape.noise);
+        }
 
         // 获取标准生物群系数据
         if (this.settings.useSingleBiome) {
@@ -366,6 +449,37 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             ChunkGenerationProfiler.end(Category.STRUCTURES_GEN, tStructures);
         }
 
+        // ---- 岩浆房（RWG ChunkGeneratorRealistic:247-250）----
+        //
+        // 位置照抄 RWG：**洞穴/峡谷与结构之后、`new Chunk(...)` 之前**。用它自己的注释说，
+        // 黑曜石外壳要能封住洞穴与结构挖开的口子，所以必须放在它们之后。
+        //
+        // 门控适配：RWG 用构造器里的 `continental`（「大陆/地标模式」总开关）。rtgc 的布局
+        // **恒为大陆模式**（`RtgBiomeLayout` 的构造器必建 `continents`，没有非大陆分支），
+        // 所以这里用**地标子系统的唯一开关** `RwgLayoutConfig.averageLandmarksPerTypeAndContinent`
+        // 代替：它为 0 时 `ContinentalNoise.sampleLandform` 的地标采样整支不进入，
+        // `getVolcanoCoordinates` 恒返回 `Long.MIN_VALUE`，火山与熔岩洞完全不存在。
+        // 该判据 + 生成器内部的逐列坐标判定 ⇒ 配置为 0 时本块**零副作用**。
+        final RtgBiomeLayout layout = RtgLayoutAccess.current();
+        if (layout != null && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+                && RealisticBiomeIslandVolcano.volcanoIsland instanceof RealisticBiomeIslandVolcano) {
+            RealisticBiomeIslandVolcano.volcanoIsland.generateMagmaChamber(primer, cx, cz, layout);
+        }
+
+        // ---- 熔岩洞地标本体（RWG ChunkGeneratorRealistic:251-253）----
+        //
+        // 位置照抄 RWG：紧随岩浆房之后、`new Chunk(...)` 之前（它也要在洞穴/结构之后，
+        // 因为它用黑曜石/岩浆把洞穴壁改造成地标）。
+        if (layout != null && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+            LavaCaveLandmark.generate(primer, cx, cz, layout, this.rtgWorld.simplexInstance(0), this.landmarkCell);
+        }
+
+        // RWG ChunkGeneratorRealistic:255-257 + 266-279 的 `markLavaCaveOpeningBiome`
+        // 在 1.12.2 **没有对应物**：它把熔岩洞开口那一列标成 `Support.lavaCaveMarkerBiome`
+        //（RWG 用 BOP 的 `phantasmagoric_inferno`），而 BOP 7.0.1.2445 **既没有这个群系类、
+        // lang 里也没有这个名字**（已核对 jar）⇒ 这一步跳过，不发明群系。
+        // `RtgBiomeLayout.getBiomeDataAt` 里那条标记群系分支同样保持关闭（见那里的注释）。
+
         // ---- Chunk finalize ----
         //
         // ⚠ **两个数组都必须写**（此前只在 REID 时写 int 数组，是本次修掉的一个真缺陷）。
@@ -444,11 +558,72 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         int worldX = cx * 16;
         int worldZ = cz * 16;
+        // 火山地表的查询入口（RWG 用构造器里持有的 `cmr`，rtgc 用世界级布局单例）。
+        final RtgBiomeLayout layout = RtgLayoutAccess.current();
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 mpos.setPos(worldX + x, 0, worldZ + z);
                 float river = rivers[x * 16 + z];
-                biomes[x * 16 + z].rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
+                final IRealisticBiome columnBiome = biomes[x * 16 + z];
+
+                // ---- RWG ChunkGeneratorRealistic:697-743：火山地表 ----
+                //
+                // 本列是火山时**不走**普通的 `rReplace`：
+                //   · 有坐标（这一列属于某座火山）→ 用 `volcanoSurfaceDepth`（高度叠加块写下的
+                //     灰层厚度）调火山自己的 `rReplaceAt`，它会铺火山灰并在熔岩口内灌岩浆；
+                //     厚度为 0 且底层群系存在时，退回"底层群系"的地表（并把 `bases[]` 换成它的
+                //     `baseBiome`）—— 那一列虽然是火山群系，但锥体还没长上来。
+                //   · 没有坐标（邻域命中、但本列不在火山锥内）→ 用**真正的**本列群系
+                //     （`getBiomeDataAt`，即底层群系）来铺地表。
+                //
+                // 适配：RWG `biome.rReplaceAt(blocks, metadata, blockX, blockY, i, j, depth,
+                // worldObj, rand, perlin, cell, n, river, base, localX, localZ, baseHeight,
+                // underlyingHeight, max(1, addedBlocks))` 在 rtgc 的对应签名是
+                // `rReplaceAt(primer, i, j, x, y, depth, rtgWorld, noise, river, base,
+                // localX, localZ, baseHeight, underlyingHeight, surfaceDepth)`，
+                // 其中 i/j = **世界坐标**、x/y = **区块内局部坐标**（与 `replaceBiomeBlocks`
+                // 既有的调用约定一致，见 SurfaceVolcanoAsh 的类注释）。
+                //
+                // ⚠ rtgc 特有的那道 `averageLandmarksPerTypeAndContinent > 0f` 守卫：
+                // RWG 的火山群系被 `setCategory(categories, Support.volcanoIsland, 5)` 放进
+                // **第 5 类**、且从不进任何 placement 池，所以它的 `biomes[]` 里出现火山只可能是
+                // 上面 513-539 的叠加块写的。rtgc 的 `RtgBiomeCategorizer` 按**名字含 island**
+                // 把 BOP 的火山岛归进了 ISLAND 池（RWG 没有这一级），于是即使地标功能为 0，
+                // `getBiomeDataAt` 仍可能返回火山群系、本分支仍会被进入。加这道守卫后，
+                // 地标开关为 0 时本块**完全不可达**（与改动前逐字相同的行为）。
+                if (columnBiome instanceof RealisticBiomeIslandVolcano && layout != null
+                        && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+                    final int blockX = worldX + x;
+                    final int blockZ = worldZ + z;
+                    final long coordinates = layout.getVolcanoCoordinates(blockX, blockZ);
+                    if (coordinates != Long.MIN_VALUE) {
+                        final IRealisticBiome underlyingBiome = layout.getVolcanoUnderlyingBiome(blockX, blockZ);
+                        final float localX = ContinentalNoise.unpackVolcanoX(coordinates);
+                        final float localZ = ContinentalNoise.unpackVolcanoY(coordinates);
+                        final float baseHeight = layout.getVolcanoBaseHeight(blockX, blockZ);
+                        final int addedBlocks = this.volcanoSurfaceDepth[x * 16 + z] & 255;
+                        if (addedBlocks > 0 || underlyingBiome == null) {
+                            ((RealisticBiomeIslandVolcano) columnBiome).rReplaceAt(primer, blockX, blockZ, x, z, -1,
+                                    rtgWorld, noise, river, base, localX, localZ, baseHeight,
+                                    layout.getVolcanoUnderlyingHeight(blockX, blockZ), Math.max(1, addedBlocks));
+                        } else {
+                            base[x * 16 + z] = underlyingBiome.baseBiome();
+                            underlyingBiome.rReplace(primer, blockX, blockZ, x, z, -1, rtgWorld, noise, river, base);
+                        }
+                    } else {
+                        IRealisticBiome actualBiome = layout.getBiomeDataAt(blockX, blockZ);
+                        if (actualBiome == columnBiome) {
+                            actualBiome = layout.getVolcanoUnderlyingBiome(blockX, blockZ);
+                        }
+                        if (actualBiome == null) {
+                            actualBiome = columnBiome;
+                        }
+                        base[x * 16 + z] = actualBiome.baseBiome();
+                        actualBiome.rReplace(primer, blockX, blockZ, x, z, -1, rtgWorld, noise, river, base);
+                    }
+                } else {
+                    columnBiome.rReplace(primer, mpos, x, z, -1, rtgWorld, noise, river, base);
+                }
                 placeBedrock(primer, x, z);
             }
         }
@@ -751,6 +926,23 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     blockPos.getX(), blockPos.getZ());
         }
 
+        // ---- 熔岩洞地标的装饰：冒烟草（RWG ChunkGeneratorRealistic:1022）----
+        //
+        // RWG 的次序：`LavaCaveLandmark.decorateSurface`（冒烟草）→ …… → `landmarkDecorations.decorate`
+        // （深板岩/拼图大师/暮色门/发光蘑菇四类可选装饰）。两者都在**群系装饰之后、冰雪与原版
+        // 装饰事件之前**，rtgc 这里就放在 `RiverCaveVines` 之后（同一段位置）。
+        //
+        // ⚠ RWG 的后半段（`landmarkDecorations.decorate`，:1056-1058）**按用户裁定不移植**：
+        // 用户原话"就是彻底删掉，什么都没有，别判断模组行不行" ⇒ `LandmarkDecorations` 类已删除，
+        // 这里既不建它、也不做任何"装了哪些模组"的判断。
+        if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+            final RtgBiomeLayout landmarkLayout = RtgLayoutAccess.current();
+            if (landmarkLayout != null) {
+                LavaCaveLandmark.decorateSurface(this.world, landmarkLayout,
+                        this.rtgWorld.simplexInstance(0), blockPos.getX(), blockPos.getZ(), this.smolderingGrass);
+            }
+        }
+
         // ---- Pop: animals ----
         long tPopAnimals = ChunkGenerationProfiler.start(Category.POP_ANIMALS);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
@@ -1048,7 +1240,25 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 int zOffset = ((j - sampleSize) * 8) - 8;
                 final int sampleX = baseOffsetX + xOffset;
                 final int sampleZ = baseOffsetZ + zOffset;
-                final IRealisticBiome layoutBiome = RtgLayoutAccess.biomeAt(sampleX, sampleZ);
+                IRealisticBiome layoutBiome = RtgLayoutAccess.biomeAt(sampleX, sampleZ);
+                // ---- RWG ChunkGeneratorRealistic:328-331：采样时把火山群系换成它的「底层群系」----
+                //
+                // RWG 原文：
+                //     if (sampledBiome instanceof RealisticBiomeIslandVolcano) {
+                //         RealisticBiomeBase underlyingBiome = cmr.getVolcanoUnderlyingBiome(sampleX, sampleZ);
+                //         if (underlyingBiome != null) sampledBiome = underlyingBiome;
+                //     }
+                // 用意：火山锥的高度由下面 513-539 的叠加块单独负责，**高度混合的求和不应该
+                // 看到火山群系本身**（否则 `underlyingHeight` 会被锥体自身的高度污染，锥体再叠加一次）。
+                if (layoutBiome instanceof RealisticBiomeIslandVolcano) {
+                    final RtgBiomeLayout volcanoLayout = RtgLayoutAccess.current();
+                    final IRealisticBiome underlyingBiome = volcanoLayout == null
+                            ? null
+                            : volcanoLayout.getVolcanoUnderlyingBiome(sampleX, sampleZ);
+                    if (underlyingBiome != null) {
+                        layoutBiome = underlyingBiome;
+                    }
+                }
                 if (layoutBiome != null) {
                     biomeData[rowOffset + j] = RtgRealisticIndex.idFor(layoutBiome);
                 } else {
@@ -1233,6 +1443,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 int smallIdx = (i + 4) * smallWidth + (j + 4);
                 int worldX = chunkWorldX + i;
                 int worldZ = chunkWorldZ + j;
+                // RWG ChunkGeneratorRealistic:475 —— 火山灰厚度**逐列清零**（复用字段，不清会
+                // 把上一个区块的厚度漏进本区块的地表）。
+                this.volcanoSurfaceDepth[k] = 0;
 
                 // ---- RWG ChunkGeneratorRealistic:456-460 + 488-495：地表群系的噪声抖动 ----
                 //
@@ -1298,6 +1511,68 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 chainWeight[k] = chain;
                 // RWG:511-512 —— 宿主强度还要算上"附近有链"的影响，否则链边缘的隧道会断掉。
                 chainHost[k] = Math.max(chain, nearbyMountainChainInfluence(i, j));
+
+                // ---- RWG ChunkGeneratorRealistic:513-539：火山锥的高度叠加 ----
+                //
+                // 位置照抄 RWG：山峰链 fade 之前、`calculateRiver` **之前**，且是**替换**而非叠加
+                // （RWG `testHeight[i*16+j] = volcanoHeight`）。rtgc 这里改的是 `baseHeights`，
+                // 它在本循环之后被拷进 `landscape.noise` / `landscape.dryHeight`，再走河道雕刻与
+                // 山地链 fade —— 与 RWG `getNewNoise` 的返回值同一条管线。
+                //
+                // 三处 API 适配（都不是公式改动）：
+                //   ① `Support.volcanoIsland` → `RealisticBiomeIslandVolcano.volcanoIsland`（静态字段）；
+                //   ② `cmr.getVolcanoXxx(...)` → `layout.getVolcanoXxx(...)`（同一个 `RtgBiomeLayout`）；
+                //   ③ `perlin.noise2(a,b)` → `perlin.noise2f(a,b)`、`rNoiseAt(perlin, …)` →
+                //      `rNoiseAt(rtgWorld, …)`（火山群系自己取 `simplexInstance(0)`，与 RWG 的 perlin 同一个）。
+                //
+                // 写入的群系数组：RWG 写的是 `biomes[]`（既供地表替换、又供 `baseBiomesList`），
+                // rtgc 拆成了两份，其**地表**那一份是 `landscape.surfaceBiome`（→ `jitteredBiomes`
+                // → `replaceBiomeBlocks`）；这正是 RWG `biomes[]` 在 rtgc 的对应物。
+                //
+                // ⚠ 多一道 `averageLandmarksPerTypeAndContinent > 0f`：这是 rtgc 的**短路**，
+                // 不改变任何结果 —— 地标采样关闭时 `getVolcanoVicinityCoordinates` 本就恒返回
+                // `Long.MIN_VALUE`，只是那 256 次逐列采样查询也可以一并省掉（RWG 没有这道守卫，
+                // 因为它逐列查得也不慢；这里保行为、顺带省掉开销）。
+                if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+                        && RealisticBiomeIslandVolcano.volcanoIsland instanceof RealisticBiomeIslandVolcano) {
+                    final long coordinates = layout.getVolcanoVicinityCoordinates(worldX, worldZ);
+                    if (coordinates != Long.MIN_VALUE) {
+                        final RealisticBiomeIslandVolcano volcano = RealisticBiomeIslandVolcano.volcanoIsland;
+                        final float localX = ContinentalNoise.unpackVolcanoX(coordinates);
+                        final float localZ = ContinentalNoise.unpackVolcanoY(coordinates);
+                        final float underlyingHeight = baseHeights[k];
+                        final float volcanoHeight = volcano.rNoiseAt(rtgWorld, localX, localZ,
+                                layout.getVolcanoBaseHeight(worldX, worldZ), underlyingHeight);
+                        baseHeights[k] = volcanoHeight;
+                        final int addedBlocks = (int) volcanoHeight - (int) underlyingHeight;
+                        final boolean lavaBasin = volcano.isInsideLavaFill(rtgWorld, localX, localZ);
+                        final float ashBlend = Math.max(0f, Math.min(1f, (addedBlocks - 1f) / 4f));
+                        final float ashNoise = Math.max(0f, Math.min(1f,
+                                0.5f + bRandNoise.noise2f(worldX / 12f, worldZ / 12f) * 0.5f));
+                        final boolean volcanicSurface = addedBlocks >= 5 || addedBlocks > 0 && ashBlend > ashNoise;
+                        if ((volcanicSurface || lavaBasin)
+                                && layout.getVolcanoCoordinates(worldX, worldZ) != Long.MIN_VALUE) {
+                            surfaceBiome[k] = volcano;
+                            this.volcanoSurfaceDepth[k] = (byte) (lavaBasin ? 6 : Math.min(127, addedBlocks));
+                        }
+                    }
+                }
+
+                // ---- RWG ChunkGeneratorRealistic:540-549：熔岩洞地标的通风口锥体 ----
+                //
+                // 前置条件照抄 RWG：**不在火山影响圈内**（火山优先，两者不重叠）且在熔岩洞内；
+                // 它改写同一份高度数组（RWG `testHeight` ↔ rtgc `baseHeights`），
+                // 位置同样在 `calculateRiver` 之前。`bRandNoise` 就是上面火山块用的那个 perlin。
+                if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+                        && layout.getVolcanoVicinityCoordinates(worldX, worldZ) == Long.MIN_VALUE) {
+                    final long caveCoordinates = layout.getLavaCaveCoordinates(worldX, worldZ);
+                    if (caveCoordinates != Long.MIN_VALUE) {
+                        baseHeights[k] = LavaCaveLandmark.surfaceHeight(bRandNoise,
+                                ContinentalNoise.unpackVolcanoX(caveCoordinates),
+                                ContinentalNoise.unpackVolcanoY(caveCoordinates),
+                                baseHeights[k]);
+                    }
+                }
             }
         }
 

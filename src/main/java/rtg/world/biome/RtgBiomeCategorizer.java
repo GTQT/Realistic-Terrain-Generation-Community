@@ -1,16 +1,16 @@
 package rtg.world.biome;
 
-import java.util.Map;
-
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.biome.Biome;
 import net.minecraftforge.common.BiomeDictionary;
-
 import rtg.api.RTGAPI;
 import rtg.api.util.Logger;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.world.biome.RtgBiomeLayout.Climate;
 import rtg.world.biome.RtgBiomeLayout.Placement;
+import rtg.world.biome.realistic.land.RealisticBiomeIslandVolcano;
+
+import java.util.Map;
 
 
 /**
@@ -117,6 +117,8 @@ public final class RtgBiomeCategorizer {
         public int untyped;
         /** C3：进了 {@code ISLAND} 池的岛屿群系数量。 */
         public int island;
+        /** 火山（{@link RealisticBiomeIslandVolcano}）：**不进任何池**，只由地标系统摆放。 */
+        public int volcano;
         /** C2 / C3：进了 {@code SMALL} / {@code SMALL_ISLAND} 池的特殊群系数量。 */
         public int special;
         /** 每个气候带收到多少个陆地群系（下标 = climate ordinal）。 */
@@ -222,6 +224,17 @@ public final class RtgBiomeCategorizer {
                 MATCHED_PLACEMENTS.add(place.name);
             } else if (isRiver(name, base)) {
                 report.river++;      // 不进布局
+            } else if (realistic instanceof RealisticBiomeIslandVolcano) {
+                // 火山**永不入池**（RWG 的写法）：`Support.volcanoIsland` 是独立字段
+                //（`SupportBOP.java:49-53`），从不经过 `Support.addBiome`，在 RWG 里它的
+                // category 是 5、任何池都取不到它；火山出现在哪里完全由 ContinentalNoise
+                // 的地标决定（`ChunkManagerRealistic.getVolcanoCoordinates`）。
+                //
+                // ⚠ 不能让它走下面的 `islandBiome`：BOP 的 `volcanic_island` 名字含 "island"，
+                // 会被塞进 ISLAND 池 ⇒ 普通岛屿长出 baseHeight=61 的火山锥，
+                // 而且 `getVolcanoBaseHeight`/`getVolcanoUnderlyingBiome` 的岛屿分支会取到
+                // 火山自身，锥体基座被自己的高度污染。
+                report.volcano++;
             } else if (islandBiome(key)) {
                 // C3：RWG 的 `ISLAND` 池（`placement != CORE` ⇒ **不进 core**）。
                 // RWG 那边这个池实际是空的，岛屿靠 smallIsland/largeIsland 两级；

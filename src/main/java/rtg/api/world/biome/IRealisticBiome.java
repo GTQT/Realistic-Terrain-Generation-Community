@@ -57,6 +57,64 @@ public interface IRealisticBiome {
 
     float rNoise(RTGWorld rtgWorld, int x, int y, float border, float river);
 
+    /**
+     * RWG {@code rwg/biomes/realistic/RealisticBiomeBase.generateMapGen}（L186-198）的 rtgc 版签名 ——
+     * 「地图生成器」钩子：某群系有机会把**自己的**地标（火山锥等）盖进本区块的方块数组。
+     *
+     * <p><b>RWG 的驱动链</b>：{@code ChunkGeneratorRealistic.provideChunk}（L216-233）在
+     * 「地形已填好、地表替换之前」遍历 {@code mapGenBiomes[k] > 0f} 的每个群系（k 是该区块
+     * **中心采样点**上混合权重非零的现实主义编号），逐个调 {@code generateMapGen}；
+     * 基类实现是 k=5 的 11×11「候选中心」双重循环（见
+     * {@link RealisticBiomeBase#generateMapGen}），每个候选点按自己的种子调一次
+     * {@link #rMapGen}。**只有** {@code rMapGen} 非空的群系才会真正落方块。
+     *
+     * <p><b>签名适配（三处，都是 API 形态差异，不是算法差异）</b>：
+     * <ul>
+     *   <li>{@code Block[] blocks + byte[] metadata} → {@code ChunkPrimer primer}
+     *       （同仓既有约定：1.12.2 的方块自带状态，没有独立的 metadata 数组）；</li>
+     *   <li>{@code ChunkManagerRealistic cmr} → 由实现自己取
+     *       {@code RtgLayoutAccess.current()}（rtgc 的布局是**世界级单例**，
+     *       生成器不持有它，见 {@code RtgLayoutAccess} 的类注释）；</li>
+     *   <li>{@code NoiseGenerator perlin + CellNoise cell} → 实现内用
+     *       {@code rtgWorld.simplexInstance(0)}（同一算法的 P 与 C 实例，见
+     *       {@code RealisticBiomeBOPTropicalIsland#rMapGen}）与自建的
+     *       {@code new RwgCellNoise(worldSeed, (short) 0)}。</li>
+     * </ul>
+     *
+     * @param worldSeed 世界种子（RWG 的 {@code Long seed} 形参 / {@code world.getSeed()}）
+     * @param chunkX    当前区块的**区块** X 坐标
+     * @param chunkZ    当前区块的**区块** Z 坐标
+     * @param noise     该区块的 256 列地形高度数组（RWG 的 {@code testHeight}，
+     *                  rtgc 里是 {@code ChunkLandscape.noise}，索引口径同为 {@code x * 16 + z}）；
+     *                  地标是**就地抬高**它，故必须传地表替换正在用的那个活数组，不能是副本。
+     */
+    default void generateMapGen(RTGWorld rtgWorld, ChunkPrimer primer, Random mapRand, long worldSeed,
+            int chunkX, int chunkZ, float[] noise) {
+    }
+
+    /**
+     * RWG {@code rwg/biomes/realistic/RealisticBiomeBase.rMapGen}（L200-201）的 rtgc 版签名：
+     * 单个**候选地标中心**的一次机会。基类为空实现，由群系按需覆写。
+     *
+     * <p><b>⚠ 形参顺序的坑（照抄 RWG 的实际语义，而不是它的形参名）</b>：
+     * RWG 基类把这一对写成 {@code (…, int chunkX, int chunkY, int baseX, int baseY, …)}，
+     * 但 {@code generateMapGen} 的调用点传的是 {@code rMapGen(…, baseX, baseY, chunkX, chunkY, …)}
+     * ——即**基类声明的名字与实参语义相反**。子类
+     * {@code RealisticBiomeIslandTropical}（L56-58）覆写时用的名字才是对的：
+     * 第 6/7 位 = 候选中心（{@code baseX/baseY}），第 8/9 位 = 当前区块（{@code chunkX/chunkY}）。
+     * rtgc 统一按**语义**命名（本方法与 {@code generateMapGen} 的实参顺序一一对应），
+     * 覆写者按此理解即可。
+     *
+     * @param baseX  候选地标中心的**区块** X 坐标（RWG 的 {@code baseX}，可为负、可远离本区块）
+     * @param baseZ  候选地标中心的**区块** Z 坐标
+     * @param chunkX 当前区块的**区块** X 坐标（落方块时的目标区块）
+     * @param chunkZ 当前区块的**区块** Z 坐标
+     * @param noise  同 {@link #generateMapGen}：该区块 256 列的地形高度活数组
+     */
+    default void rMapGen(RTGWorld rtgWorld, ChunkPrimer primer, Random mapRand, int baseX, int baseZ,
+            int chunkX, int chunkZ, float[] noise) {
+    }
+
     double waterLakeMult();
 
     double lavaLakeMult();

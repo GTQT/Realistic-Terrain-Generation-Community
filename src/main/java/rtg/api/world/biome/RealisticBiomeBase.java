@@ -23,6 +23,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Objects;
+import java.util.Random;
 
 
 public abstract class RealisticBiomeBase implements IRealisticBiome {
@@ -153,6 +154,52 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     @Override
     public int baseBiomeId() {
         return this.baseBiomeId;
+    }
+
+    /**
+     * RWG {@code rwg/biomes/realistic/RealisticBiomeBase.generateMapGen}（L186-198）的**逐行照抄**。
+     *
+     * <pre>
+     * RWG：                                              rtgc：
+     *   int k = 5;                                        同名同值
+     *   mapRand.setSeed(seed);                            seed → worldSeed
+     *   long l  = (mapRand.nextLong() / 2L) * 2L + 1L;    逐字
+     *   long l1 = (mapRand.nextLong() / 2L) * 2L + 1L;    逐字
+     *   for (baseX = chunkX - k; baseX &lt;= chunkX + k; …   逐字
+     *     for (baseY = chunkY - k; …)                     逐字（baseY → baseZ，仅是命名）
+     *       mapRand.setSeed((long) baseX * l + (long) baseY * l1 ^ seed);
+     *       rMapGen(…, baseX, baseY, chunkX, chunkY, …);  逐字（形参名见接口注释的「顺序的坑」）
+     * </pre>
+     *
+     * <p><b>本方法的语义</b>：枚举以当前区块为中心、半径 {@code k = 5} 的 11×11 = 121 个
+     * **候选地标中心**（{@code baseX/baseZ}），每个候选点用「世界种子 ⊕ (baseX·l + baseZ·l1)」
+     * 重新播种 {@code mapRand}，然后交给 {@link #rMapGen} 决定是否在**当前区块**
+     * （{@code chunkX/chunkZ}）落方块。因此地标会「从远处糊过来」：某个候选中心离本区块再远，
+     * 只要它自己的种子通过了门控，就会把属于它的那部分锥体画进本区块。
+     *
+     * <p>{@code l}/{@code l1} 是 RWG 的两条奇偶性为奇的「跳跃步长」——{@code mapRand} 先被
+     * {@code setSeed(worldSeed)} 归一，故这两个值只依赖世界种子，**与区块无关**；
+     * 加上每个候选点的 {@code setSeed}，整段逻辑对每个群系都是自足的纯函数
+     * （不依赖其它群系是否也跑了 {@code generateMapGen}）。
+     *
+     * <p>rtgc 侧的差异只有一处，且不在本方法体内：调用点（{@code ChunkGeneratorRTG.provideChunk}）
+     * 由父级接线，见 {@link IRealisticBiome#generateMapGen} 的说明。
+     * <p>{@code mapRand} 必须是调用方复用的实例（RWG 是 {@code ChunkGeneratorRealistic.mapRand}）：
+     * 本方法一开始就 {@code setSeed}，所以复用不会串状态。
+     */
+    @Override
+    public void generateMapGen(RTGWorld rtgWorld, ChunkPrimer primer, Random mapRand, long worldSeed,
+            int chunkX, int chunkZ, float[] noise) {
+        int k = 5;
+        mapRand.setSeed(worldSeed);
+        long l = (mapRand.nextLong() / 2L) * 2L + 1L;
+        long l1 = (mapRand.nextLong() / 2L) * 2L + 1L;
+        for (int baseX = chunkX - k; baseX <= chunkX + k; baseX++) {
+            for (int baseZ = chunkZ - k; baseZ <= chunkZ + k; baseZ++) {
+                mapRand.setSeed((long) baseX * l + (long) baseZ * l1 ^ worldSeed);
+                rMapGen(rtgWorld, primer, mapRand, baseX, baseZ, chunkX, chunkZ, noise);
+            }
+        }
     }
 
     /**

@@ -16,14 +16,48 @@
 
 ---
 
-## 0. 唯一豁免：火山与地标
+## 0. 火山与地标：**已按用户要求写回**（此前的"唯一豁免"作废）
 
-用户明确要求删除，故**不作为缺口**：`Support.volcanoIsland`、`canGenerateVolcanoAt`、
-`hasRiverNearVolcano`、`getVolcanoBaseHeight/UnderlyingHeight/UnderlyingBiome`、
-`getVolcanoCoordinates/VicinityCoordinates`、`getLavaCave*`、`LavaCaveLandmark`、
-`LandmarkDecorations`、`ContinentLandmarkNoise` 的**使用**。
-（`ContinentLandmarkNoise` 类本身已逐字移植，但 `RwgLayoutConfig.averageLandmarksPerTypeAndContinent = 0`
-使 `ContinentalNoise` 的地标分支永不进入——实测火山/熔岩洞命中数均为 0。）
+> ⚠ **状态变更（1.0.33 同版本追记）**：本节原先写的是"用户明确要求删除，故不作为缺口"
+> （`Support.volcanoIsland`、`canGenerateVolcanoAt`、`hasRiverNearVolcano`、
+> `getVolcanoBaseHeight/UnderlyingHeight/UnderlyingBiome`、`getVolcanoCoordinates/VicinityCoordinates`、
+> `getLavaCave*`、`LavaCaveLandmark`、`LandmarkDecorations`、`ContinentLandmarkNoise` 的使用，
+> 以及用 `RwgLayoutConfig.averageLandmarksPerTypeAndContinent = 0` 把整支关掉）。
+> **用户随后要求「写回火山的全部内容」**，所以上表那些符号现在**全部已实现**：
+
+| 组成 | rtgc 落地位置 | RWG 出处 |
+|---|---|---|
+| 火山锥 / 岩缘 / 熔岩口 / 山顶门控 | `rtg/world/biome/realistic/land/RealisticBiomeIslandVolcano.java` | `rwg/biomes/realistic/ocean/RealisticBiomeIslandVolcano.java` |
+| 火山渣地表 | `rtg/api/world/surface/SurfaceVolcanoAsh.java` | `rwg/surface/SurfaceVolcanoAsh.java` |
+| 热带岛小火山（地图生成钩子） | `rtg/world/gen/MapVolcano.java` ＋ `IRealisticBiome.rMapGen` / `RealisticBiomeBase.generateMapGen` ＋ `RealisticBiomeBOPTropicalIsland.rMapGen` | `rwg/map/MapVolcano.java` ＋ `RealisticBiomeBase:186-201` ＋ `RealisticBiomeIslandTropical:56-74` |
+| 岩浆房 / 火山通道 | `RealisticBiomeIslandVolcano.generateMagmaChamber`（生成器在**结构之后**调） | `ChunkGeneratorRealistic:247-250` |
+| 熔岩洞地标 | `rtg/world/gen/LavaCaveLandmark.java` | `rwg/map/LavaCaveLandmark.java` |
+| 地标装饰（深板岩柱/拼图大师/暮色门/发光蘑菇） | **不移植**（用户裁定"彻底删掉，什么都没有，别判断模组行不行"） | `rwg/support/LandmarkDecorations.java`（四类装饰全部依赖 1.12.2 不存在的模组） |
+| 火山/熔岩洞的选址与门控 | `RtgBiomeLayout.getVolcanoXxx/getLavaCaveXxx/canGenerateVolcanoAt/hasRiverNearVolcano/isBorderlessAt/getNoiseWithRiverOceanAt` | `ChunkManagerRealistic:402-476/607-655/859-861/945-963` |
+| 生成器接线（高度叠加 / 地表分支 / 岩浆房 / 熔岩洞 / 地标装饰 / mapgen 调度） | `ChunkGeneratorRTG` | `ChunkGeneratorRealistic:216-233/247-257/513-549/697-743/1022/1056-1058` |
+| 开关 | `RwgLayoutConfig`：`largeIslandVolcanoChance = 0.15f`、`averageLandmarksPerTypeAndContinent = 0.25f`（RWG 原值） | `ConfigRWG:36-37` |
+
+**四处已记录的偏离**（都不是"省略"，是 1.12.2 没有对应物 / 用户裁定）：
+1. **`LandmarkDecorations` 整类不移植**（用户裁定，原话："**就是彻底删掉，什么都没有，别判断模组行不行**"）：
+   RWG 的这个类产生四类可选装饰（深板岩柱 / LootGames 拼图大师 / 暮色门 / Natura 发光蘑菇），
+   全部依赖 1.12.2 不存在的模组。用户先裁定"深板岩 → 黑曜石"，继而要"凑不齐就什么都别生成"，
+   最后明确"彻底删掉、别判断模组行不行" ⇒ **类已删除**，`ChunkGeneratorRTG` 里连
+   `landmarkDecorations` 字段与调用点一并移除，**不做任何 `Loader.isModLoaded` 判断**（也不留半成品）。
+   `LavaCaveLandmark`（熔岩洞本体 + 通风口锥体 + 冒烟草）**不受影响**：它零可选模组依赖，
+   冒烟草用 BOP 的 `biomesoplenty:grass`（BOP 在场时才有值，与 RWG 同义）。
+2. **熔岩洞的"标记群系"未落地**：RWG 用 BOP 的 `phantasmagoric_inferno` 标开口列
+   （`markLavaCaveOpeningBiome`），而 BOP 7.0.1.2445 **既无该群系类也无该 lang 名**（已核对 jar）⇒ 跳过，不发明群系。
+3. **`isBorderlessAt` 的桶宽**：RWG 写死 `float[256]`（它自己的现实主义编号空间）；rtgc 改用
+   `RtgRealisticIndex.idFor(...)` 与 `biomeIdBound()`（REID 下 MC 编号可 >256）。
+   ⚠ 不能用 `baseBiomeId()`：山地链与其备份群系共用同一 MC 编号，会被折叠成一个桶。
+4. **mapgen 去重**：RWG 用独立的 `mapGenBiomes[256]` 标记数组（用完清 0）；rtgc 照同一判据
+   （中心列 `smallRender[312]`）读，再用本区块的 `activeBiomeIds`（天然无重复）去重 ——
+   不复用/清零 `smallRender`（清掉会破坏金字塔）。
+
+**实测**：`gradlew calibrateVolcanoPlacement`（`src/preview`）给出开关打开后的实际密度 ——
+种子 123456789、20000² 窗口内 **4 座火山中心**（最近邻间距 p50 ≈ 7925 格）、火山锥列占 0.048%、
+熔岩洞中心 6 个（间距 ≈ 8165 格）⇒ 开关确实生效，且与 RWG 的"每大陆每类 0.25 个"稀疏度同量级。
+火山群系**不进任何布局池**（`RtgBiomeCategorizer` 已加排除：RWG 的 `Support.volcanoIsland` 也从不 addBiome）。
 
 ---
 
@@ -46,11 +80,11 @@
 | 3 | 约 13 个群系的地形落点是**推断**（RWG 对它们没有显式地形行） | 能力缺口 | 已逐个写出依据，集中在 §13/§25 的落点表 | §13 §25 |
 | 4 | `LARGE_ISLAND` 池为空（RWG 成员 `fungiForest` / `hotPlainsCanyonIsland` 在 1.12 无对应物） | 能力缺口；`selectIslandBiome` 逐级退化到核心池，不会返回 null | 保持 | §18 |
 | 5 | RWG `RealisticBiomeBOPOcean.sanitizeKelp` 的**列 metadata 重写**（8/9/10/11 四段） | 1.12 的 BOP 没有对应的方块状态/API | 只做"站不住就换回水"（`OceanDecorationSanitizer`） | CHANGELOG |
-| 6 | 火山 + 地标 | **唯一豁免**（用户裁定删除） | 不做，也**不要再列为缺口** | §0 |
+| 6 | 火山 + 地标 | ~~唯一豁免（用户裁定删除）~~ → **已按用户要求写回** | **已实现**（锥体/地表/岩浆房/熔岩洞/地标装饰/开关 + 生成器接线），四处偏离见 §0 | §0 |
 | 7 | RWG `RealisticBiomeCoastDunes.rDecorate` 的 `DecoWaterGrass`（海草 / 树叶 / 高草，`11 × strength` 次）未移植 | 需要新写一个 `DecoWaterGrass`（1.7.10 的 `Blocks.double_plant`＋metadata、`canBlockStay` 都要映射到 1.12 的 `IBlockState` / `canPlaceBlockAt`） | **未做**：rtgc 全仓 grep `DecoWaterGrass` = 0 命中；4 个海滩只有各自原有的植被装饰 | 地表审计（`RealisticBiomeCoastDunes:24-40`） |
 | 8 | 这 10 个群系不吃 `SURFACE_TOP_BLOCK` / `SURFACE_FILLER_BLOCK` / `SURFACE_CLIFF_*` 配置 | RWG 的这几个 `rReplace` **把方块写死**（沙/砂岩/圆石/石头），移植时照抄 | 有意：改 cfg 无效，且这是唯一忠实做法（`SurfaceCoastDunes` / `SurfaceOcean` 的 javadoc 已声明） | 地表审计 |
 | 9 | **约 88 个群系的"地形家族"是最近亲推断，且其中几条只对齐了一半**（地形照 RWG 某类，地表却留在别的类上） | RWG 对这些 MC/BOP 群系**没有**显式条目，只能取"最近亲"；工具**判不出**该取哪个家族 | **部分未做**：二次自检已修 5 处（§0.5.4 的 C5、C8–C11）；仍待复核的见下方清单 | 独立审计（第二遍） |
-| 10 | **死类 + RWG 有而 rtgc 零调用的地表**：`RealisticBiomeBOPVolcanicIsland.SurfaceBOPVolcanicIsland`（零调用）、`RealisticBiomeVanillaIcePlains.SurfacePolar`（零调用）、`BOPKelpForest.TerrainBOPKelpForest` 的死构造参数；RWG 的 `SurfaceVolcanoAsh` **未移植** | 历史遗留 / 火山豁免 | 不影响生成，但**会误导审计**（本次就被 `SurfaceBOPVolcanicIsland` 那条自相矛盾的注释带偏过一次） | 独立审计 C12 |
+| 10 | **死类 + RWG 有而 rtgc 零调用的地表**：~~`RealisticBiomeBOPVolcanicIsland.SurfaceBOPVolcanicIsland`（零调用）~~、`RealisticBiomeVanillaIcePlains.SurfacePolar`（零调用）、`BOPKelpForest.TerrainBOPKelpForest` 的死构造参数；~~RWG 的 `SurfaceVolcanoAsh` **未移植**~~ | 历史遗留 / ~~火山豁免~~ | **火山那两项已消**：`SurfaceVolcanoAsh` 已移植并接线，`RealisticBiomeBOPVolcanicIsland` 整个类已删除（RWG 对 BOP 火山岛只有一个包装 `RealisticBiomeIslandVolcano`）。剩下两项仍不影响生成，但**会误导审计**（本次就被 `SurfaceBOPVolcanicIsland` 那条自相矛盾的注释带偏过一次） | 独立审计 C12 / §0 |
 
 **第 9 条里"仍待复核"的清单**（都不是"冰雪/沙漠配错气候"那类实害，属**依据不足**）：
 
@@ -308,7 +342,7 @@
 |---|---|---|---|
 | 1 | 河道仍有两套：布局的（生效）与 `TerrainBase` 旧族（死） | 分期切换 | **已消**：旧族随 D1 整族删除（§16） |
 | 2 | `rwgRiverBed()` 派生自 `WaterLevel`，布局里用字面 `59f` | F-41 水位单一真相源 | **已消**：旧族删除后只剩布局的 `59f` |
-| 3 | 火山 / 地标整体缺席 | **用户要求** | 不消（§0） |
+| 3 | 火山 / 地标整体缺席（**当时**为**用户要求**） | 用户后来要求写回 | **已消**（1.0.33 同版本追记）：全部按 RWG 移植接线，开关恢复 0.15 / 0.25，实测密度见 §0 |
 | 4 | `RwgLayoutConfig` 硬编码（不做逃生开关） | **用户要求** | 不消 |
 | 5 | 海洋槽位兜底（跨气候借用同一个海洋） | rtgc 曾只有 1 个深海 | **已消**：6 个 `RtgOceanBiome` + `frozen_ocean` / `deep_ocean` 填满 8 个槽位，`fillMissingOceanSlots` 只在真缺群系时才生效 |
 | 6 | 气候归类用规则而非手写 | rtgc 有约 130 群系、无对照表 | 保留；偏斜已按 **Forge 自己的标签**修正（§15 D3） |

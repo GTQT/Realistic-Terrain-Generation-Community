@@ -297,6 +297,15 @@ String parserChangelog() {
     return parsedChangelog
 }
 
+tasks.register('calibrateVolcanoPlacement', JavaExec) {
+    group = 'verification'
+    description = 'Measures volcano / lava-cave landmark density with the restored RWG switches'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.VolcanoPlacementCalibration'
+    maxHeapSize = '1g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
 tasks.register('calibrateCellularNoise', JavaExec) {
     group = 'verification'
     description = 'Compares rtgc VoronoiResult.rwgCellDistance() against a faithful port of RWG CellNoise(noise) (C-5)'

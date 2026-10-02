@@ -4,6 +4,7 @@ import net.minecraft.world.biome.Biome;
 
 import rtg.api.RTGAPI;
 import rtg.api.util.Logger;
+import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.world.biome.realistic.land.RealisticBiomeMountainChain;
 
@@ -28,6 +29,8 @@ import rtg.world.biome.realistic.land.RealisticBiomeMountainChain;
 public final class RtgLayoutAccess {
 
     private static volatile RtgBiomeLayout layout;
+    /** 世界的噪声源；见 {@link #setTerrainWorld}。生成器构造时注入。 */
+    private static volatile RTGWorld terrainWorld;
     private static volatile long layoutSeed = Long.MIN_VALUE;
 
     private RtgLayoutAccess() {}
@@ -69,6 +72,12 @@ public final class RtgLayoutAccess {
                         Thread.currentThread().getName(), seed, RTGAPI.rtgBiomeCount(), layoutSeed);
             }
             final RtgBiomeLayout fresh = new RtgBiomeLayout(seed);
+            // 火山的"火山锥基座高度 / 底层群系高度"要在布局里算 rNoise，而布局只按种子建立、
+            // 拿不到世界噪声源；生成器构造时会把 RTGWorld 交进来（见 ChunkGeneratorRTG 构造器）。
+            // 两边谁先谁后都可能，故这里把已记住的 RTGWorld 补挂到新布局上。
+            if (terrainWorld != null) {
+                fresh.setTerrainWorld(terrainWorld);
+            }
             final RtgBiomeCategorizer.Report report = RtgBiomeCategorizer.apply(fresh);
             // 边界三池的内容来自 `RtgBiomeCategorizer.RWG_PLACEMENTS`（照抄 RWG 的显式标注），
             // 没标到的气候/方向由 `getLandBiomeAt` 落到核心池 —— 与 RWG 的 fall-through 一致。
@@ -90,6 +99,22 @@ public final class RtgLayoutAccess {
     /** 当前布局；未初始化时为 {@code null}（此时调用方应回退到旧行为）。 */
     public static RtgBiomeLayout current() {
         return layout;
+    }
+
+    /**
+     * 把世界的噪声源（{@link RTGWorld}）交给布局 —— 火山的火山锥/底层高度查询需要它
+     * （RWG 的 {@code ChunkManagerRealistic} 自带 perlin/cell，rtgc 的布局是按种子独立建立的）。
+     *
+     * <p>由 {@code ChunkGeneratorRTG} 的构造器调用；此时布局可能已建好（挂上去），也可能还没建
+     *（记住它，等 {@link #forSeed} 建好时补挂）—— 两种顺序都能工作。
+     */
+    public static synchronized void setTerrainWorld(final RTGWorld world) {
+
+        terrainWorld = world;
+        final RtgBiomeLayout current = layout;
+        if (current != null) {
+            current.setTerrainWorld(world);
+        }
     }
 
     /**

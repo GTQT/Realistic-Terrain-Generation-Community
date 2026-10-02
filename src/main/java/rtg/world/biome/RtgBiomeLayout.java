@@ -1,17 +1,14 @@
 package rtg.world.biome;
 
+import net.minecraft.init.Biomes;
+import rtg.api.RTGAPI;
+import rtg.api.util.noise.*;
+import rtg.api.world.RTGWorld;
+import rtg.api.world.biome.IRealisticBiome;
+import rtg.world.biome.realistic.land.RealisticBiomeIslandVolcano;
+
 import java.util.ArrayList;
 import java.util.List;
-
-import net.minecraft.init.Biomes;
-
-import rtg.api.RTGAPI;
-import rtg.api.util.noise.ContinentalNoise;
-import rtg.api.util.noise.PoissonPointNoise;
-import rtg.api.util.noise.PerlinNoise;
-import rtg.api.util.noise.RwgCellNoise;
-import rtg.api.util.noise.RwgLayoutConfig;
-import rtg.api.world.biome.IRealisticBiome;
 
 
 /**
@@ -33,6 +30,18 @@ import rtg.api.world.biome.IRealisticBiome;
  *       故留待布局接好之后单独决定。</li>
  *   <li><b>已关闭</b>：火山与熔岩洞 —— 由 {@code RwgLayoutConfig.averageLandmarksPerTypeAndContinent = 0}
  *       使 {@code ContinentalNoise} 内的地标采样分支永不进入，无需改动该类一行代码。</li>
+ *   <li><b>本次新增（外科手术式）</b>：火山 / 熔岩洞的**查询方法族**
+ *       （RWG {@code ChunkManagerRealistic} L402-476 / L607-655，含其依赖的 L849-857 / L935-939）
+ *       已逐行搬入本类，见下面「火山 / 熔岩洞族」一节。它们**尚未被任何调用方接上**：
+ *       {@link #computeBiomeDataAt} 的火山分支、以及 {@code getBiomeDataAt} 里的熔岩洞标记群系
+ *       分支仍是关闭状态 —— 本节只提供查询，不改任何既有行为。另需父级在布局建立后调用一次
+ *       {@link #setTerrainWorld(RTGWorld)}，否则地形高度采样会退化为哨兵值（见该字段的说明）。</li>
+ *   <li><b>另新增（同一次外科手术）</b>：火山**地图生成器**钩子所需的两个查询
+ *       {@link #getNoiseWithRiverOceanAt}（RWG L859-861）与 {@link #isBorderlessAt}（RWG L945-963），
+ *       以及它们共用的字段 {@link #borderNoise}。调用方是
+ *       {@code RealisticBiomeBOPTropicalIsland.rMapGen}（RWG
+ *       {@code RealisticBiomeIslandTropical:56-74}）；在 {@code ChunkGeneratorRTG} 接上
+ *       {@code generateMapGen} 钩子之前，它们同样**零调用者**。</li>
  * </ul>
  *
  * <h2>缓存键的说明（纠正一处此前的推断）</h2>
@@ -723,6 +732,425 @@ public final class RtgBiomeLayout {
             sample[3] = RIVER_BED + perlin.noise2(x / 12f, y / 12f) * 2f + perlin.noise2(x / 8f, y / 8f) * 1.5f;
         }
         return (biomeHeight * (sample[2] + 1f)) + (sample[3] * (-sample[2]));
+    }
+
+    // ==================================================================
+    // 火山 / 熔岩洞族（RWG L402-476 / L607-655，另含其依赖 L849-857 / L935-939）
+    //
+    // 本节是**外科手术式新增**：方法体逐行照抄 RWG `ChunkManagerRealistic`，只做了三类
+    // API 适配（都不是算法改动）：
+    //   ① `ConfigRWG.landmassOffsetX/Z` → `RwgLayoutConfig.landmassOffsetX/Z`（L424-425 等）；
+    //   ② `Support.volcanoIsland` → `RealisticBiomeIslandVolcano.volcanoIsland`（L446 等）；
+    //   ③ 地形采样 `biome.rNoise(perlin, cell, x, y, ocean, border, river, continent)` →
+    //      `biome.rNoise(terrainWorld, x, y, border, river)`：rtgc 的 `rNoise` 签名去掉了
+    //      `ocean` 与 `continent`（地形函数自行向布局查询，见 `TerrainBase:794-797` 与
+    //      `TerrainBase.oceanAt`），故 RWG 那两个实参**无从传递**；`border = 1f` 与
+    //      `river = river + 1f` 与 RWG 逐字一致。
+    //
+    // ⚠ 另有两处 RWG 有、rtgc 没有的前置条件：
+    //   · RWG 每个查询方法的首行都是 `if (!continental) return Long.MIN_VALUE;` ——
+    //     rtgc 的布局**恒为大陆模式**（构造函数必定建立 continents，没有「非大陆」分支），
+    //     故该分支在这里不存在；
+    //   · {@link #terrainWorld} 可以为 null（见该字段的说明），此时地形采样退化为
+    //     RWG 自己的哨兵值（63f / 59f）—— 方向是**拒绝火山**，不会生成错的地形。
+    // ==================================================================
+
+    /** RWG L49：火山邻域的河网采样步长（格）。 */
+    private static final int VOLCANO_RIVER_SAMPLE_SPACING = 16;
+    /** 火山 / 熔岩洞三个缓存的上限。RWG 在 L440 / L459 / L627 各自写作字面量 {@code 256}。 */
+    private static final int LANDMARK_CACHE_MAX = 256;
+
+    /**
+     * 火山族做**逐列地形采样**所需的 {@link RTGWorld}。
+     *
+     * <p><b>为什么需要它</b>：RWG 的 {@code ChunkManagerRealistic} 自己持有 {@code perlin} /
+     * {@code cell} 与群系列表，所以它的 {@code getVolcanoBaseHeight} / {@code getNoiseAt}
+     * 能直接算出地形高度；rtgc 把地形函数搬进了 {@code IRealisticBiome.rNoise(RTGWorld, …)}，
+     * 而本布局是按**种子**建立的（{@code RtgLayoutAccess.forSeed}），手里没有 {@code RTGWorld}。
+     * 用「可注入字段」而不是「给每个方法加形参」是为了让本节所有方法保持 RWG 的原签名
+     * （调用方 {@code RealisticBiomeIslandVolcano.generateMagmaChamber} 已经是两参数的写法）。
+     *
+     * <p><b>接线位置（在别的文件里，本次改动没有加）</b>：父级在
+     * {@code RtgLayoutAccess.forSeed} 建好布局后调用一次 {@link #setTerrainWorld(RTGWorld)}
+     * 即可（那里能拿到 {@code rtgWorld}）。**未接线时**火山族不会崩，但会走「拒绝」方向：
+     * 高度采样返回 RWG 自己的哨兵值，`canGenerateAtHeight` 与 `getNoiseAt(...) &gt; 63f`
+     * 都拿不到真实地形。
+     */
+    private RTGWorld terrainWorld;
+
+    /**
+     * 火山资格缓存（键 = {@code getVolcanoSeedKey}）。对应 RWG 的 {@code volcanoEligibilityMap}
+     * （`TLongByteHashMap`，取值 {@code 1} = 合格、{@code 2} = 否）。
+     *
+     * <p>与 {@link #biomeCache} 同理**必须线程安全**：单人游戏里客户端线程与服务端线程会并发
+     * 查询同一个布局。故用 {@code ConcurrentHashMap}，并且读取用 {@code get(...) != null}
+     * 代替 RWG 的 {@code containsKey} + {@code get} —— 同一逻辑，但没有「两次调用之间被
+     * {@code clear()} 掉」的那个窗口（trove 版同样有该窗口）。
+     */
+    private final java.util.concurrent.ConcurrentHashMap<Long, Byte> volcanoEligibilityMap =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** 熔岩洞资格缓存（键 = {@code getLavaCaveSeedKey}）。对应 RWG 的 {@code lavaCaveEligibilityMap}。 */
+    private final java.util.concurrent.ConcurrentHashMap<Long, Byte> lavaCaveEligibilityMap =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** 火山基座高度缓存（键 = {@code getVolcanoSeedKey}）。对应 RWG 的 {@code volcanoBaseHeightMap}。 */
+    private final java.util.concurrent.ConcurrentHashMap<Long, Float> volcanoBaseHeightMap =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 注入地形采样用的 {@link RTGWorld}（见 {@link #terrainWorld}；本类不会自己去取世界）。 */
+    public void setTerrainWorld(final RTGWorld rtgWorld) {
+        this.terrainWorld = rtgWorld;
+    }
+
+    /** 已注入的地形世界；未注入时为 {@code null}（诊断用）。 */
+    public RTGWorld terrainWorld() {
+        return this.terrainWorld;
+    }
+
+    /** RWG L402-406。 */
+    public long getVolcanoCoordinates(final int x, final int y) {
+        final long coordinates = continents.getVolcanoCoordinates(landmassX(x), landmassZ(y));
+        return coordinates != Long.MIN_VALUE && canGenerateVolcanoAt(x, y) ? coordinates : Long.MIN_VALUE;
+    }
+
+    /** RWG L408-412。 */
+    public long getVolcanoVicinityCoordinates(final int x, final int y) {
+        final long coordinates = continents.getVolcanoVicinityCoordinates(landmassX(x), landmassZ(y));
+        return coordinates != Long.MIN_VALUE && canGenerateVolcanoAt(x, y) ? coordinates : Long.MIN_VALUE;
+    }
+
+    /** RWG L414-418。 */
+    public long getLavaCaveCoordinates(final int x, final int z) {
+        final long coordinates = continents.getLavaCaveCoordinates(landmassX(x), landmassZ(z));
+        return coordinates != Long.MIN_VALUE && canGenerateLavaCaveAt(x, z) ? coordinates : Long.MIN_VALUE;
+    }
+
+    /** RWG L420-427：把中心坐标从「大陆场坐标」移回「世界坐标」。 */
+    public long getLavaCaveCenterCoordinates(final int x, final int z) {
+        final long center = continents.getLavaCaveCenterCoordinates(landmassX(x), landmassZ(z));
+        if (center == Long.MIN_VALUE || !canGenerateLavaCaveAt(x, z)) {
+            return Long.MIN_VALUE;
+        }
+        final int centerX = (int) (center >> 32) - RwgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) center - RwgLayoutConfig.landmassOffsetZ;
+        return (long) centerX << 32 | centerZ & 0xffffffffL;
+    }
+
+    /** RWG L429-443：熔岩洞只生成在「中心列地表高度 &gt; 63」处。 */
+    private boolean canGenerateLavaCaveAt(final int x, final int z) {
+        final int shiftedX = landmassX(x);
+        final int shiftedZ = landmassZ(z);
+        final long key = continents.getLavaCaveSeedKey(shiftedX, shiftedZ);
+        if (key == Long.MIN_VALUE) {
+            return false;
+        }
+        final Byte cached = lavaCaveEligibilityMap.get(key);
+        if (cached != null) {
+            return cached == 1;
+        }
+
+        final long center = continents.getLavaCaveCenterCoordinates(shiftedX, shiftedZ);
+        final int centerX = (int) (center >> 32) - RwgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) center - RwgLayoutConfig.landmassOffsetZ;
+        final boolean eligible = getNoiseAt(centerX, centerZ) > 63f;
+        if (lavaCaveEligibilityMap.size() > LANDMARK_CACHE_MAX) {
+            lavaCaveEligibilityMap.clear();
+        }
+        lavaCaveEligibilityMap.put(key, (byte) (eligible ? 1 : 2));
+        return eligible;
+    }
+
+    /**
+     * RWG L445-462。
+     *
+     * <p>火山群系实例来自 {@link RealisticBiomeIslandVolcano#volcanoIsland}
+     * （RWG 是 {@code Support.volcanoIsland}）。**为 null 时整支不生成** —— 与 RWG 的
+     * {@code instanceof} 判定同义。
+     */
+    private boolean canGenerateVolcanoAt(final int x, final int y) {
+        if (!(RealisticBiomeIslandVolcano.volcanoIsland instanceof RealisticBiomeIslandVolcano)) {
+            return false;
+        }
+        final int landmassX = landmassX(x);
+        final int landmassZ = landmassZ(y);
+        final long key = continents.getVolcanoSeedKey(landmassX, landmassZ);
+        if (key == Long.MIN_VALUE) {
+            return false;
+        }
+        final Byte cached = volcanoEligibilityMap.get(key);
+        if (cached != null) {
+            return cached == 1;
+        }
+
+        final long centerCoordinates = continents.getVolcanoCenterCoordinates(landmassX, landmassZ);
+        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final boolean eligible = !hasRiverNearVolcano(centerX, centerZ)
+                && RealisticBiomeIslandVolcano.volcanoIsland.canGenerateAtHeight(getVolcanoBaseHeight(x, y));
+        if (volcanoEligibilityMap.size() > LANDMARK_CACHE_MAX) {
+            volcanoEligibilityMap.clear();
+        }
+        volcanoEligibilityMap.put(key, (byte) (eligible ? 1 : 2));
+        return eligible;
+    }
+
+    /**
+     * RWG L464-476：火山邻域（半径 {@code ContinentalNoise.VOLCANO_ISLAND_RADIUS}）里只要有
+     * 一列落在河网内（河强 &lt; 0）就拒绝这座火山。
+     */
+    private boolean hasRiverNearVolcano(final int centerX, final int centerZ) {
+        final int radius = (int) Math.ceil(ContinentalNoise.VOLCANO_ISLAND_RADIUS);
+        final int radiusSquared = radius * radius;
+        for (int offsetX = -radius; offsetX <= radius; offsetX += VOLCANO_RIVER_SAMPLE_SPACING) {
+            for (int offsetZ = -radius; offsetZ <= radius; offsetZ += VOLCANO_RIVER_SAMPLE_SPACING) {
+                if (offsetX * offsetX + offsetZ * offsetZ <= radiusSquared
+                        && getRawRiverStrength(centerX + offsetX, centerZ + offsetZ) < 0f) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * RWG L935-939：{@link #getRawRiverStrength(float, float)} 的「世界坐标」重载
+     * （先按 {@code RIVER_WARP_DIVISOR / RIVER_WARP_STRENGTH} 做河道扭曲）。
+     * <p>RWG 把它紧挨着放在 2 参版上面；本节的两个火山方法都需要它。
+     */
+    private float getRawRiverStrength(final int x, final int y) {
+        final float pX = x + (perlin.noise1(y / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH);
+        final float pY = y + (perlin.noise1(x / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH);
+        return getRawRiverStrength(pX, pY);
+    }
+
+    /**
+     * RWG L607-630：火山锥体**下方**（尚未叠加火山覆盖）的地形高度。
+     *
+     * <p>与 RWG 的两处差异（都属于上面节首声明的 API 适配）：
+     * <ul>
+     *   <li>RWG 把 {@code getTerrainOceanValue(continent)} 与 {@code continent} 作为
+     *       {@code rNoise} 的第 5 / 第 8 个实参传下去；rtgc 的签名没有这两个形参，故这里
+     *       **不计算** {@code continent}（RWG 里它只用于那两个实参）；</li>
+     *   <li>RWG 在 biome 仍为 null 时会 NPE；rtgc 的 {@code getLandBiomeAt} 在池为空时
+     *       会返回 null（见类注释「可能返回 null」），故返回 RWG 自己的哨兵值 {@code 63f}。</li>
+     * </ul>
+     */
+    public float getVolcanoBaseHeight(final int x, final int y) {
+        final int landmassX = landmassX(x);
+        final int landmassZ = landmassZ(y);
+        final long seedCoordinates = continents.getVolcanoSeedKey(landmassX, landmassZ);
+        if (seedCoordinates == Long.MIN_VALUE) {
+            return 63f;
+        }
+        final Float cached = volcanoBaseHeightMap.get(seedCoordinates);
+        if (cached != null) {
+            return cached;
+        }
+        final long centerCoordinates = continents.getVolcanoCenterCoordinates(landmassX, landmassZ);
+        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
+        final int centerY = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final int climate = getClimateAt(centerX, centerY);
+        IRealisticBiome biome = continents.isIslandVolcano(landmassX, landmassZ)
+                ? selectIslandBiome(1, climate, centerX, centerY)
+                : getLandBiomeAt(centerX, centerY, climate);
+        if (biome == null) {
+            biome = getLandBiomeAt(centerX, centerY, climate);
+        }
+        if (biome == null || terrainWorld == null) {
+            return 63f;
+        }
+        final float river = getRawRiverStrength(centerX, centerY);
+        float height = biome.rNoise(terrainWorld, centerX, centerY, 1f, river + 1f);
+        height = calculateRiver(centerX, centerY, river, height);
+        if (volcanoBaseHeightMap.size() > LANDMARK_CACHE_MAX) {
+            volcanoBaseHeightMap.clear();
+        }
+        volcanoBaseHeightMap.put(seedCoordinates, height);
+        return height;
+    }
+
+    /**
+     * RWG L632-640：不叠加火山锥体时该列的大岛地形高度。
+     * <p>{@code biome == null} 时与 RWG 一样返回 {@code 63f}。
+     */
+    public float getVolcanoUnderlyingHeight(final int x, final int y) {
+        final IRealisticBiome biome = getVolcanoUnderlyingBiome(x, y);
+        if (biome == null || terrainWorld == null) {
+            return 63f;
+        }
+        final float river = getRawRiverStrength(x, y);
+        final float height = biome.rNoise(terrainWorld, x, y, 1f, river + 1f);
+        return calculateRiver(x, y, river, height);
+    }
+
+    /**
+     * RWG L642-655。
+     * <p>注意 RWG 的**非岛屿**分支用的是入参 {@code (x, y)}（不是火山中心坐标）—— 照抄。
+     */
+    public IRealisticBiome getVolcanoUnderlyingBiome(final int x, final int y) {
+        final int shiftedX = landmassX(x);
+        final int shiftedZ = landmassZ(y);
+        final long centerCoordinates = continents.getVolcanoCenterCoordinates(shiftedX, shiftedZ);
+        if (centerCoordinates == Long.MIN_VALUE) {
+            return null;
+        }
+        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final int climate = getClimateAt(centerX, centerZ);
+        IRealisticBiome biome = continents.isIslandVolcano(shiftedX, shiftedZ)
+                ? selectIslandBiome(1, climate, centerX, centerZ)
+                : getLandBiomeAt(x, y, getClimateAt(x, y));
+        if (biome == null) {
+            biome = getLandBiomeAt(centerX, centerZ, climate);
+        }
+        return biome;
+    }
+
+    /**
+     * RWG L849-857：该列的**地表高度**（河心处直接给河床 59f）。
+     *
+     * <p>RWG 用它给熔岩洞做门控（{@code > 63f}，见 {@link #canGenerateLavaCaveAt}）。
+     * rtgc **没有这个方法**（逐列高度由 {@code ChunkGeneratorRTG.getNewerNoise} 在区块级别
+     * 算出，布局拿不到；{@code RtgTerrainQuery} 也刻意没有移植 RWG 的
+     * {@code areBiomesViable} 高度判定）。故这里照抄 RWG 的实现，只把它的两个外部依赖换成
+     * rtgc 的等价物：{@code perlin} / {@code cell} / 群系列表 →
+     * {@code biome.rNoise(terrainWorld, …)}。
+     *
+     * <p>RWG 在此取 {@code getTerrainOceanValue(x, y)} 作为 {@code rNoise} 的 {@code ocean}
+     * 形参；rtgc 的签名没有它（地形函数自行向布局查询），故不计算。
+     */
+    public float getNoiseAt(final int x, final int y) {
+        final float river = getRiverStrength(x, y) + 1f;
+        if (river < 0.5f) {
+            return 59f;
+        }
+        final IRealisticBiome biome = getBiomeDataAt(x, y);
+        if (biome == null || terrainWorld == null) {
+            return 59f;
+        }
+        return biome.rNoise(terrainWorld, x, y, 1f, river);
+    }
+
+    // ==================================================================
+    // 火山地标的两个查询（RWG L859-861 / L945-963，逐行对应）
+    //
+    // 这两个方法的**唯一调用方**是 `RealisticBiomeBOPTropicalIsland.rMapGen`
+    // （RWG `RealisticBiomeIslandTropical:56-74`）；它们此前没有对应的 rtgc 方法，
+    // 是本次按 RWG 原文补上的。除下方各自注明的 API 适配外，判定逻辑逐字相同。
+    // ==================================================================
+
+    /**
+     * RWG {@code ChunkManagerRealistic.borderNoise}（L112 声明 / L117 分配 {@code new float[256]}）：
+     * {@link #isBorderlessAt} 的**编号桶**（即投影到编号轴上的直方图）。
+     *
+     * <p><b>为什么不是 {@code new float[256]}</b>：RWG 的桶按「现实主义编号」索引，而它的编号
+     * 空间恰好是 {@code 0..255}。rtgc 的现实主义编号空间是
+     * {@link RtgRealisticIndex}（MC 编号 + 256 个合成槽位，见其 {@code biomeIdBound()}），
+     * 宽度由注册表与合成群系共同决定，故这里**按需分配**（分配推迟到第一次查询时，
+     * 那时编号空间已冻结）。语义完全一致：只有本方法会写这个数组，且每次扫描结束时全部清零。
+     *
+     * <p><b>线程约束（与 RWG 相同）</b>：这是 RWG 那种**单线程临时字段**。本类的并发读者
+     * （单人游戏的客户端线程）只走 {@link #getBiomeDataAt} 这条纯查询路径，
+     * 而 {@code isBorderlessAt} 只从区块生成（服务端线程）的 map-gen 路径进入，
+     * 因此与 RWG 一样不需要加锁。
+     */
+    private float[] borderNoise = new float[0];
+
+    /**
+     * RWG {@code ChunkManagerRealistic.getNoiseWithRiverOceanAt}（L859-861）：
+     * 该列的现实主义群系在给定 {@code river} 下的地形高度。
+     *
+     * <p>RWG 原文：{@code return getBiomeDataAt(x, y).rNoise(perlin, cell, x, y, ocean, 1f, river);}
+     *
+     * <p><b>两处 API 适配</b>：
+     * <ul>
+     *   <li>{@code perlin/cell} 与 {@code ocean/continent} 形参：rtgc 的
+     *       {@link IRealisticBiome#rNoise} 只收 {@code (rtgWorld, x, y, border, river)} ——
+     *       地形函数自己向布局查询海洋/大陆值（见 {@code TerrainBase} 的 {@code oceanAt}），
+     *       故 {@code ocean} 在 rtgc 侧**无从传递**。本方法保留该形参只为与 RWG 的调用点同形
+     *       （调用方仍照抄地传 {@code cmr.getTerrainOceanValue(…)}），**方法体内不使用它**。
+     *       {@code border = 1f} 与 RWG 逐字一致。</li>
+     *   <li>{@code getBiomeDataAt} 返回 null 时：RWG 会 NPE，rtgc 返回 RWG 自己的哨兵值
+     *       {@code 59f}（与同节的 {@link #getNoiseAt} 同口径）。方向是**拒绝火山**
+     *       （门控是 {@code > 110f}），不会生成错的地形。</li>
+     * </ul>
+     */
+    public float getNoiseWithRiverOceanAt(final int x, final int y, final float river, final float ocean) {
+        final IRealisticBiome biome = getBiomeDataAt(x, y);
+        if (biome == null || terrainWorld == null) {
+            return 59f;
+        }
+        return biome.rNoise(terrainWorld, x, y, 1f, river);
+    }
+
+    /**
+     * RWG {@code ChunkManagerRealistic.isBorderlessAt}（L945-963）的逐行照抄：
+     * 在 (x,y) 周围按 **16 格** 步长取 5×5 = 25 个采样点，若**同一个现实主义群系占满全部 25 点**
+     * 就返回 true。命名里的「borderless」即「不在群系边界上」——
+     * <b>返回 true 表示这一带是同一种群系，火山锥可以整片跨区块生成而不会骑在群系交界上</b>。
+     *
+     * <pre>
+     * RWG：                                                   rtgc：
+     *   for (bx = -2; bx &lt;= 2; bx++)                           逐字
+     *     for (by = -2; by &lt;= 2; by++)                         逐字
+     *       borderNoise[getBiomeDataAt(x + bx*16, y + by*16)    索引表达式换成
+     *                    .biomeID] += 0.04f;                     RtgRealisticIndex.idFor(群系)
+     *   by = 0;                                                逐字
+     *   for (bx = 0; bx &lt; 256; bx++) { if (borderNoise[bx] &gt; 0.98f) by = 1;
+     *                                   borderNoise[bx] = 0; } 上界 256 → borderNoise.length
+     *   return by == 1 ? true : false;                         逐字
+     * </pre>
+     *
+     * <p>阈值口径证明等价性：25 × 0.04f = 1.0f，而 24 × 0.04f = 0.96f &lt; 0.98f，
+     * 故 {@code > 0.98f} 当且仅当**某一个桶恰好累加到 25 次**（同一群系 25 个采样全中）。
+     *
+     * <p><b>无法逐字照抄的地方（本方法唯一的两处改写，都不改语义）</b>：
+     * <ol>
+     *   <li>RWG 直接用 {@code getBiomeDataAt(…).biomeID} 当数组下标。rtgc 的
+     *       {@link IRealisticBiome} **没有** {@code biomeID} 字段，但有一个语义完全对应的
+     *       「现实主义编号」取值器 —— {@link RtgRealisticIndex#idFor}
+     *       （普通群系 = 其 MC 编号，合成群系 = 独立槽位；RWG 的
+     *       {@code RealisticBiomeBase.getBiome(k)} 就是它的等价物）。故索引表达式换成
+     *       {@code idFor(…)}，桶宽随之从 256 改为 {@code borderNoise.length}
+     *       （见 {@link #borderNoise}），**不是**退化成对象身份计数。
+     *       <br>⚠ 不能用 {@link IRealisticBiome#baseBiomeId()}：多个现实主义群系共用同一个
+     *       MC 群系（山地链与它的备份群系就是如此），用 MC 编号会把它们折叠成一个桶，
+     *       于是"边界上有两种不同的现实主义群系"会被误判成"无边界"。</li>
+     *   <li>{@code getBiomeDataAt} 可能返回 null（见其说明：核心池未注册时），此时
+     *       {@code idFor} 返回 {@code -1}。RWG 会直接 NPE；rtgc **跳过该点**
+     *       （不计入任何桶）——结果是更难满足 25/25，即**拒绝火山**，与
+     *       {@link #getNoiseWithRiverOceanAt} 的 fail-soft 方向一致。</li>
+     * </ol>
+     *
+     * @return true = 这 25 个采样点全属同一个现实主义群系（不在群系边界上）
+     */
+    public boolean isBorderlessAt(final int x, final int y) {
+        int bx, by;
+
+        if (borderNoise.length < RtgRealisticIndex.biomeIdBound()) {
+            borderNoise = new float[RtgRealisticIndex.biomeIdBound()];
+        }
+
+        for (bx = -2; bx <= 2; bx++) {
+            for (by = -2; by <= 2; by++) {
+                final int id = RtgRealisticIndex.idFor(getBiomeDataAt(x + bx * 16, y + by * 16));
+                if (id >= 0) {
+                    if (id >= borderNoise.length) {
+                        borderNoise = java.util.Arrays.copyOf(borderNoise, id + 1);
+                    }
+                    borderNoise[id] += 0.04f;
+                }
+            }
+        }
+
+        by = 0;
+        for (bx = 0; bx < borderNoise.length; bx++) {
+            if (borderNoise[bx] > 0.98f) {
+                by = 1;
+            }
+            borderNoise[bx] = 0;
+        }
+
+        return by == 1 ? true : false;
     }
 
     // ==================================================================

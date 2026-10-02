@@ -1,147 +1,20 @@
 package rtg.init;
 
-import javax.annotation.Nullable;
-import java.util.Arrays;
-
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.biome.Biome;
-
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
-
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
 import rtg.api.util.UtilityClass;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.compat.ModCompat.Mods;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPAlps;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPAlpsFoothills;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPBambooForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPBayou;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPBog;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPBorealForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPBrushland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPChaparral;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPCherryBlossomGrove;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPColdDesert;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPConiferousForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPCoralReef;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPCrag;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPDeadForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPDeadSwamp;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPEucalyptusForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPFen;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPFlowerField;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPFlowerIsland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPGlacier;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPGrassland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPGravelBeach;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPGrove;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPHighland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPKelpForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPLandOfLakes;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPLavenderFields;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPLushDesert;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPLushSwamp;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMangrove;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMapleWoods;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMarsh;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMeadow;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMoor;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMountainFoothills;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMountainPeaks;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPMysticGrove;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOasis;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOminousWoods;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOrchard;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOriginBeach;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOriginIsland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOutback;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPOvergrownCliffs;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPPasture;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPPrairie;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPQuagmire;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPRainforest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPRedwoodForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPRedwoodForestEdge;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSacredSprings;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSeasonalForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPShield;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPShrubland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSnowyConiferousForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSnowyForest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSnowyTundra;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPSteppe;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPTemperateRainforest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPTropicalIsland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPTropicalRainforest;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPTundra;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPVolcanicIsland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPWasteland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPWetland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPWhiteBeach;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPWoodland;
-import rtg.world.biome.realistic.biomesoplenty.RealisticBiomeBOPXericShrubland;
+import rtg.world.biome.realistic.biomesoplenty.*;
+import rtg.world.biome.realistic.land.RealisticBiomeIslandVolcano;
 import rtg.world.biome.realistic.thaumcraft.RealisticBiomeTCEerie;
 import rtg.world.biome.realistic.thaumcraft.RealisticBiomeTCMagicalForest;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaBeach;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaBirchForest;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaBirchForestHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaBirchForestHillsM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaBirchForestM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaColdBeach;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaColdTaiga;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaColdTaigaHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaColdTaigaM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaDeepOcean;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaDesert;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaDesertHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaDesertM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaExtremeHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaExtremeHillsEdge;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaExtremeHillsM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaExtremeHillsPlus;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaExtremeHillsPlusM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaFlowerForest;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaForest;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaForestHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaFrozenOcean;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaFrozenRiver;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaIceMountains;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaIcePlains;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaIcePlainsSpikes;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaJungle;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaJungleEdge;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaJungleEdgeM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaJungleHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaJungleM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMegaSpruceTaiga;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMegaTaiga;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMegaTaigaHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesa;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesaBryce;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesaPlateau;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesaPlateauF;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesaPlateauFM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMesaPlateauM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMushroomIsland;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaMushroomIslandShore;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaOcean;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaPlains;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaRedwoodTaigaHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaRiver;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaRoofedForest;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaRoofedForestM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSavanna;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSavannaM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSavannaPlateau;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSavannaPlateauM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaStoneBeach;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSunflowerPlains;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSwampland;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaSwamplandM;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaTaiga;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaTaigaHills;
-import rtg.world.biome.realistic.vanilla.RealisticBiomeVanillaTaigaM;
+import rtg.world.biome.realistic.vanilla.*;
+
+import javax.annotation.Nullable;
 
 
 @UtilityClass
@@ -549,7 +422,14 @@ public final class BiomeInit {
             RTGAPI.addRTGBiomes(new RealisticBiomeBOPTundra(biome));
         }
         if ((biome = getBiome(Mods.biomesoplenty.getResourceLocation("volcanic_island"))) != null) {
-            RTGAPI.addRTGBiomes(new RealisticBiomeBOPVolcanicIsland(biome));
+            // RWG 用 **RealisticBiomeIslandVolcano** 包装 BOP 的火山岛（`SupportBOP:49-53`），
+            // 并把它记成 `Support.volcanoIsland`：生成器靠它决定"哪一列要长火山锥、灌岩浆"。
+            // rtgc 的对应物就是同名静态字段；原来那个 RTG 时代的
+            // `RealisticBiomeBOPVolcanicIsland` 已删除 —— RWG 对同一个 MC 群系**只有一个**包装，
+            // 而 `RTGAPI` 是按群系索引的 Map（两个包装会让后者把前者顶掉，见 docs §0.5.4 检查 4）。
+            final RealisticBiomeIslandVolcano volcanoIsland = new RealisticBiomeIslandVolcano(biome);
+            RTGAPI.addRTGBiomes(volcanoIsland);
+            RealisticBiomeIslandVolcano.volcanoIsland = volcanoIsland;
         }
         if ((biome = getBiome(Mods.biomesoplenty.getResourceLocation("wasteland"))) != null) {
             RTGAPI.addRTGBiomes(new RealisticBiomeBOPWasteland(biome));

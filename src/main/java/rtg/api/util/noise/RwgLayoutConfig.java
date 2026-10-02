@@ -53,19 +53,22 @@ public final class RwgLayoutConfig {
     public static final float maximumIslandWidth = 600f;
     /** 岛屿出现概率。RWG 默认 {@code 0.30f}。 */
     public static final float islandPlacementChance = 0.30f;
-    /** 大岛屿带火山的概率。RWG 默认 {@code 0.15f}；**rtgc 设为 0 以关闭火山**（用户先前明确要求「不要火山」）。 */
-    public static final float largeIslandVolcanoChance = 0f;
+    /** 大岛屿带火山的概率。RWG 默认 {@code 0.15f}（照抄）。 */
+    public static final float largeIslandVolcanoChance = 0.15f;
     /**
-     * 每个大陆每种地标的平均数量。RWG 默认 {@code 0.25f}；**rtgc 设为 0 以关闭地标**。
+     * 每个大陆每种地标的平均数量。RWG 默认 {@code 0.25f}（照抄）。
      * <p>
-     * 这是关闭整个地标子系统的**唯一开关**：{@code ContinentalNoise.sampleLandform} 里
+     * 这是地标子系统的**唯一开关**：{@code ContinentalNoise.sampleLandform} 里
      * 地标采样被包在 {@code if (continent >= 0D && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f)}
-     * 中。置 0 之后该分支永不进入，于是火山与熔岩洞**完全不会出现**，
-     * 而 {@code ContinentalNoise} 本身**一行都不用改**（保持照抄）。
+     * 中。置 0 之后该分支永不进入，于是火山与熔岩洞**完全不会出现**。
      * <p>
-     * 用户先前要求删除地标系统，故这里取 0，而不是 RWG 的 0.25。
+     * <b>历史</b>：这条一度是 {@code 0f} —— 用户先前明确要求删除火山与地标，
+     * 当时就靠这一个数把它整个关掉（{@code ContinentalNoise} 本身一行都不用改，保持照抄）。
+     * 后来用户要求「**写回火山的全部内容**」，故恢复 RWG 原值 0.25f；
+     * 火山本体（`MapVolcano` / `RealisticBiomeIslandVolcano` / 岩浆房 / 熔岩洞地标 /
+     * 地标装饰）也已按 RWG 逐行移植接线，不再是"关掉即完事"。
      */
-    public static final float averageLandmarksPerTypeAndContinent = 0f;
+    public static final float averageLandmarksPerTypeAndContinent = 0.25f;
 
     // ---- 坐标偏移 ----
     // RWG 用它们做「同一种子下的不同地貌取景」。默认全 0，与 RWG 一致。

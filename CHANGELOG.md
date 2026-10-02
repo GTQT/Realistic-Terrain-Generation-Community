@@ -1857,6 +1857,82 @@ RWG 那边**没有可抄的长度**：它只算到"洞顶那一格空气"，实�
 （`Et-Futurum-Requiem`，1.7.10 专属）。这条已作为**有意差异**记入 `docs/rwg-port-gaps.md` §0.5.2。
 `gradlew build` 通过。
 
+### 追加（同版本）：**火山与地标全部写回**（RWG 逐行移植）
+
+用户要求："开始写回火山的全部内容" ＋ "全做完"。
+
+此前火山与地标是**唯一的照抄豁免**（用户先前明确要求删除，`docs/rwg-port-gaps.md` §0 记着，
+并靠 `RwgLayoutConfig.averageLandmarksPerTypeAndContinent = 0` 一个数把整支关掉）。
+现在整条链路按 RWG 逐行移植并接线，§0 的豁免作废。
+
+**新文件**
+
+| 文件 | RWG 出处 |
+|---|---|
+| `rtg/world/biome/realistic/land/RealisticBiomeIslandVolcano.java` | `rwg/biomes/realistic/ocean/RealisticBiomeIslandVolcano.java`（锥体/岩缘/熔岩口/岩浆房/山顶门控） |
+| `rtg/api/world/surface/SurfaceVolcanoAsh.java` | `rwg/surface/SurfaceVolcanoAsh.java` |
+| `rtg/world/gen/MapVolcano.java` | `rwg/map/MapVolcano.java`（热带岛小火山） |
+| `rtg/world/gen/LavaCaveLandmark.java` | `rwg/map/LavaCaveLandmark.java`（熔岩洞本体/通风口锥体/冒烟草） |
+| （不移植）`LandmarkDecorations` | **整类删除**（用户裁定）；RWG 的 `rwg/support/LandmarkDecorations.java` 四类装饰全部依赖 1.12.2 不存在的模组 |
+| `src/preview/java/rtg/api/util/noise/VolcanoPlacementCalibration.java` | 新增标定工具（`gradlew calibrateVolcanoPlacement`） |
+
+**改动**
+
+- `RtgBiomeLayout`：新增火山/熔岩洞查询族（`getVolcanoCoordinates` / `getVolcanoVicinityCoordinates` /
+  `getLavaCaveCoordinates` / `getLavaCaveCenterCoordinates` / `canGenerateVolcanoAt`（含"火山附近有河就不生成"）/
+  `getVolcanoBaseHeight` / `getVolcanoUnderlyingHeight` / `getVolcanoUnderlyingBiome` / `isBorderlessAt` /
+  `getNoiseWithRiverOceanAt`）—— 对应 `ChunkManagerRealistic:402-476/607-655/859-861/945-963`。
+- `ChunkGeneratorRTG`：① 高度叠加（火山锥**替换**该列高度、写 `volcanoSurfaceDepth`、
+  火山渣/熔岩口判定，位置在河道雕刻之前）；② `replaceBiomeBlocks` 的火山地表三分支；
+  ③ 岩浆房（**结构之后**，黑曜石外壳要封住洞穴/结构挖开的口子）；④ 熔岩洞 `generate` /
+  `surfaceHeight` / `decorateSurface`；⑤ 地标装饰；⑥ mapgen 调度（`generateTerrain` 之后、
+  地表替换之前，传 `landscape.noise` **本身** —— `MapVolcano` 会就地抬高锥体侧翼）。
+- `IRealisticBiome` / `RealisticBiomeBase`：新增 `rMapGen` / `generateMapGen` 钩子链（RWG `:186-201`，
+  k=5 的 11×11 候选中心循环）；`RealisticBiomeBOPTropicalIsland` 覆写 `rMapGen` 调 `MapVolcano`。
+- `RtgLayoutAccess` / `ChunkGeneratorRTG`：把 `RTGWorld` 注入布局（火山的"基座/底层高度"要算 `rNoise`；
+  RWG 的 `ChunkManagerRealistic` 自带噪声源，rtgc 的布局只按种子建立）。
+- `RwgLayoutConfig`：`largeIslandVolcanoChance` 0 → **0.15**、`averageLandmarksPerTypeAndContinent` 0 → **0.25**（RWG 原值）。
+- `BiomeInit`：BOP `volcanic_island` 改由 `RealisticBiomeIslandVolcano` 包装（= RWG `SupportBOP:49-53`）；
+  **删除** `RealisticBiomeBOPVolcanicIsland` —— RWG 对同一 MC 群系只有一个包装，两个会让 `RTGAPI` 的 Map 静默顶掉一个。
+- `RtgBiomeCategorizer`：火山群系**不进任何池**（RWG 的 `Support.volcanoIsland` 从不 `addBiome`）。
+  ⚠ 不修的话 BOP 的 `volcanic_island` 会因名字含 "island" 进 ISLAND 池 ⇒ 普通岛屿长出 baseHeight=61 的火山锥，
+  且 `getVolcanoBaseHeight`/`getVolcanoUnderlyingBiome` 的岛屿分支会取到火山自身（污染锥体基座）。
+
+**四处偏离**（1.12.2 无对应物 / 用户裁定，均已在代码注释与 §0 记录）
+
+1. **`LandmarkDecorations` 整类不移植**（用户裁定，原话："**就是彻底删掉，什么都没有，别判断模组行不行**"）：
+   RWG 的这个类产生四类可选装饰（深板岩柱 / LootGames 拼图大师 / 暮色门 / Natura 发光蘑菇），
+   全部依赖 1.12.2 不存在的模组。用户先裁定"深板岩 → 黑曜石"，继而要"凑不齐就什么都别生成"，
+   最后明确"彻底删掉、**别判断模组行不行**" ⇒ **类已删除**，`ChunkGeneratorRTG` 里连同
+   `landmarkDecorations` 字段、初始化与调用点一并移除，**不做任何 `Loader.isModLoaded` 判断**。
+   `LavaCaveLandmark` 不受影响（零可选模组依赖，冒烟草用 BOP 的 `biomesoplenty:grass`）。
+2. **熔岩洞"标记群系"跳过**：RWG 用 BOP 的 `phantasmagoric_inferno` 标开口列（`markLavaCaveOpeningBiome`），
+   而 BOP 7.0.1.2445 **既无该群系类也无该 lang 名**（已核对 jar）⇒ 不发明群系。
+3. **`isBorderlessAt` 桶宽**：RWG 写死 `float[256]`；rtgc 用 `RtgRealisticIndex.idFor` / `biomeIdBound()`
+   （REID 下 MC 编号可 >256）。不能用 `baseBiomeId()`（山地链与其备份群系共用 MC 编号，会折叠成一个桶）。
+4. **mapgen 去重**：RWG 用独立 `mapGenBiomes[256]` 标记数组；rtgc 照同一判据（中心列 `smallRender[312]`）
+   读、用本区块 `activeBiomeIds` 去重 —— **不**清零 `smallRender`（会破坏金字塔）。
+
+**验证**
+
+```
+gradlew build -x test              BUILD SUCCESSFUL
+tools/terrain-wiring-check.ps1     131/131（火山群系占位地形仍走 terrainIslandTropical ⇒ 无需白名单）
+tools/terrain-surface-audit.ps1    matched=43, mismatched=0
+tools/rwg-placement-check.ps1      PASS（copied=22, rtgc-only=1, gaps=1 fungiforest）
+tools/reachability.ps1             仍只有 terrainDunes DEAD（未新增死码）
+gradlew calibrateVolcanoPlacement  种子 123456789 / 20000² 窗口：火山中心 4 座（最近邻 p50 ≈ 7925 格）、
+                                   火山锥列 0.048%、熔岩洞中心 6 个（≈ 8165 格）
+```
+
+**按用户裁定最终定下的三条**
+
+- 熔岩洞"**标记群系**"：1.12.2 无对应物 ⇒ **没有就没有**，不发明群系（`markLavaCaveOpeningBiome` 整块跳过）。
+- `LandmarkDecorations` 的**四类可选装饰**（深板岩柱 / LootGames 拼图大师 / 暮色门 / Natura 发光蘑菇）：
+  用户最终裁定"**就是彻底删掉，什么都没有，别判断模组行不行**" ⇒ 类已删除、调用点与字段一并移除，
+  **不做任何模组判断**（既不生成，也不留半成品）。
+- `LavaCaveLandmark`（熔岩洞本体 + 冒烟草 + 通风口锥体）与上述无关，正常生成。
+
 
 ## [1.0.32]
 

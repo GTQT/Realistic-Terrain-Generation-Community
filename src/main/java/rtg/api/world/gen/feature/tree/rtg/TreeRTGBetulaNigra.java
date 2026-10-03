@@ -3,14 +3,15 @@ package rtg.api.world.gen.feature.tree.rtg;
 /**
  * Betula Nigra (River Birch)
  */
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Random;
 
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import rtg.api.util.Logger;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Random;
 
 
 public class TreeRTGBetulaNigra extends TreeRTG {
@@ -49,8 +50,8 @@ public class TreeRTGBetulaNigra extends TreeRTG {
     public TreeRTGBetulaNigra() {
 
         super();
-        this.crownSize = 6;
-        this.trunkSize = 4;
+        this.crownSize = 20;
+        this.trunkSize = 5;
         TreeMaterials.Picker picker  = new TreeMaterials.Picker();
         this.branchBlock = picker.birch.branches;
         this.leavesBlock = picker.birch.leaves;
@@ -105,7 +106,7 @@ public class TreeRTGBetulaNigra extends TreeRTG {
         // make the crown trunk
         for (int crownLocation = 0 ; crownLocation < crownSize;crownLocation++) {
         	if (!this.placeTrunkBlock(world, pos.up(crownLocation+trunkSize), this.generateFlag,lightTracker)) {
-        		//Logger.info("aborting Tree at {}" , pos);
+        		Logger.info("aborting Tree at {}" , pos);
         		return false;
         	};
         }

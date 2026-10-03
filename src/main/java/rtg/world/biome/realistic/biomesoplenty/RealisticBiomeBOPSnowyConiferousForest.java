@@ -2,17 +2,17 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.block.BOPBlocks;
-
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoBoulder;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.collection.trees.bop.DecoCollectionBOPConiferousForest;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPSnowyConiferousForest extends RealisticBiomeBase {
@@ -38,6 +38,10 @@ public class RealisticBiomeBOPSnowyConiferousForest extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6：树交给新的树装饰集合，并摘掉 BOP 自家 TREE 生成器。
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoCollectionBOPConiferousForest(this.getConfig());
 
         DecoBoulder decoBoulder = new DecoBoulder();
         decoBoulder.setBoulderBlock(Blocks.COBBLESTONE.getDefaultState());

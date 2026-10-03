@@ -1,10 +1,12 @@
 package rtg.world.biome;
 
-import java.util.List;
-import java.util.Random;
-
+import net.minecraft.init.Biomes;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
+import rtg.api.RTGAPI;
+import rtg.api.world.biome.IRealisticBiome;
+
+import java.util.*;
 
 
 /**
@@ -71,6 +73,13 @@ public final class RtgTerrainQuery {
     private static final int SAMPLE_SHIFT = 2;
 
     /**
+     * 原版 1.12.2 的村庄候选群系 —— 抄 {@code MapGenVillage.VILLAGE_SPAWN_BIOMES}
+     * （{@code MapGenVillage.java:17}，逐项一致）。用于认出"这次 areBiomesViable 是村庄发的"。
+     */
+    private static final Set<Biome> VANILLA_VILLAGE_BIOMES = new HashSet<>(Arrays.asList(
+            Biomes.PLAINS, Biomes.DESERT, Biomes.SAVANNA, Biomes.TAIGA));
+
+    /**
      * 原版 {@code BiomeProvider.areBiomesViable} 的等价物，数据源换成 RTG 布局。
      *
      * @return 布局不可用时返回 {@code null}（调用方回落到父类）
@@ -86,15 +95,63 @@ public final class RtgTerrainQuery {
         final int i1 = k - i + 1;
         final int j1 = l - j + 1;
 
+        final boolean villageQuery = isVillageQuery(allowed);
+
         for (int l1 = 0; l1 < i1 * j1; ++l1) {
             final int x2 = (i + l1 % i1) << SAMPLE_SHIFT;
             final int z2 = (j + l1 / i1) << SAMPLE_SHIFT;
             final Biome biome = RtgLayoutAccess.mcBiomeAt(x2, z2);
-            if (biome == null || !allowed.contains(biome)) {
+            if (biome == null) {
+                return Boolean.FALSE;
+            }
+            if (!allowed.contains(biome) && !(villageQuery && allowsVillages(biome))) {
                 return Boolean.FALSE;
             }
         }
         return Boolean.TRUE;
+    }
+
+    /**
+     * 本次调用是不是 {@code MapGenVillage} 发起的？
+     *
+     * <p>判据：{@code allowed} 里的群系**全部**落在原版村庄候选集
+     * （{@code Biomes.PLAINS / DESERT / SAVANNA / TAIGA}）之内。原版
+     * {@code BiomeProvider.areBiomesViable} 的其它调用方传的都是这些之外的表
+     * （海底神殿传 {@code WATER_BIOMES}、林地府邸传它自己的 {@code ALLOWED_BIOMES}），
+     * 所以它们不会命中这条判据，**只有村庄会**。
+     *
+     * <p>之所以用"子集"而不是"对象同一性"：{@code MapGenVillage} 在 1.12.2 里传的就是那个静态
+     * {@code VILLAGE_SPAWN_BIOMES}（实测 {@code MapGenVillage.java:17/76}），子集判据能同时覆盖
+     * "某个模组把它复制了一份"的情况。
+     */
+    private static boolean isVillageQuery(final List<Biome> allowed) {
+        if (allowed == null || allowed.isEmpty()) {
+            return false;
+        }
+        return VANILLA_VILLAGE_BIOMES.containsAll(allowed);
+    }
+
+    /**
+     * 该群系是否通过 RTG 的逐群系配置**主动允许**村庄。
+     *
+     * <p>原版 1.12.2 的村庄只能落在 {@code VILLAGE_SPAWN_BIOMES} 那四个群系里，BOP 等模组群系
+     * 永远进不去。RTG 的 {@code BiomeConfig.ALLOW_VILLAGES} 就是为这件事准备的开关
+     * （默认 {@code false}），但它（上游与本仓库都）**只有写入点、没有读取点** ——
+     * 各群系里的 {@code ALLOW_VILLAGES.set(true)} 此前是死代码。这里是它的读取器。
+     *
+     * <p>未登记在布局里的群系返回 {@code false}，因此原版村庄仍严格只落在那四个群系。
+     */
+    private static boolean allowsVillages(final Biome biome) {
+        if (biome == null || VANILLA_VILLAGE_BIOMES.contains(biome)) {
+            return false;
+        }
+        // 未登记的群系 getIdForBiome 返回 -1，getRTGBiome 会走到缓存兜底并返回 null，
+        // 下面的 null 判断已覆盖，无需单独再挡一次。
+        final IRealisticBiome realistic = RTGAPI.getRTGBiome(biome);
+        if (realistic != null && realistic.getConfig() != null) {
+            return realistic.getConfig().ALLOW_VILLAGES.get();
+        }
+        return false;
     }
 
     /**

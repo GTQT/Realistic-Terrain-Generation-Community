@@ -2,26 +2,26 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.biome.BOPBiomes;
-
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoBoulder;
-import rtg.api.world.deco.DecoFallenTree;
-import rtg.api.world.deco.DecoShrub;
-import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.*;
+import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.deco.helper.DecoHelper5050;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPapyrifera;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPiceaSitchensis;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
@@ -52,6 +52,10 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoTreeCollectionBOPLandOfLakes(this.getConfig());
 
         TreeRTG birchTree = new TreeRTGBetulaPapyrifera();
         birchTree.setLogBlock(BlockUtil.getStateLog(EnumType.BIRCH));
@@ -138,4 +142,44 @@ public class RealisticBiomeBOPLandOfLakes extends RealisticBiomeBase {
         }
     }
 
+
+    private static class DecoTreeCollectionBOPLandOfLakes extends DecoCollectionBase {
+
+		public DecoTreeCollectionBOPLandOfLakes(BiomeConfig config) {
+			super(config);
+			
+			DecoTreeSet trees = new DecoTreeSet();
+			
+			{DecoVariableTree spruceTree = new DecoVariableSpruce();
+			spruceTree.changeAverageHeightSqrt(-1);// short
+			trees.add(spruceTree,4);}
+			
+			
+			{DecoVariableTree oakSpruceTree = new DecoVariableSpruce();
+			oakSpruceTree.changeAverageHeightSqrt(-1);// short
+			TreeMaterials oakSpruceMaterials = new TreeMaterials("Oak Spruce",
+					Blocks.LOG.getStateFromMeta(0),
+					Blocks.LEAVES.getStateFromMeta(1),
+					Blocks.LOG.getStateFromMeta(12));
+			oakSpruceTree.setMaterials(oakSpruceMaterials);
+			trees.add(oakSpruceTree,4);}
+			
+			{DecoVariableTree oakTree = new DecoVariableOak();
+			oakTree.changeAverageHeightSqrt(-1.5f);// shorter
+			trees.add(oakTree,3);}
+			
+			{DecoVariableTree oakBirchTree = new DecoVariableOak();
+			oakBirchTree.changeAverageHeightSqrt(-1.5f);// shorter
+			oakBirchTree.setMaterials(TreeMaterials.Picker.birch);
+			trees.add(oakBirchTree,3);}
+
+			Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 5.5f); 
+			trees.setDistribution(treeFrequencyDistribution);
+			
+			this.addDeco(trees);
+			
+			
+		}
+    	
+    }
 }

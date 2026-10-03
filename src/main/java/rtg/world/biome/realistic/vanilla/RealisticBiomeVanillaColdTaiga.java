@@ -5,11 +5,12 @@ import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.deco.collection.DecoCollectionTaiga;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.deco.collection.DecoCollectionTaiga;
+import rtg.api.world.deco.collection.trees.DecoCollectionTaigaTrees;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaColdTaiga extends RealisticBiomeBase {
@@ -52,6 +53,10 @@ public class RealisticBiomeVanillaColdTaiga extends RealisticBiomeBase {
     	decos.changeAvgHeightSqrt(-1f);
     	decos.changeHeightVariability(-0.5f);
         this.addDecoCollection(decos);
+        DecoCollectionTaigaTrees decoTrees = new DecoCollectionTaigaTrees(this.getConfig());
+        this.treeGenerator = decoTrees;
+    	decoTrees.changeAvgHeightSqrt(-1f);
+    	decoTrees.changeHeightVariability(-0.5f);
     }
 
     public static class TerrainVanillaColdTaiga extends TerrainBase {

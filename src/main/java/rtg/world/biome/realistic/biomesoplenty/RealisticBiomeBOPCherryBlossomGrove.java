@@ -2,17 +2,15 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.block.BOPBlocks;
-
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoBoulder;
 import rtg.api.world.deco.DecoFallenTree;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeBOPCherryBlossomGrove extends RealisticBiomeBase {
@@ -21,6 +19,7 @@ public class RealisticBiomeBOPCherryBlossomGrove extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
+        this.getConfig().ALLOW_VILLAGES.set(true);
         this.getConfig().addProperty(this.getConfig().ALLOW_LOGS).set(true);
         this.getConfig().addProperty(this.getConfig().FALLEN_LOG_DENSITY_MULTIPLIER);
     }

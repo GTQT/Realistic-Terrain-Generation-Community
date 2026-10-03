@@ -3,12 +3,11 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeBOPXericShrubland extends RealisticBiomeBase {
@@ -20,6 +19,7 @@ public class RealisticBiomeBOPXericShrubland extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
+        this.getConfig().ALLOW_VILLAGES.set(true);
     }
 
     @Override

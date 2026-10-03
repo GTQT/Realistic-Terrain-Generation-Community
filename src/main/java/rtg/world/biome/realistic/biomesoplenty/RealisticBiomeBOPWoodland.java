@@ -2,40 +2,28 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.biome.BOPBiomes;
-
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoFallenTree;
-import rtg.api.world.deco.DecoFlowersRTG;
-import rtg.api.world.deco.DecoShrub;
-import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.*;
 import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.deco.helper.DecoHelper5050;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPiceaSitchensis;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPinusPonderosa;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ALLIUM;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.BLUE_ORCHID;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.DANDELION;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.HOUSTONIA;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ORANGE_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.OXEYE_DAISY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.PINK_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.POPPY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.RED_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.WHITE_TULIP;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
+
+import static net.minecraft.block.BlockFlower.EnumFlowerType.*;
 
 
 public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
@@ -66,6 +54,30 @@ public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        DecoVariableTree oaks = new DecoVariableOak();
+        oaks.changeLocalNoiseVariability(0.5f);
+        oaks.setSaplingChance(.2f);
+
+        DecoVariableTree spruceBirch = new DecoVariableBirch();
+        spruceBirch.changeLocalNoiseVariability(0.5f);
+        spruceBirch.setSaplingChance(.2f);
+
+        TreeMaterials spruceBirchMaterials = new TreeMaterials(
+                "Birch",
+                TreeMaterials.Picker.spruce.log,
+                TreeMaterials.Picker.birch.leaves,
+                TreeMaterials.Picker.spruce.branches);
+        spruceBirch.setMaterials(spruceBirchMaterials);
+
+        DecoTreeSet treeCombination = new DecoTreeSet();
+        treeCombination.add(oaks, 2);
+        treeCombination.add(spruceBirch, 1);
+        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 5.5f));
+
+        this.treeGenerator = treeCombination;
         this.addDecoCollection(new DecoCollectionWoodland(this.getConfig()));
     }
 

@@ -2,19 +2,28 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.block.BOPBlocks;
-
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.DecoTreeSet;
+import rtg.api.world.deco.DecoVariableBirch;
+import rtg.api.world.deco.collection.DecoCollectionBase;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
+import rtg.api.world.gen.feature.tree.bop.TreeBOPJacaranda;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusRobur;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGResizable;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
-import rtg.api.world.surface.SurfaceGrassland;
 
 
 public class RealisticBiomeBOPMysticGrove extends RealisticBiomeBase {
@@ -45,6 +54,41 @@ public class RealisticBiomeBOPMysticGrove extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        TreeRTG oakTree = new TreeRTGQuercusRobur();
+        oakTree.setMinCrownSize(6);
+        oakTree.setMaxCrownSize(10);
+        oakTree.setMinTrunkSize(6);
+        oakTree.setMaxTrunkSize(8);
+        oakTree.setLeafChoice(BOPTreeMaterials.floweringOak());
+        TreeRTGResizable variableOak = new TreeRTGResizable(oakTree);
+        variableOak.changeAverageHeightSqrt(-0.5f);
+        variableOak.changeHeightNoiseVariability(-1);
+        DecoTree oakDeco = new DecoTree(variableOak);
+
+        DecoVariableBirch mysticDeco = new DecoVariableBirch();
+        mysticDeco.changeAverageHeightSqrt(-1);
+        mysticDeco.changeHeightNoiseVariability(-1);
+        mysticDeco.setMaterials(BOPTreeMaterials.magic);
+
+        TreeRTG jacarandaTree = new TreeBOPJacaranda();
+        TreeRTGResizable variableJacaranda = new TreeRTGResizable(jacarandaTree);
+        variableJacaranda.changeAverageHeightSqrt(-0.5f);
+        variableJacaranda.changeHeightNoiseVariability(-1);
+        DecoTree jacarandaDeco = new DecoTree(variableJacaranda);
+
+        DecoTreeSet treeCombination = new DecoTreeSet();
+        treeCombination.add(oakDeco, 2);
+        treeCombination.add(mysticDeco, 1);
+        treeCombination.add(jacarandaDeco, 1);
+        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 3f, 6.0f));
+
+        DecoCollectionBase rtgTreeColl = new DecoCollectionBase(getConfig());
+        rtgTreeColl.addDeco(treeCombination);
+
+        this.treeGenerator = rtgTreeColl;
 
         DecoFallenTree decoFallenTree = new DecoFallenTree();
         decoFallenTree.getDistribution().setNoiseDivisor(80f);

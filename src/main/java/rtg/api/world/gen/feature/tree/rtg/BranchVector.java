@@ -1,14 +1,18 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG.FractionalBlockPos;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import rtg.api.util.FractionalBlockPos;
 
 class BranchVector {
 	final double dx;
 	final double dy;
 	final double dz;
+    final double horizontalLength;
     final double length;
 	
 	
+    // note horizontal is in radians; vertical is in fractional motion
 	BranchVector (double horizontalDirection, float verticalShift) {
 		double trialDx = Math.cos(horizontalDirection);
 		double trialDz = Math.sin(horizontalDirection);
@@ -19,7 +23,23 @@ class BranchVector {
 		dx = trialDx/longestDirection;
 		dy = trialDy/longestDirection;
 		dz = trialDz/longestDirection;
-		length = Math.sqrt(dx*dx+dy*dy+dz*dz);
+		horizontalLength = Math.sqrt(dx * dx + dz * dz);
+		length = horizontalLength;
+	}
+
+	public BranchVector(Vec3d vector) {
+		double trialDx = vector.x;
+		double trialDz = vector.z;
+		double trialDy  = vector.y;
+		// adjust lengths so the vector goes to the edge of a unit cube
+		double longestDirection =Math.max(Math.abs(trialDx),Math.abs(trialDy));
+		longestDirection = Math.max(longestDirection,Math.abs(trialDz));
+		dx = trialDx/longestDirection;
+		dy = trialDy/longestDirection;
+		dz = trialDz/longestDirection;
+		horizontalLength = Math.sqrt(dx * dx + dz * dz);
+		length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+		
 	}
 	
     void move(FractionalBlockPos moved) {
@@ -33,6 +53,13 @@ class BranchVector {
     	moved.y += dy*proportion;
     	moved.z += dz*proportion;
     	
+    }
+    
+    BlockPos reposition(BlockPos pos, float distance) {
+    	int newX = pos.getX() + (int)Math.round(dx*distance);
+    	int newY = pos.getY() + (int)Math.round(dy*distance);
+    	int newZ = pos.getZ() + (int)Math.round(dz*distance);
+    	return new BlockPos(newX,newY,newZ);
     }
 	
 }

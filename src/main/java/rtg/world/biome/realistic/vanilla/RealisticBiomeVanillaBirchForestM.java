@@ -10,14 +10,14 @@ import rtg.api.world.deco.DecoFallenTree;
 import rtg.api.world.deco.DecoShrub;
 import rtg.api.world.deco.DecoTree;
 import rtg.api.world.deco.collection.DecoCollectionBirchForestM;
+import rtg.api.world.deco.collection.trees.DecoCollectionBirchForestMTrees;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPapyrifera;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceMountainStone;
 import rtg.api.world.terrain.TerrainBase;
 
-
 import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
-import rtg.api.world.surface.SurfaceMountainStone;
 
 
 public class RealisticBiomeVanillaBirchForestM extends RealisticBiomeBase {
@@ -92,6 +92,7 @@ public class RealisticBiomeVanillaBirchForestM extends RealisticBiomeBase {
         decoShrub.setMaxY(110);
         decoShrub.setLoopMultiplier(1f);
         this.addDeco(decoShrub);
+        this.treeGenerator = new DecoCollectionBirchForestMTrees(this.getConfig());
     }
 
 //    @Override

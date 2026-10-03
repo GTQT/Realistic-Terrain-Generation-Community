@@ -8,12 +8,12 @@ import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.*;
 import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
+import rtg.api.world.deco.collection.trees.DecoCollectionSavannaTrees;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGAcaciaBucheri;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMesa;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaSavannaPlateauM extends RealisticBiomeBase {
@@ -104,6 +104,7 @@ public class RealisticBiomeVanillaSavannaPlateauM extends RealisticBiomeBase {
         decoDoubleGrass.setMaxY(128);
         decoDoubleGrass.setStrengthFactor(3f);
         this.addDeco(decoDoubleGrass);
+        this.treeGenerator = new DecoCollectionSavannaTrees(this.getConfig());
     }
 
     @Override

@@ -1,20 +1,20 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
 import net.minecraft.util.math.BlockPos;
+import rtg.api.util.FractionalBlockPos;
 import rtg.api.util.Logger;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG.FractionalBlockPos;
 
-class RTGTreeBranch {
+public class RTGTreeBranch implements RTGBranch {
 	static int reports = 0;
 	final BranchVector direction;
-	final float initialLength;
+	public final float initialLength;
 	private float remainingLength;
 	final double initialHorizontal;
-	final float initialVertical;
-	final int stage;
+	public final float initialVertical;
+	public final int stage;// under consideration for deprecation
 	final FractionalBlockPos branchLocation;
 	
-	RTGTreeBranch (double horizontal, float vertical, float length, int stage, BlockPos branchStart) {
+	public RTGTreeBranch (double horizontal, float vertical, float length, int stage, BlockPos branchStart) {
 		initialLength = length;
 		remainingLength = length;
 		initialHorizontal = horizontal;
@@ -24,7 +24,11 @@ class RTGTreeBranch {
 		branchLocation = new FractionalBlockPos(branchStart);
 	}
 	
-	RTGTreeBranch(RTGTreeBranch copied) {
+	public RTGTreeBranch (double horizontal, float vertical, float length, BlockPos branchStart) {
+		this(horizontal,vertical,length,0,branchStart);
+	}
+	
+	public RTGTreeBranch(RTGTreeBranch copied) {
 		initialLength = copied.initialLength;
 		remainingLength = copied.initialLength;
 		initialHorizontal = copied.initialHorizontal;
@@ -34,20 +38,20 @@ class RTGTreeBranch {
 		branchLocation = new FractionalBlockPos(copied.branchLocation);
 	}
 	
-	BlockPos moved() {
+	public BlockPos moved() {
 		direction.move(branchLocation);
-		remainingLength -= direction.length;
+		remainingLength -= direction.horizontalLength;
 		return branchLocation.location();
 	}
 	
-	BlockPos movedOrthogonally() {
+	public BlockPos movedOrthogonally() {
 		BlockPos oldPos = branchLocation.location();
 		double oldX = branchLocation.x;
 		double oldY = branchLocation.y;
 		double oldZ = branchLocation.z;
 		double multiplier = multiplierToNextBlock() + .0001; // fudge factor for rounding errors
 		direction.moveFractionally(branchLocation,multiplierToNextBlock());
-		remainingLength -= Math.abs(multiplier)/direction.length;
+		remainingLength -= Math.abs(multiplier)*direction.horizontalLength;
 		BlockPos newPos = branchLocation.location();
 		int differences = 0;
 		if (oldPos.getX() != newPos.getX()) differences ++;
@@ -91,8 +95,12 @@ class RTGTreeBranch {
 		
 	}
 	
-	final BlockPos location() {return branchLocation.location();}
+	public final BlockPos location() {return branchLocation.location();}
 	
-	boolean notDone() {return remainingLength > 0;}
+	public float remainingLength() { return remainingLength;}
+	
+	public boolean notDone() {return remainingLength > 0;}
+	
+	public double horizontalDirection() {return initialHorizontal;}
 
 }

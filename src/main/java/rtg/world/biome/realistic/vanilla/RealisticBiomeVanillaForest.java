@@ -5,10 +5,10 @@ import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.collection.DecoCollectionForest;
+import rtg.api.world.deco.collection.trees.DecoCollectionForestTrees;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaForest extends RealisticBiomeBase {
@@ -43,6 +43,7 @@ public class RealisticBiomeVanillaForest extends RealisticBiomeBase {
     public void initDecos() {
 
         this.addDecoCollection(new DecoCollectionForest(this.getConfig()));
+        this.treeGenerator = new DecoCollectionForestTrees(this.getConfig());
     }
 
     @Override

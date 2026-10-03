@@ -3,7 +3,6 @@ package rtg.api.world.gen.feature.tree.rtg;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import rtg.api.util.RTGTreeData;
 
 import java.util.Random;
 
@@ -46,10 +45,11 @@ public class TreeRTGCeibaRosea extends TreeRTG {
 
         super();
 
-        length = 8f;
-        branch = 4;
+        length = 16f;
+        branch = 5;
         verStart = 0.32f;
         verRand = 0.1f;
+        canGrowInWater = true;
     }
 
     public TreeRTGCeibaRosea(float length, int branch, float verStart, float verRand) {
@@ -64,12 +64,14 @@ public class TreeRTGCeibaRosea extends TreeRTG {
 
     @Override
     public boolean generate(World world, Random rand, BlockPos pos) {
+    	
+    	pos = this.dropToGround(world, pos);
 
         if (!this.isGroundValid(world, pos)) {
             return false;
         }
 
-        RTGTreeData treeData = new RTGTreeData();
+        if (pos.getY()<60) return false; // not in deep water
 
         int x = pos.getX();
         int y = pos.getY();
@@ -144,7 +146,7 @@ public class TreeRTGCeibaRosea extends TreeRTG {
                 this.placeLogBlock(world, new BlockPos((int) x, (int) y, (int) z), this.trunkLog, this.generateFlag, lightTracker);
             }
             else {
-                this.placeLogBlock(world, new BlockPos((int) x, (int) y, (int) z), this.logBlock, this.generateFlag, lightTracker);
+                this.placeLogBlock(world, new BlockPos((int) x, (int) y, (int) z), this.branchBlock, this.generateFlag, lightTracker);
             }
 
             x += velX;

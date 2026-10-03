@@ -2,22 +2,22 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.biome.BOPBiomes;
-
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.util.BlockUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoBoulder;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.collection.trees.bop.DecoCollectionBOPSeasonalForest;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
-import rtg.api.world.surface.SurfaceGrassland;
 
 
 public class RealisticBiomeBOPSeasonalForest extends RealisticBiomeBase {
@@ -48,6 +48,11 @@ public class RealisticBiomeBOPSeasonalForest extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6：本群系的树交给新的树装饰集合。
+        // （上游此群系在别处做 BOP 抑制；本仓库统一在 initDecos 里登记，见 T6 说明。）
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoCollectionBOPSeasonalForest(this.getConfig());
 
         DecoBoulder decoBoulder = new DecoBoulder();
         decoBoulder.setBoulderBlock(Blocks.COBBLESTONE.getDefaultState());

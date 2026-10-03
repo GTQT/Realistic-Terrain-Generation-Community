@@ -2,7 +2,6 @@ package rtg.api.world.biome;
 
 import net.minecraft.block.BlockLeaves;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.init.Blocks;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
@@ -11,11 +10,11 @@ import net.minecraft.world.biome.BiomeDecorator;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.RTGConfig;
 import rtg.api.config.BiomeConfig;
-import rtg.api.util.BlockUtil;
 import rtg.api.util.ChunkInfo;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase.BeachType;
 import rtg.api.world.biome.RealisticBiomeBase.RiverType;
+import rtg.api.world.deco.AbstractDeco;
 import rtg.api.world.deco.DecoBase;
 import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
@@ -130,6 +129,25 @@ public interface IRealisticBiome {
     Collection<TreeRTG> getTrees();
 
     /**
+     * 这个群系的**树装饰集合**（移植上游新树系统 / T5）。
+     *
+     * <p>上游 {@code IRealisticBiome:79} 就是这一行（无 default 实现）。
+     * rtgc 侧由唯一实现类 {@code RealisticBiomeBase} 覆写，返回其 {@code treeGenerator} 字段。
+     */
+    AbstractDeco getTreeDecos();
+
+    /**
+     * 把这个群系登记进树木接管管理器（移植上游新树系统 / T6）。
+     *
+     * <p>群系在 {@code initDecos()} 里调一次，表示"本群系的树由 RTG 负责"。
+     * 登记之后 {@code rDecorate} 与 {@code EventHandlerCommon.takeoverTreeGeneration}
+     * 才认为该群系归 RTG 管。
+     */
+    default void useTreeManager() {
+        rtg.event.EventHandlerCommon.treeGenerationManager.manageBiome(baseBiome());
+    }
+
+    /**
      * Adds a deco object to the list of biome decos.
      * The 'allowed' parameter allows us to pass biome config booleans dynamically when configuring the decos in the biome.
      */
@@ -197,8 +215,11 @@ public interface IRealisticBiome {
 
         if (allowed) {
 
-            // Set the sapling data for this tree before we add it to the list.
-            tree.setSaplingBlock(BlockUtil.getSaplingFromLeaves(tree.getLeavesBlock(), Blocks.SAPLING.getDefaultState()));
+            /*
+             * 底层 API 变动（移植上游新树系统）：新版 TreeRTG 去掉了 saplingBlock 字段与
+             * setSaplingBlock(../getSaplingBlock()。树苗改由 RTGSaplingManager 从树叶推导，
+             * 不再需要在这里给每棵树塞一份树苗数据 —— 故原第一行已删除。
+             */
 
             /*
              * Make sure all leaves delay their decay to prevent insta-despawning of leaves (e.g. Swamp Willow)
@@ -240,6 +261,23 @@ public interface IRealisticBiome {
             }
         }
         ChunkInfo.noteOwnDecoNs(System.nanoTime() - tOwn);
+
+        // 树装饰（移植上游新树系统 / T5 + T6）。
+        //
+        // 上游语义（IRealisticBiome:152-166）：
+        //   allowVanillaTrees() 为真 → 交给原版 Biome.decorate 自己长树；
+        //   为假 → 关掉原版树，改由 treeBiome.getTreeDecos().generate(...) 生成 RTG 树。
+        //
+        // 本仓库补充 T6 那一半：BOP 群系的 allowVanillaTrees() 仍是 true（它的树由 BOP 自己的
+        // GenerationManager 管，不是原版 decorator），所以还要看**接管管理器**：
+        // 被接管（或已抑制 BOP 自家树）时，同样由 getTreeDecos() 出树。
+        if ((!this.allowVanillaTrees()
+                || rtg.event.EventHandlerCommon.treeGenerationManager.managingBiome(this.baseBiome()))
+                && this.getTreeDecos() != null) {
+            final long tTrees = System.nanoTime();
+            this.getTreeDecos().generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
+            ChunkInfo.noteDeco("treeGenerator", System.nanoTime() - tTrees);
+        }
 
         // ⚠ 海洋群系把这一段**推迟到冰雪之后**（RWG 的 `rDecorateAfterIce`）——
         // 见 defersVanillaDecorateUntilAfterIce() 的说明。

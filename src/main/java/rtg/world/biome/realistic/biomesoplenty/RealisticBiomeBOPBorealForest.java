@@ -2,15 +2,19 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.biome.BOPBiomes;
-
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.config.BiomeConfig;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.deco.*;
+import rtg.api.world.deco.collection.DecoCollectionBase;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPBorealForest extends RealisticBiomeBase {
@@ -18,7 +22,12 @@ public class RealisticBiomeBOPBorealForest extends RealisticBiomeBase {
     public RealisticBiomeBOPBorealForest(final Biome biome) { super(biome); }
 
     @Override
-    public void initDecos() {}
+    public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoCollectionBOPBorealForest(this.getConfig());
+    }
 
     @Override
     public Biome preferredBeach() {
@@ -53,6 +62,46 @@ public class RealisticBiomeBOPBorealForest extends RealisticBiomeBase {
             // 照抄 RWG SupportBOP.java  borealForest -> TerrainMountainSpikes()
             return terrainMountainSpikes(x, y, rtgWorld, river);
         }
+    }
+
+
+    public static class DecoCollectionBOPBorealForest extends DecoCollectionBase {
+        
+        private Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 5.5f); 
+        // the BoP version is pretty crowded
+        // the trees are a bit stunted too
+
+    	public DecoCollectionBOPBorealForest(BiomeConfig config) {
+    		super(config);     
+    		DecoTreeSet treeChooser = new DecoTreeSet();
+    		treeChooser.setDistribution(treeFrequencyDistribution);
+    		treeChooser.add(evergreenTree(),9);
+    		treeChooser.add(yellowAutumnTree(), 9);
+    		treeChooser.add(stuntedOakTree(), 2);
+    		this.addDeco(treeChooser);
+    	}
+
+    	private DecoTree evergreenTree() {
+    		DecoVariableTree result = new DecoVariableSpruce();
+    		result.changeAverageHeightSqrt(-.5f);
+    		return result;
+    	}
+    	
+    	private DecoTree yellowAutumnTree() {
+    		DecoVariableTree result = new DecoVariableBirch();
+    		result.changeAverageHeightSqrt(-.5f);
+    		result.setMaterials(BOPTreeMaterials.yellowAutumn);
+    		return result;
+    	}
+  
+    	
+    	private DecoTree stuntedOakTree() {
+    		DecoVariableTree result = new DecoVariableOak();
+    		result.changeAverageHeightSqrt(-1.5f);
+    		result.changeHeightNoiseVariability(-.5f);
+    		return result;
+    	}	
+    	
     }
 
 }

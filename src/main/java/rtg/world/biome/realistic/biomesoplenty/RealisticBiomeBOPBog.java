@@ -2,16 +2,14 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 
 import biomesoplenty.api.biome.BOPBiomes;
-
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeBOPBog extends RealisticBiomeBase {
@@ -28,6 +26,7 @@ public class RealisticBiomeBOPBog extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
+        this.getConfig().ALLOW_VILLAGES.set(true);
     }
 
     @Override

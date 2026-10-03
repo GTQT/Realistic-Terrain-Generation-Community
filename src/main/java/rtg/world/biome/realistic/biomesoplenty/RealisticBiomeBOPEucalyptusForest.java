@@ -4,15 +4,22 @@ package rtg.world.biome.realistic.biomesoplenty;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoBoulder;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.DecoShrub;
+import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.DecoTree.TreeCondition;
+import rtg.api.world.deco.bop.VariableBOPEucalyptusTree;
+import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPEucalyptusForest extends RealisticBiomeBase {
@@ -38,6 +45,10 @@ public class RealisticBiomeBOPEucalyptusForest extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoCollectionBOPEucalyptusForest(this.getConfig());
 
         DecoBoulder decoBoulder = new DecoBoulder();
         decoBoulder.setBoulderBlock(Blocks.COBBLESTONE.getDefaultState());
@@ -77,4 +88,35 @@ public class RealisticBiomeBOPEucalyptusForest extends RealisticBiomeBase {
         }
     }
 
+
+    private class DecoCollectionBOPEucalyptusForest extends DecoCollectionBase {
+
+		public DecoCollectionBOPEucalyptusForest(BiomeConfig config) {
+			super(config);       
+			float tallMin = -1f;
+	        float tallMax = 3f;
+	        Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 1.0f, 2.0f); 
+	        
+	    	DecoTree trees = new VariableBOPEucalyptusTree();
+	    	trees.setStrengthFactorForLoops(6f)
+	        .setTreeCondition(TreeCondition.ALWAYS_GENERATE)
+	        .setTreeConditionNoise(tallMin)
+	        .setTreeConditionNoise2(tallMax)
+	        .setTreeConditionChance(1)
+	        .setMaxY(120)
+	        .setStrengthNoiseFactorForLoops(true)
+	        .setStrengthNoiseFactorXForLoops(false);
+	    	
+	    	trees.setDistribution(treeFrequencyDistribution);
+	    	
+	        this.addDeco(trees);
+	    	
+	    	DecoShrub shrubs = new DecoShrub();
+	    	shrubs.setLoops(8);
+	    	
+	    	this.addDeco(shrubs);
+	        
+		}
+    	
+    }
 }

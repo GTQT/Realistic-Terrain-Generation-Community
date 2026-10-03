@@ -4,16 +4,25 @@ package rtg.world.biome.realistic.biomesoplenty;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.util.BlockUtil;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
 import rtg.api.world.deco.DecoShrub;
+import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.DecoTreeSet;
+import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.deco.helper.DecoHelper5050;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaUtilis;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGCupressusSempervirens;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPGrove extends RealisticBiomeBase {
@@ -39,6 +48,38 @@ public class RealisticBiomeBOPGrove extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        TreeRTGBetulaUtilis birchTree = new TreeRTGBetulaUtilis();
+        birchTree.setMinCrownSize(6);
+        birchTree.setMaxCrownSize(10);
+        birchTree.setMinTrunkSize(4);
+        birchTree.setMaxTrunkSize(6);
+        birchTree.setMaterials(TreeMaterials.Picker.birch);
+        DecoTree birchDeco = new DecoTree(birchTree);
+
+        TreeRTG darkOakTree = new TreeRTGCupressusSempervirens();
+        darkOakTree.setMinCrownSize(4);
+        darkOakTree.setMaxCrownSize(10);
+        darkOakTree.setMinTrunkSize(3);
+        darkOakTree.setMaxTrunkSize(7);
+        darkOakTree.setMaterials(TreeMaterials.Picker.darkOak);
+        DecoTree oakDeco = new DecoTree(darkOakTree);
+
+        DecoTreeSet treeCombination = new DecoTreeSet();
+        treeCombination.add(birchDeco, 5);
+        treeCombination.add(oakDeco, 2);
+        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 1.5f, 3.5f));
+
+        DecoShrub shrubs = new DecoShrub();
+        shrubs.setLeafChoice(BOPTreeMaterials.floweringOak());
+        shrubs.setLoops(8);
+
+        DecoCollectionBase rtgTreeColl = new DecoCollectionBase(getConfig());
+        rtgTreeColl.addDeco(treeCombination);
+        rtgTreeColl.addDeco(shrubs);
+
+        this.treeGenerator = rtgTreeColl;
 
         DecoShrub decoShrubCustom = new DecoShrub();
         decoShrubCustom.setLogBlock(BlockUtil.getStateLog(EnumType.BIRCH));

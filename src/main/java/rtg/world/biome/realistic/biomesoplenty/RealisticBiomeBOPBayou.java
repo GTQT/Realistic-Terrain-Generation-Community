@@ -6,22 +6,26 @@ import biomesoplenty.api.enums.BOPTrees;
 import biomesoplenty.api.enums.BOPWoods;
 import biomesoplenty.common.block.BlockBOPLeaves;
 import biomesoplenty.common.block.BlockBOPLog;
-
 import net.minecraft.block.BlockLeaves;
 import net.minecraft.block.BlockLog;
 import net.minecraft.block.BlockLog.EnumAxis;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.config.BiomeConfig;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoFallenTree;
-import rtg.api.world.deco.DecoMushrooms;
-import rtg.api.world.deco.DecoShrub;
+import rtg.api.world.deco.*;
+import rtg.api.world.deco.collection.DecoCollectionBase;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGCeibaRosea;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusFalcata;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGSalixMyrtilloides;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPBayou extends RealisticBiomeBase {
@@ -33,6 +37,14 @@ public class RealisticBiomeBOPBayou extends RealisticBiomeBase {
         .paging.getVariantState(BOPTrees.WILLOW)
         .withProperty(BlockLeaves.CHECK_DECAY, false)
         .withProperty(BlockLeaves.DECAYABLE, false);
+    // ===== 移植上游新树系统（BOP 群系接线需要）=====
+    // 上游 BOPBayou 用 willowXxxBlock 这几个名字，内嵌的 DecoCollectionBOPBayou 会引用它们。
+    // 这里按**本仓库既有的取值**定义同名别名（leavesBlock 的 DECAYABLE=false 是本仓库的调优，
+    // 不采用上游的 true），这样既不改变现有行为，搬过来的内嵌类又能原样编译。
+    private static IBlockState willowLogBlock = logBlock;
+    private static IBlockState willowBranchBlock = BlockBOPLog.paging.getVariantState(BOPWoods.WILLOW)
+            .withProperty(BlockLog.LOG_AXIS, EnumAxis.NONE);
+    private static IBlockState willowLeavesBlock = leavesBlock;
     private double lakeWaterLevel = 0.04;// the lakeStrength below which things should be below water
     private double lakeDepressionLevel = 0.3;// the lakeStrength below which land should start to be lowered
 
@@ -66,6 +78,10 @@ public class RealisticBiomeBOPBayou extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // 移植上游新树系统 / T5+T6：树交给内嵌的 DecoCollectionBOPBayou，并摘掉 BOP 自家 TREE 生成器。
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        this.treeGenerator = new DecoCollectionBOPBayou(this.getConfig());
 
 //        TreeRTG myrtilloidesTree = new TreeRTGSalixMyrtilloides();
 //        myrtilloidesTree.setLogBlock(logBlock);
@@ -141,5 +157,79 @@ public class RealisticBiomeBOPBayou extends RealisticBiomeBase {
             return terrainSwampRiver(x, y, rtgWorld, river);
         }
     }
+
+
+    private static class DecoCollectionBOPBayou extends DecoCollectionBase {
+        
+        public DecoCollectionBOPBayou(BiomeConfig config) {
+			super(config); 
+			
+			// uses willow, mangrove, and spreading oak
+			// currently uses area density variability but not area height variability
+			
+			// Define trees
+			TreeRTG myrtilloidesTree = new TreeRTGSalixMyrtilloides();
+			myrtilloidesTree.setLogBlock(willowLogBlock);
+	        myrtilloidesTree.setLeavesBlock(willowLeavesBlock);
+	        myrtilloidesTree.setBranchBlock(willowBranchBlock);
+	        //myrtilloidesTree.validGroundBlocks.add(mudBlock);\        
+	        DecoTree decomyrtilloides = new DecoTree(myrtilloidesTree);
+	        decomyrtilloides.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
+	        decomyrtilloides.setTreeConditionChance(4);
+	        decomyrtilloides.setLogBlock(willowLogBlock);
+	        decomyrtilloides.setLeavesBlock(willowLeavesBlock);
+	        decomyrtilloides.setMaxY(90);
+	        //this.addDeco(decoTrees);
+
+
+	        TreeRTG roseaTree = new TreeRTGCeibaRosea(16f, 5, 0.32f, 0.1f);
+	        roseaTree.setLogBlock(willowLogBlock);
+	        roseaTree.setLeavesBlock(willowLeavesBlock);
+	        roseaTree.setBranchBlock(willowBranchBlock);
+	        //roseaTree.validGroundBlocks.add(mudBlock);
+	        roseaTree.setMinTrunkSize(2);
+	        roseaTree.setMaxTrunkSize(5);
+	        roseaTree.setMinCrownSize(5);
+	        roseaTree.setMaxCrownSize(8);
+	        roseaTree.setNoLeaves(false);
+	        DecoTree ceibaRoseaTree = new DecoTree(roseaTree);
+	        ceibaRoseaTree.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
+	        ceibaRoseaTree.setTreeConditionChance(4);
+	        ceibaRoseaTree.setMaxY(90);
+	        //this.addDeco(ceibaRoseaTree);
+	        
+	        //Quercus Falcata
+	        DecoTree oakTree = new DecoTree(new TreeRTGQuercusFalcata());
+	        oakTree.setTreeCondition(DecoTree.TreeCondition.NOISE_GREATER_AND_RANDOM_CHANCE);
+	        oakTree.setMinSize(2);
+	        oakTree.setMaxSize(4);
+	        oakTree.setMinTrunkSize(3);
+	        oakTree.setMaxTrunkSize(6);
+	        oakTree.setMinCrownSize(4);
+	        oakTree.setMaxCrownSize(10);
+	        oakTree.setDistribution(new Distribution(100f, 6f, 0.8f));
+	        oakTree.setTreeConditionNoise(0f);
+	        oakTree.setTreeConditionChance(4);
+	        //this.addDeco(decoTree);
+    
+	        // combine into TreeSet, and add it as sole entry to the deco.
+			Distribution treeFrequencyDistribution = new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 5.5f); 
+			DecoTreeSet treeChooser = new DecoTreeSet();
+			treeChooser.setDistribution(treeFrequencyDistribution);
+			treeChooser.add(oakTree,2);
+			treeChooser.add(ceibaRoseaTree,4);
+			treeChooser.add(decomyrtilloides,2);
+
+			this.addDeco(treeChooser);
+			
+			// have to add our own vines to the trees
+			DecoLeafVines vines = new DecoLeafVines();
+			vines.setLoops(20);
+			
+			this.addDeco(vines);
+		}
+		
+    }
+    
 
 }

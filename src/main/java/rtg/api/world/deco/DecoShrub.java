@@ -39,6 +39,18 @@ public class DecoShrub extends DecoBase {
     private IBlockState leavesBlock;
     private boolean leavesTweaked = false; // 只在首次generate时调整叶子属性
 
+    /**
+     * 移植上游新树系统（BOP 群系接线需要）：叶子可按 Random 逐块选取。
+     *
+     * <p>默认实现返回 {@link #leavesBlock}，所以**不调 setLeafChoice 的老群系行为完全不变**。
+     */
+    protected java.util.function.Function<Random, IBlockState> leafChoice =
+            new java.util.function.Function<Random, IBlockState>() {
+                public IBlockState apply(Random applied) {
+                    return leavesBlock;
+                }
+            };
+
     public DecoShrub() {
 
         super();
@@ -117,9 +129,9 @@ public class DecoShrub extends DecoBase {
 
                 if (shouldGen) {
                     if (shrubGen == null) {
-                        shrubGen = new WorldGenShrubRTG(this.size, this.logBlock, this.leavesBlock, this.sand);
+                        shrubGen = new WorldGenShrubRTG(this.size, this.logBlock, this.leavesBlock, this.sand, this.leafChoice);
                     } else {
-                        shrubGen.reset(this.size, this.logBlock, this.leavesBlock, this.sand);
+                        shrubGen.reset(this.size, this.logBlock, this.leavesBlock, this.sand, this.leafChoice);
                     }
                     shrubGen.generate(rtgWorld.world(), rand, pos);
                 }
@@ -290,5 +302,14 @@ public class DecoShrub extends DecoBase {
 
         this.leavesBlock = leavesBlock;
         return this;
+    }
+
+    // ===== 移植上游新树系统：逐块叶子选择 =====
+    public void setLeafChoice(java.util.function.Function<Random, IBlockState> newChoice) {
+        leafChoice = newChoice;
+    }
+
+    protected IBlockState getLeaves(Random rand) {
+        return this.leafChoice.apply(rand);
     }
 }

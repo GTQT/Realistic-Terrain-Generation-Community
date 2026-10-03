@@ -3,15 +3,20 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.DecoVariableOak;
+import rtg.api.world.deco.DecoVariableTree;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusFalcata;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
-import rtg.api.world.surface.SurfaceGrassland;
 
 
 public class
@@ -21,6 +26,7 @@ RealisticBiomeBOPOrchard extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
+        this.getConfig().ALLOW_VILLAGES.set(true);
         this.getConfig().addProperty(this.getConfig().ALLOW_LOGS).set(true);
         this.getConfig().addProperty(this.getConfig().FALLEN_LOG_DENSITY_MULTIPLIER);
     }
@@ -38,6 +44,17 @@ RealisticBiomeBOPOrchard extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        DecoVariableTree orchardTree = new DecoVariableOak();
+        orchardTree.setTallTree(new TreeRTGQuercusFalcata());
+        orchardTree.changeAverageHeightSqrt(-.6f);
+        orchardTree.changeHeightNoiseVariability(-1);
+        orchardTree.setLeafChoice(BOPTreeMaterials.floweringOak());
+        orchardTree.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 1.5f, 5.5f));
+
+        this.treeGenerator = orchardTree;
 
         DecoFallenTree decoFallenTree = new DecoFallenTree();
         decoFallenTree.getDistribution().setNoiseDivisor(80f);

@@ -5,10 +5,10 @@ import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.collection.DecoCollectionTaiga;
+import rtg.api.world.deco.collection.trees.DecoCollectionTaigaTrees;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaColdTaigaM extends RealisticBiomeBase {
@@ -50,6 +50,7 @@ public class RealisticBiomeVanillaColdTaigaM extends RealisticBiomeBase {
 
     	// unlike the other cold taigas, *not* smaller than ordinary Taiga, to be different
         this.addDecoCollection(new DecoCollectionTaiga(this.getConfig(), 8f));
+        this.treeGenerator = new DecoCollectionTaigaTrees(this.getConfig());
     }
 
     public static class TerrainVanillaColdTaigaM extends TerrainBase {

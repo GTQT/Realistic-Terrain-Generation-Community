@@ -3,30 +3,17 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFlowersRTG;
 import rtg.api.world.deco.DecoShrub;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
 
-import static net.minecraft.block.BlockDoublePlant.EnumPlantType.PAEONIA;
-import static net.minecraft.block.BlockDoublePlant.EnumPlantType.ROSE;
-import static net.minecraft.block.BlockDoublePlant.EnumPlantType.SUNFLOWER;
-import static net.minecraft.block.BlockDoublePlant.EnumPlantType.SYRINGA;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ALLIUM;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.BLUE_ORCHID;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.DANDELION;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.HOUSTONIA;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ORANGE_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.OXEYE_DAISY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.PINK_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.POPPY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.RED_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.WHITE_TULIP;
-import rtg.api.world.surface.SurfaceGrassland;
+import static net.minecraft.block.BlockDoublePlant.EnumPlantType.*;
+import static net.minecraft.block.BlockFlower.EnumFlowerType.*;
 
 
 public class RealisticBiomeBOPFlowerField extends RealisticBiomeBase {
@@ -35,6 +22,7 @@ public class RealisticBiomeBOPFlowerField extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
+        this.getConfig().ALLOW_VILLAGES.set(true);
         this.getConfig().addProperty(this.getConfig().ALLOW_PONDS_WATER).set(true);
     }
 

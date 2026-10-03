@@ -1,5 +1,7 @@
 package rtg.api.world.deco;
 
+import net.minecraft.block.BlockLog;
+import net.minecraft.block.BlockLog.EnumAxis;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
@@ -11,12 +13,13 @@ import net.minecraftforge.event.terraingen.DecorateBiomeEvent.Decorate;
 import net.minecraftforge.fml.common.eventhandler.Event;
 import rtg.RTGConfig;
 import rtg.api.event.DecorateBiomeEventRTG;
-import rtg.api.util.BlockUtil;
 import rtg.api.util.ChunkInfo;
 import rtg.api.util.Distribution;
 import rtg.api.util.Logger;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
+import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 
 import java.util.Random;
@@ -25,9 +28,30 @@ import java.util.Random;
 /**
  * @author WhichOnesPink
  */
-public class DecoTree extends DecoBase {
+public class DecoTree extends AbstractDecoTree {
 
     public static final double MAX_TREE_DENSITY = 5.0D;
+
+    /**
+     * rtgc 全局降密系数（**相对上游的有意偏离**）。
+     *
+     * <h2>为什么要有它</h2>
+     *
+     * 新树系统（T2–T6）上线后，树的实际数量 ≈
+     * {@code loopCount × RTGConfig.treeDensityMultiplier × 群系 TREE_DENSITY_MULTIPLIER}，
+     * 而上游这两个倍率的默认都是 1.0 —— 等于**完全没有节流**。上游把 34 个群系一次性
+     * 全按它自己的密度配好，实测在本包里密到卡顿。
+     *
+     * <h2>为什么做成代码常量、而不是改配置默认值</h2>
+     *
+     * 已有世界的 {@code config/RTG/rtg.cfg} 里存着旧值，{@code loadConfig()} 会覆盖
+     * {@code initConfig()} 设的默认值 —— 只改默认值对已经在跑的世界**无效**。
+     * 做成常量则与配置无关、立刻生效，且只有这一个旋钮（不会和配置倍率重复相乘）。
+     *
+     * <p>0.4 ≈ 降到 2.5 倍之一（用户要求"调低二到三倍"）。
+     * 想再调只需改这一个数：0.33 ≈ 三分之一，0.5 ≈ 一半。
+     */
+    public static final float TREE_DENSITY_REDUCTION = 0.4f;
 
     protected int loops;
     protected float strengthFactorForLoops; // If set, this overrides and dynamically calculates 'loops' based on the strength parameter.
@@ -36,7 +60,7 @@ public class DecoTree extends DecoBase {
     protected TreeType treeType; // Enum for the various tree presets.
     protected TreeRTG tree;
     protected WorldGenerator worldGen;
-    protected Distribution distribution; // Parameter object for noise calculations.
+    // distribution 已上提到父类 AbstractDecoTree（上游结构），此处不再重复声明。
     protected TreeCondition treeCondition; // Enum for the various conditions/chances for tree gen.
     protected float treeConditionNoise; // Only applies to a noise-related TreeCondition.
     protected float treeConditionNoise2; // Only applies to a noise-related TreeCondition.
@@ -46,6 +70,9 @@ public class DecoTree extends DecoBase {
     protected int maxY; // Upper height restriction.
     protected IBlockState logBlock;
     protected IBlockState leavesBlock;
+    // 底层 API 变动（移植上游新树系统 / T4）：上游 DecoTree 有 branchBlock（树枝方块），
+    // 由 setLogBlock 派生、可被 setBranchBlock 覆盖，供树苗路径与 4 参 doGenerate 使用。
+    protected IBlockState branchBlock;
     protected int minSize; // Min tree height (only used with certain tree presets)
     protected int maxSize; // Max tree height (only used with certain tree presets)
     protected int minTrunkSize; // Min tree height (only used with certain tree presets)
@@ -396,14 +423,13 @@ public class DecoTree extends DecoBase {
         return this;
     }
 
-    public Distribution getDistribution() {
-
-        return distribution;
-    }
-
+    // distribution 本体与 getDistribution 已上提到父类 AbstractDecoTree（上游结构）。
+    // 这里只做一次**协变覆盖**：把返回类型收窄为 DecoTree，否则
+    // `new DecoTree(..).setDistribution(..).setTreeCondition(..)` 这类链式调用会断
+    // （父类版本返回 AbstractDecoTree，没有 setTreeCondition）。
+    @Override
     public DecoTree setDistribution(Distribution distribution) {
-
-        this.distribution = distribution;
+        super.setDistribution(distribution);
         return this;
     }
 
@@ -492,7 +518,35 @@ public class DecoTree extends DecoBase {
     public DecoTree setLogBlock(IBlockState logBlock) {
 
         this.logBlock = logBlock;
+        // 底层 API 变动（移植上游新树系统 / T4）：上游在 setLogBlock 里顺带派生 branchBlock
+        // （把原木的 LOG_AXIS 归零作为"树枝"方块），供树苗路径与 doGenerate 使用。
+        // 逐行照抄上游 DecoTree.java:417-423。
+        try {
+            this.branchBlock = logBlock.withProperty(BlockLog.LOG_AXIS, EnumAxis.NONE);
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            //e.printStackTrace();
+        }
+        if (branchBlock == null) {
+            branchBlock = logBlock;
+        }
         return this;
+    }
+
+    public DecoTree setBranchBlock(IBlockState branchBlock) {
+
+        this.branchBlock = branchBlock;
+        return this;
+    }
+
+    /**
+     * 底层 API 变动（移植上游新树系统 / T4）：上游 {@code DecoTree} 有这个方法，
+     * 供 {@code RTGSaplingAction} 一次性灌入原木/树枝/树叶三件套。逐行照抄上游。
+     */
+    public void setMaterials(TreeMaterials materials) {
+        setLogBlock(materials.log);
+        setBranchBlock(materials.branches);
+        setLeavesBlock(materials.leaves);
     }
 
     public IBlockState getLeavesBlock() {
@@ -598,11 +652,53 @@ public class DecoTree extends DecoBase {
         DISTRIBUTION_GIVES_CHANCE
     }
 
+    /**
+     * 偏离上游（有意）：{@code applyConfigMultipliers(int, ...)} 上游已上提到
+     * {@code AbstractDecoTree}，而那个版本**丢掉了 MAX_TREE_DENSITY 钳制**。
+     *
+     * <p>但本仓库的配置文案（{@code RTGConfig.treeDensityMultiplier} 的注释）明确承诺
+     * "The combination of this value and the biome-specific value will never exceed 5.0"。
+     * 树的数量走的正是这个 int 重载，放任不管会让该承诺失效（玩家把倍率调高就能突破上限）。
+     * 判定为上游疏漏，故在此覆盖回钳制版本，并额外乘上 {@link #TREE_DENSITY_REDUCTION}。
+     */
+    @Override
     protected int applyConfigMultipliers(final int loopCount, final IRealisticBiome biome) {
-        return (int)(loopCount * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
+        return (int)(loopCount * TREE_DENSITY_REDUCTION
+                * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
     }
 
     protected float applyConfigMultipliers(final float trees, final IRealisticBiome biome) {
-        return (float)(trees * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
+        return (float)(trees * TREE_DENSITY_REDUCTION
+                * Math.min(RTGConfig.treeDensityMultiplier() * biome.getConfig().TREE_DENSITY_MULTIPLIER.get(), MAX_TREE_DENSITY));
+    }
+
+    /**
+     * 底层 API 变动（移植上游新树系统 / T3）：上游 {@code DecoTree} 有这个方法，
+     * {@code DecoTreeSet.doVariableGenerate} 会对选中的 DecoTree 调用它。
+     * 逐行照抄上游 {@code DecoTree.java:542-551}。
+     */
+    public void doVariableGenerate(Random rand, ChunkInfo chunkInfo, BlockPos column, int y, TreeDensityLimiter treesRemaining) {
+        // this is here to allow combining trees together for sharing a forest density and allowing variable tree sizes
+        this.tree.setLogBlock(this.logBlock);
+        this.tree.setBranchBlock(this.branchBlock);
+        this.tree.setLeavesBlock(this.leavesBlock);
+        this.tree.setTrunkSize(getRangedRandom(rand, this.minTrunkSize, this.maxTrunkSize));
+        this.tree.setCrownSize(getRangedRandom(rand, this.minCrownSize, this.maxCrownSize));
+        this.tree.setNoLeaves(this.noLeaves);
+        tree.doVariableGenerate(rand, chunkInfo, column, y, treesRemaining);
+    }
+
+    /**
+     * 底层 API 变动（移植上游新树系统 / T4）：上游 {@code DecoTree} 多了这个 4 参重载，
+     * 供 {@code RTGSaplingManager} 的树苗路径直接调用（不经区块装饰循环）。
+     * 逐行照抄上游 {@code DecoTree.java:553-560}。
+     */
+    public boolean doGenerate(World world, Random rand, BlockPos pos, int actualHeight) {
+        this.tree.setLogBlock(this.logBlock);
+        this.tree.setBranchBlock(this.branchBlock);
+        this.tree.setLeavesBlock(this.leavesBlock);
+        this.tree.setNoLeaves(this.noLeaves);
+        this.tree.setTreeSize(actualHeight, rand);
+        return tree.generate(world, rand, pos);
     }
 }

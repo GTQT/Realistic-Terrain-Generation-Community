@@ -5,12 +5,11 @@ import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
 import rtg.api.world.deco.collection.DecoCollectionSavanna;
+import rtg.api.world.deco.collection.trees.DecoCollectionSavannaTrees;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceGrasslandMix1;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaSavanna extends RealisticBiomeBase {
@@ -61,6 +60,7 @@ public class RealisticBiomeVanillaSavanna extends RealisticBiomeBase {
 
         //this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
         this.addDecoCollection(new DecoCollectionSavanna(this.getConfig()));
+        this.treeGenerator = new DecoCollectionSavannaTrees(this.getConfig());
     }
 
     @Override

@@ -3,12 +3,15 @@ package rtg.world.biome.realistic.biomesoplenty;
 
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.deco.DecoVariableOak;
+import rtg.api.world.deco.DecoVariableTree;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.surface.SurfaceGrassland;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 
 public class RealisticBiomeBOPSnowyForest extends RealisticBiomeBase {
@@ -16,7 +19,14 @@ public class RealisticBiomeBOPSnowyForest extends RealisticBiomeBase {
     public RealisticBiomeBOPSnowyForest(final Biome biome) { super(biome, RiverType.FROZEN, BeachType.COLD); }
 
     @Override
-    public void initDecos() {}
+    public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+        // 上游同款：雪林用可变形橡树 + snowyForest 树材。
+        DecoVariableTree snowyOaks = new DecoVariableOak();
+        snowyOaks.setMaterials(BOPTreeMaterials.snowyForest);
+        this.treeGenerator = snowyOaks;
+    }
 
     @Override
     public void initConfig() {

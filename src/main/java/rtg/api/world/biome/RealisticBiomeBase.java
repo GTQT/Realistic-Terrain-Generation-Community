@@ -11,7 +11,9 @@ import rtg.RTGConfig;
 import rtg.api.RTGAPI;
 import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.deco.AbstractDeco;
 import rtg.api.world.deco.DecoBase;
+import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceRiverOasis;
@@ -44,6 +46,17 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     // TODO: [1.12] To be removed. All trees need to be a Deco and be added through #addDeco.
     @Deprecated
     private final Collection<TreeRTG> rtgTrees;
+
+    /**
+     * 树装饰集合（移植上游新树系统 / T5）。
+     *
+     * <p>上游把"这个群系的树"单独放在这个字段里，由各群系在 {@code initDecos()} 里指派
+     * （{@code treeGenerator = new DecoCollectionXxxTrees(getConfig())} 这类），
+     * 再由 {@code IRealisticBiome.rDecorate} 在 {@code allowVanillaTrees()} 为假时调用它。
+     *
+     * <p>默认是**空集合**（不是 null）：这样接线之前行为完全不变。
+     */
+    protected AbstractDeco treeGenerator;
 
     public RealisticBiomeBase(@Nonnull final Biome baseBiome) {
         this(baseBiome, RiverType.NORMAL, BeachType.NORMAL);
@@ -80,6 +93,8 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         this.surfaceRiver = new SurfaceRiverOasis(config);
         this.decos = new ArrayList<>();
         this.rtgTrees = new ArrayList<>();
+        // 上游同款默认值：空集合（DecoCollectionBase 本身不产生任何装饰）
+        this.treeGenerator = new DecoCollectionBase(this.config);
 
         initDecos();
 
@@ -144,6 +159,18 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     @Override
     public Collection<TreeRTG> getTrees() {
         return this.rtgTrees;
+    }
+
+    /**
+     * 树装饰集合（移植上游新树系统 / T5）。
+     *
+     * <p>对齐上游 {@code RealisticBiomeBase:169-171}：返回 {@code treeGenerator}。
+     * 注意上游 {@code IRealisticBiome} 里**没有**给这个方法的 default 实现，
+     * 每个实现类都要提供；本仓库只有这一个实现类，故在此覆写。
+     */
+    @Override
+    public AbstractDeco getTreeDecos() {
+        return this.treeGenerator;
     }
 
     @Override

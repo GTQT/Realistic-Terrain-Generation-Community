@@ -1,16 +1,11 @@
 package rtg.world.biome.realistic.land;
 
-import java.util.Collection;
-import java.util.Random;
-
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.init.Blocks;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.ChunkInfo;
@@ -18,12 +13,16 @@ import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.biome.RealisticBiomeBase.BeachType;
 import rtg.api.world.biome.RealisticBiomeBase.RiverType;
+import rtg.api.world.deco.AbstractDeco;
 import rtg.api.world.deco.DecoBase;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainStoneMix1;
 import rtg.api.world.terrain.TerrainBase;
 import rtg.world.biome.RtgRealisticIndex;
+
+import java.util.Collection;
+import java.util.Random;
 
 
 /**
@@ -382,6 +381,12 @@ public class RealisticBiomeMountainChain implements IRealisticBiome {
     @SuppressWarnings("deprecation")
     public Collection<TreeRTG> getTrees() {
         return backingBiome.getTrees();
+    }
+
+    // 移植上游新树系统 / T5：山地链是合成包装，树装饰一律委托给被包装的群系。
+    @Override
+    public AbstractDeco getTreeDecos() {
+        return backingBiome.getTreeDecos();
     }
 
     @Override

@@ -1083,5 +1083,24 @@ public abstract class TerrainBase {
         }
     }
 
+    /**
+     * 底层 API 变动（移植上游新树系统）：新版 {@code TreeRTGBetulaPopulifolia} 依赖这个静态方法，
+     * 上游 {@code TerrainBase} 有、本仓库在 RWG 重写时把它删掉了。逐行照抄上游实现。
+     *
+     * <p>用途：把 [0,1] 的概率按 {@code multiplier} 做一次廉价的重映射（置信比调整）。
+     */
+    public static float bayesianAdjustment(float probability, float multiplier) {
+        // returns the original probability adjusted for the multiplier to the confidence ratio
+        // useful for computationally cheap remappings within [0,1]
+        if (probability >= 1) {
+            return probability;
+        }
+        if (probability <= 0) {
+            return probability;
+        }
+        float newConfidence = probability * multiplier / (1f - probability);
+        return newConfidence / (1f + newConfidence);
+    }
+
     public abstract float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river);
 }

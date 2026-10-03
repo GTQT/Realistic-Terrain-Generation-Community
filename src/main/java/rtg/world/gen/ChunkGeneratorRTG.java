@@ -42,6 +42,7 @@ import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.RTGChunkGenSettings;
 import rtg.api.world.gen.feature.WorldGenPond;
+import rtg.event.EventHandlerCommon;
 import rtg.world.biome.BiomeAnalyzer;
 import rtg.world.biome.RtgBiomeLayout;
 import rtg.world.biome.RtgLayoutAccess;
@@ -767,6 +768,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
+        // 上游 74cf4fd「Lighting bug reduction」：填充完成后修补四个角邻区块的天光。
+        // 放在 onChunkPopulate(false) 之后、与上游同一位置。
+        EventHandlerCommon.fixLightingAround(world, chunkPos);
         BlockFalling.fallInstantly = false;
 
         ChunkGenerationProfiler.end(Category.POP_TOTAL, tPopTotal);

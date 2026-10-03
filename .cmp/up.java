@@ -1,0 +1,297 @@
+﻿package rtg.api.world.deco;
+
+import java.util.Random;
+import java.util.function.Function;
+
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.init.Blocks;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.World;
+import net.minecraft.world.gen.feature.WorldGenAbstractTree;
+import net.minecraft.world.gen.feature.WorldGenTrees;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.terraingen.DecorateBiomeEvent.Decorate;
+import net.minecraftforge.fml.common.eventhandler.Event;
+import rtg.RTGConfig;
+import rtg.api.event.DecorateBiomeEventRTG;
+import rtg.api.util.BlockUtil;
+import rtg.api.util.ChunkInfo;
+import rtg.api.util.Logger;
+import rtg.api.util.BlockUtil.MatchType;
+import rtg.api.world.RTGWorld;
+import rtg.api.world.biome.IRealisticBiome;
+import rtg.api.world.gen.feature.WorldGenShrubRTG;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
+import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+
+/**
+ * Variable Trees
+ * This class make trees of variable type and height based on a noise parameter from ChunkInfo
+ * 
+ */
+
+abstract public class DecoVariableTree extends DecoTree {
+	
+	// TODO; figure out a way to generalize this to deal with variable numbers of trees, and not having a vanilla
+	
+	protected TreeRTG tallTree;
+	protected TreeRTG mediumTree;
+	protected TreeRTG smallTree;
+	protected final TreeMaterials.Picker materialsPicker = new TreeMaterials.Picker();
+	protected TreeMaterials materials ;
+	
+	protected int tallTreeMinimumHeight = 21; // shortest allowed tall tree
+	protected int tallTreeMinimumVariability = 9; // this less 1 (Random.nextInt()) added to minimum for largest allowed medium tree
+	protected int mediumTreeMinimumHeight = 12; // etc.
+	protected int mediumTreeMinimumVariability = 5;
+	protected int smallTreeMinimumHeight = 7;
+	protected int smallTreeMinimumVariability = 3;
+	protected int vanillaTreeMinimumHeight = 2;
+	protected int vanillaTreeMinimumVariability = 2;
+			
+	protected float averageHeightSqrt = 4.4f; // average tree height square root; trees vary
+	protected float heightNoiseVariability = 2f; // maximum change in average height up or down from noise
+	                                               // can go up or down so range is twice this number
+	protected float localHeightSqrtVariability = 0.25f; // similar but tree to tree;
+	
+	protected float saplingChance = .1f; // chance a tree will be shorter than expected
+	
+	public DecoVariableTree() {
+		
+	}
+	
+	public void setLeafChoice(Function<Random,IBlockState> newChoice) {
+		tallTree.setLeafChoice(newChoice);
+		mediumTree.setLeafChoice(newChoice);
+		smallTree.setLeafChoice(newChoice);
+	}
+	
+	public void setTallTree(TreeRTG tree) {tallTree = tree;}
+
+	public void setMediumTree(TreeRTG tree) {mediumTree = tree;}
+	
+	public void setSmallTree(TreeRTG tree) {smallTree = tree;}
+	
+	public TreeRTG getTallTree() {return tallTree;}
+
+	public TreeRTG getMediumTree() {return mediumTree;}
+	
+	public TreeRTG getSmallTree() {return smallTree;}
+	
+	public TreeMaterials getMaterials() {return materials;}
+	
+	public void setMaterials(TreeMaterials newMaterials) {
+		materials = newMaterials;
+	}
+	
+	public void  changeAverageHeightSqrt(float change) {
+		averageHeightSqrt += change;
+	}
+	
+	public void  changeHeightNoiseVariability(float change) {
+		heightNoiseVariability += change;
+	}
+	
+	public void  changeLocalNoiseVariability(float change) {
+		localHeightSqrtVariability += change;
+	}
+	
+	public void setSaplingChance(float newChance) {saplingChance = newChance;}
+	
+	public int smallestSaplingHeight() {
+		return largestVanillaTree() + 1;
+	}
+	
+    @Override
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
+    	// duped from DecoTree to add debuggers
+
+        final BlockPos offsetPos = getTreePos(chunkPos);
+        /*
+         * Determine how many trees we're going to try to generate (loopCount).
+         * The actual number of trees that end up being generated could be *less* than this value,
+         * depending on environmental conditions.
+         */
+        // TODO: [1.12] What is the point of deriving a noise value from static BlockPos within a chunk (population origin) and then applying
+        //              it to a feature taking place at some other arbitrary place in the chunk. This seems nonsensical and makes needless
+        //              calls to the noise generator. This should be replaced by a random amount.
+        // Zeno: These are slowly changing values and essentially the same within a chunk, but must differ substantially between chunks for variability
+        float noise = distribution.getValue(offsetPos, rtgWorld.treeDistributionNoise());
+        float loopCount = (this.strengthFactorForLoops > 0f) ? (int) this.strengthFactorForLoops : this.loops;
+        loopCount = (this.strengthNoiseFactorForLoops) ? noise : loopCount;
+        loopCount = (this.strengthNoiseFactorXForLoops) ? (noise * this.strengthFactorForLoops) : loopCount;
+
+        if (loopCount <= 0 ) {
+            return;
+        }
+
+        // Now let's check the configs to see if we should increase/decrease this value.
+        loopCount = this.applyConfigMultipliers(loopCount, biome);
+
+        if (loopCount <= 0 ) {
+            return;
+        }
+
+        /*
+         * Since RTG posts a TREE event for each batch of trees it tries to generate (instead of one event per chunk),
+         * we post this custom event so that we can pass the number of trees RTG expects to generate in each batch.
+         *
+         * This provides more contextual information to mods like Recurrent Complex, which can use the info to better
+         * determine how to handle each batch of trees.
+         *
+         * Because the custom event extends DecorateBiomeEvent.Decorate, it still works with mods that don't need
+         * the additional context.
+         */
+        //TODO [1.12] Trees should just generate how they do in the vanilla BiomeDecorator::genDecorations and use the Forge event.
+        DecorateBiomeEventRTG.DecorateRTG event = new DecorateBiomeEventRTG.DecorateRTG(rtgWorld.world(), rand, offsetPos, Decorate.EventType.TREE, (int)loopCount);
+        MinecraftForge.TERRAIN_GEN_BUS.post(event);
+
+        if (event.getResult() != Event.Result.DENY) {
+
+        	if ((int)loopCount != event.getModifiedAmount()) {
+                loopCount = event.getModifiedAmount();
+                throw new RuntimeException();
+        	}
+            if (loopCount <=0 ) { return; }
+
+            // TODO: [1.12] This should be done in #setLeavesBlock.
+            DecoBase.tweakTreeLeaves(this, false, true);
+
+            TreeDensityLimiter treesRemaining = new TreeDensityLimiter(loopCount);
+            while (treesRemaining.notDone()) {
+                final BlockPos pos = offsetPos.add(rand.nextInt(16), 0, rand.nextInt(16));
+                int y = rtgWorld.world().getHeight(pos).getY();
+                if (y <= this.maxY && y >= this.minY && isValidTreeCondition(noise, rand)) {
+
+                    // If we're in a village, check to make sure the tree has extra room to grow to avoid corrupting the village.
+                    if (hasVillage) {
+                        if (BlockUtil.checkVerticalBlocks(MatchType.ALL, rtgWorld.world(), pos, -1, Blocks.FARMLAND) ||
+                            !BlockUtil.checkAreaBlocks(MatchType.ALL_IGNORE_REPLACEABLE, rtgWorld.world(), pos, 2)) {
+                            return;
+                        }
+                    }
+                    // get a suitable tree Type
+                    doVariableGenerate(rand,  chunkInfo, pos,y, treesRemaining);
+                } else {
+                	treesRemaining.allowed(1f, rand);
+                }
+
+            }
+        }
+        else if (RTGConfig.enableDebugging()) {
+        }
+    }
+
+
+	public void doVariableGenerate(Random rand, ChunkInfo chunkInfo, BlockPos column, int y, TreeDensityLimiter treesRemaining) { 
+		
+		float averageHeightIndex = chunkInfo.treeHeightNoiseValue();
+		
+		float noise = averageHeightIndex;
+		// value is -1 to 1, so adjust to be in [2.5,5.5], the targeted range of height square *root*
+		averageHeightIndex *= heightNoiseVariability;
+		averageHeightIndex += averageHeightSqrt;
+		// a little tree to tree variability. Math is different from noise math because noises are [-1,1] and randoms [0,1]
+		float actualHeightIndex = averageHeightIndex + rand.nextFloat()*localHeightSqrtVariability*2f - localHeightSqrtVariability;
+		// shrink down if high
+		if (y>70) {
+			actualHeightIndex -= ((float)(y-70))/20f;
+			// no negatives!
+			if (averageHeightIndex <0) {
+				treesRemaining.occupy(0.3f);// use up a little to avoid infinite loops
+				return;  //too small, no tree generated.
+			}
+		}
+		// square for actual height
+		int actualHeight = (int)(actualHeightIndex*actualHeightIndex);
+		// occasional smaller saplings
+		if (rand.nextFloat()<saplingChance&&actualHeight>vanillaTreeMinimumHeight) {
+			actualHeight = vanillaTreeMinimumHeight + rand.nextInt(actualHeight-vanillaTreeMinimumHeight);
+		}
+		// the generate step is separated out because 
+		doGenerate(chunkInfo.world(),rand,column.up(y),actualHeight,treesRemaining);
+		return;
+	}
+	
+	public boolean doGenerate(World world, Random rand, BlockPos pos, int actualHeight, TreeDensityLimiter treesRemaining) {
+		if (actualHeight >tallTreeMinimumHeight+rand.nextInt(tallTreeMinimumVariability)) {
+			return this.generateTallTree(world, rand, pos, actualHeight, materials,treesRemaining);
+		} else if (actualHeight >mediumTreeMinimumHeight+rand.nextInt(mediumTreeMinimumVariability)) {
+			return this.generateMediumTree(world, rand, pos, actualHeight, materials,treesRemaining);
+		} else if (actualHeight >smallTreeMinimumHeight+rand.nextInt(smallTreeMinimumVariability)) {
+			return this.generateSmallTree(world, rand, pos, actualHeight, materials,treesRemaining);
+		} else if (actualHeight >vanillaTreeMinimumHeight+rand.nextInt(vanillaTreeMinimumVariability)) {
+			if (treesRemaining.allowed(0.5f, rand))  {
+			    return vanillaTree().generate(world, rand, pos);
+			}
+			return false;
+		} else {
+			if (treesRemaining.allowed(0.7f, rand))  {
+			    return new WorldGenShrubRTG(actualHeight,materials.log,materials.leaves,false).generate(world, rand, pos);
+			}
+			return false;
+		}
+}
+
+    @Override
+    @Deprecated
+    public boolean properlyDefined() {
+
+        // override DecoTree because we don't have just one tree.
+        return true;
+    }
+    
+	private boolean generateTallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
+		
+		tallTree.setLogBlock(materials.log);
+        tallTree.setLeavesBlock(materials.leaves);
+        tallTree.setBranchBlock(materials.branches);
+        tallTree.setTreeSize(actualHeight, random);
+        tallTree.setNoLeaves(false);
+        if (treesRemaining.allowed(tallTree.estimatedSize(), random)) {
+		    return tallTree.generate(world, random, pos);
+        }
+        return false;
+	}
+	
+	private boolean generateMediumTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
+		
+		mediumTree.setLogBlock(materials.log);
+		mediumTree.setLeavesBlock(materials.leaves);
+		mediumTree.setBranchBlock(materials.branches);
+        mediumTree.setTreeSize(actualHeight, random);
+        mediumTree.setNoLeaves(false);
+        if (treesRemaining.allowed(mediumTree.estimatedSize(), random)) {
+             return mediumTree.generate(world, random, pos);
+        }
+        return false;
+	}
+	
+	private boolean generateSmallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {		
+
+		smallTree.setTreeSize(actualHeight, random);
+	
+	    smallTree.setLogBlock(materials.log);
+		smallTree.setLeavesBlock(materials.leaves);
+		smallTree.setBranchBlock(materials.branches);
+	    smallTree.setCrownSize(smallTree.getCrownSize()+2);// need a bit more crown for this algo
+	    //smallTree.setCrownSize(2);
+	    smallTree.setNoLeaves(false);
+	    if (treesRemaining.allowed(smallTree.estimatedSize(), random)){
+		    return smallTree.generate(world, random, pos);
+	    }
+	    return false;
+	}
+	
+	public int largestVanillaTree() {return this.smallTreeMinimumHeight + this.smallTreeMinimumVariability -1;}
+
+	protected WorldGenAbstractTree vanillaTree() {
+		return new WorldGenTrees(false,4,materials.log,materials.leaves,false);
+	}
+	
+	public void setSmallTreeMinimumHeight(int newHeight) {
+		this.smallTreeMinimumHeight = newHeight;
+	}
+}

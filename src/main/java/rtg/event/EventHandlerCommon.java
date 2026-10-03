@@ -1,39 +1,36 @@
 package rtg.event;
 
-import java.util.ArrayList;
-import java.util.Random;
-
-import net.minecraft.block.BlockSapling;
-import net.minecraft.block.BlockPlanks.EnumType;
+import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.feature.WorldGenLiquids;
-
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.terraingen.DecorateBiomeEvent;
 import net.minecraftforge.event.terraingen.DecorateBiomeEvent.Decorate;
 import net.minecraftforge.event.terraingen.SaplingGrowTreeEvent;
+import net.minecraftforge.event.world.ChunkEvent;
 import net.minecraftforge.fml.common.eventhandler.Event;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-
 import rtg.RTGConfig;
-import rtg.api.util.BlockUtil;
-import rtg.api.util.Direction;
+import rtg.api.RTGAPI;
+import rtg.api.util.ChunkInfo;
 import rtg.api.util.Logger;
 import rtg.api.util.UtilityClass;
-import rtg.api.world.deco.DecoVariableTree;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGCeibaPentandra;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGRhizophoraMucronata;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGSalixMyrtilloides;
+import rtg.api.world.RTGWorld;
+import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.feature.tree.rtg.RTGSaplingManager;
-import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
 import rtg.world.biome.BiomeProviderBOP;
 import rtg.world.biome.BiomeProviderRTG;
+
+import java.util.HashSet;
+import java.util.Random;
 
 
 @UtilityClass
@@ -41,8 +38,239 @@ public final class EventHandlerCommon
 {
     private EventHandlerCommon() {}
 
+    /**
+     * 树木接管管理器（移植上游新树系统 / T6）。
+     *
+     * <p>由各群系的 {@code initDecos()} 通过 {@code useTreeManager()} 或
+     * {@code suppressBOPBiome(...)} 登记。{@code IRealisticBiome.rDecorate} 与
+     * 本类的 {@link #takeoverTreeGeneration} 都靠它回答"这个群系的树归 RTG 管吗"。
+     */
+    public static TreeGenerationManager treeGenerationManager = new TreeGenerationManager();
+
     public static void init() {
         MinecraftForge.TERRAIN_GEN_BUS.register(EventHandlerCommon.class);
+        // 上游 74cf4fd「Lighting bug reduction」加：区块载入事件需要 EVENT_BUS。
+        MinecraftForge.EVENT_BUS.register(EventHandlerCommon.class);
+    }
+
+    // ==================== 树木接管（上游新树系统 / T6） ====================
+
+    private static final HashSet<WorldChunkPos> chunkIDs = new HashSet<>();
+
+    /**
+     * 区块+世界的复合键。上游原样（用 hashCode 相加 + equals 双判）。
+     *
+     * <p>用途见 {@link #takeoverTreeGeneration}：防止同一区块在 TREE 装饰事件里被递归处理。
+     */
+    private static class WorldChunkPos {
+
+        final World world;
+        final ChunkPos chunkPos;
+
+        WorldChunkPos(World _world, ChunkPos _chunkPos) {
+            world = _world;
+            chunkPos = _chunkPos;
+        }
+
+        public int hashCode() {
+            return world.hashCode() + chunkPos.hashCode();
+        }
+
+        public boolean equals(Object candidate) {
+            if (!(candidate instanceof WorldChunkPos)) {
+                return false;
+            }
+            WorldChunkPos compared = (WorldChunkPos) candidate;
+            return world.equals(compared.world) && chunkPos.equals(compared.chunkPos);
+        }
+    }
+
+    /**
+     * 在**非 RTG 世界类型**里接手树木生成（移植上游 T6）。
+     *
+     * <p>场景：玩家用原版/其它世界类型，但装了 RTG 并希望那些世界里也长 RTG 的树。
+     * 拦下原版 TREE 装饰事件，改由 {@code rtgBiome.getTreeDecos()} 生成。
+     *
+     * <p>两处相对上游的有意偏离（用户授权自行判断）：
+     * <ol>
+     *   <li>上游判 {@code instanceof BiomeProviderRTG}；本仓库两个 provider 是兄弟类，
+     *       故复用本类既有的 {@link #isRTGWorld} 同时覆盖 BOP。</li>
+     *   <li>上游在 RTG 世界类型下会走 {@code rtgBiome.getTreeDecos().generate(...)}
+     *       这条分支（因为它的 {@code ChunkGeneratorRTG} 自己不调树装饰）。
+     *       **本仓库不同**：{@code ChunkGeneratorRTG} 的 {@code rDecorate} 已经会调
+     *       {@code getTreeDecos()}，这里再调一次就会**重复出树**。故 RTG 世界一律交给
+     *       生成器，本方法只负责"把原版这批树拦掉"。</li>
+     * </ol>
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void takeoverTreeGeneration(DecorateBiomeEvent.Decorate event) {
+
+        if (!RTGConfig.treesInNonRTGWorlds()) {
+            return;
+        }
+        if (event.getType() != Decorate.EventType.TREE) {
+            return;
+        }
+        // RTG 自己（rDecorate 里立的树）走的是自定义事件，别拦自己的。
+        if (event instanceof rtg.api.event.DecorateBiomeEventRTG.DecorateRTG) {
+            return;
+        }
+        if (event.getWorld().isRemote) {
+            return;
+        }
+
+        final WorldChunkPos chunkID = new WorldChunkPos(event.getWorld(), event.getChunkPos());
+        if (chunkIDs.contains(chunkID)) {
+            event.setResult(Event.Result.DENY);
+            return;
+        }
+
+        final BlockPos center = event.getChunkPos().getBlock(8, 64, 8);
+        final Biome biome = event.getWorld().getBiomeProvider().getBiome(center);
+        if (!treeGenerationManager.managingBiome(biome)) {
+            return;
+        }
+
+        final IRealisticBiome rtgBiome = RTGAPI.getRTGBiome(biome);
+        if (rtgBiome == null || rtgBiome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
+            return;
+        }
+
+        // 已经在跑 RTG 生成器的世界：树由 ChunkGeneratorRTG.populate 负责，这里只拦截原版的。
+        if (isRTGWorld(event.getWorld())) {
+            event.setResult(Event.Result.DENY);
+            return;
+        }
+
+        chunkIDs.add(chunkID);
+        try {
+            final ChunkInfo chunkInfo = new ChunkInfo(event.getChunkPos(), RTGWorld.getInstance(event.getWorld()));
+            rtgBiome.getTreeDecos().generate(rtgBiome, RTGWorld.getInstance(event.getWorld()),
+                    event.getRand(), event.getChunkPos(), 0, false, chunkInfo);
+        } finally {
+            chunkIDs.remove(chunkID);
+        }
+        event.setResult(Event.Result.DENY);
+    }
+
+    // ==================== 光照修补（上游 74cf4fd，移植） ====================
+    // 上游原话：「Hacky fix to reduce the incidence of lighting bugs. They are less common, but still
+    // happening.」——即这是一个降低发生率的权宜修法，不是根因修复。
+    //
+    // 手法：自上而下扫描每一列，找出「不透明方块正上方的那个空气格」；若它的天光值比四邻中
+    // 最大值还低 1 以上（说明天光没算对），就往该格写一次 WOOL 再清成空气，强制触发重算。
+    //
+    // 移植差异（相对上游 74cf4fd）：
+    //   ① 世界判定补上 BiomeProviderBOP —— 上游只判 BiomeProviderRTG，而本仓库两个 provider 是
+    //      兄弟类（都 extends BiomeProvider），与 onDecorateBiome 的既有写法保持一致；
+    //   ② 上游原版留了 `start` / `lastChecked` 两个写完即弃的局部变量，为免编译器告警已删，
+    //      其余逻辑逐行一致。
+
+    private static boolean alreadyFixing = false;
+
+    @SubscribeEvent
+    public static void fixLightingOnLoad(ChunkEvent.Load loadEvent) {
+
+        if (loadEvent.getWorld().isRemote) return;
+        if (!isRTGWorld(loadEvent.getWorld())) return;
+        if (alreadyFixing) return;
+        alreadyFixing = true;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                fixLighting(loadEvent.getChunk(), x, z);
+            }
+        }
+        alreadyFixing = false;
+    }
+
+    // 上游把这个类的唯一调用点注释掉了，此处保持同样的注释状态（备而不用）。
+    //private static ChunkTracker lightChecked = new ChunkTracker(1500);
+
+    private static void fixLighting(World world, ChunkPos chunkPos) {
+
+        // abort if we've done this chunk before
+        //if (!lightChecked.addIfNeeded(world, chunkPos)) return;
+        Chunk chunk = world.getChunk(chunkPos.x, chunkPos.z);
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                fixLighting(chunk, x, z);
+            }
+        }
+    }
+
+    private static void fixLighting(Chunk chunk, int x, int z) {
+
+        if (chunk.getBlockState(x, 255, z).getBlock() != Blocks.AIR) return;
+        int lastAir = 255;
+        for (int y = 255; y > 48; y--) {
+            IBlockState state = chunk.getBlockState(x, y, z);
+            Block block = state.getBlock();
+            if (block == Blocks.AIR) {
+                lastAir = y;
+                continue;
+            }
+            if (state.isOpaqueCube()) {
+                BlockPos lastAirLocation = new BlockPos(x, lastAir, z);
+                int lighting = chunk.getLightFor(EnumSkyBlock.SKY, lastAirLocation);
+                if (lighting < getAdjacentBlockLight(chunk, x, lastAir, z) - 1) {
+                    chunk.getWorld().setBlockState(chunk.getPos().getBlock(x, lastAir, z), Blocks.WOOL.getDefaultState(), 3);
+                    chunk.getWorld().setBlockToAir(chunk.getPos().getBlock(x, lastAir, z));
+                }
+            }
+        }
+    }
+
+    private static int getAdjacentBlockLight(Chunk chunk, int x, int y, int z) {
+
+        int result = getBlockLight(chunk, x + 1, y, z);
+        result = Math.max(getBlockLight(chunk, x + 1, y, z + 1), result);
+        result = Math.max(getBlockLight(chunk, x - 1, y, z + 1), result);
+        result = Math.max(getBlockLight(chunk, x - 1, y, z - 1), result);
+        return result;
+    }
+
+    private static int getBlockLight(Chunk chunk, int x, int y, int z) {
+
+        if ((x < 0) || (x > 15) || (z < 0) || (z > 15)) return 0;
+        return chunk.getLightFor(EnumSkyBlock.SKY, new BlockPos(x, y, z));
+    }
+
+    // 由 ChunkGeneratorRTG.populate 在区块填充完成后调用：检查本区块的四个「角邻」区块
+    // （±1, ±1），只对**已填充完成**（isPopulated）的那些做修补。
+    public static void fixLightingAround(World world, ChunkPos pos) {
+
+        if (!isRTGWorld(world)) return;
+        Chunk targeted;
+        if (world.isChunkGeneratedAt(pos.x + 1, pos.z + 1)) {
+            targeted = world.getChunk(pos.x + 1, pos.z + 1);
+            if (targeted.isPopulated()) {
+                fixLighting(world, new ChunkPos(pos.x + 1, pos.z + 1));
+            }
+        }
+        if (world.isChunkGeneratedAt(pos.x - 1, pos.z + 1)) {
+            targeted = world.getChunk(pos.x - 1, pos.z + 1);
+            if (targeted.isPopulated()) {
+                fixLighting(world, new ChunkPos(pos.x - 1, pos.z + 1));
+            }
+        }
+        if (world.isChunkGeneratedAt(pos.x - 1, pos.z - 1)) {
+            targeted = world.getChunk(pos.x - 1, pos.z - 1);
+            if (targeted.isPopulated()) {
+                fixLighting(world, new ChunkPos(pos.x - 1, pos.z - 1));
+            }
+        }
+        if (world.isChunkGeneratedAt(pos.x + 1, pos.z - 1)) {
+            targeted = world.getChunk(pos.x + 1, pos.z - 1);
+            if (targeted.isPopulated()) {
+                fixLighting(world, new ChunkPos(pos.x + 1, pos.z - 1));
+            }
+        }
+    }
+
+    private static boolean isRTGWorld(final World world) {
+
+        return world.getBiomeProvider() instanceof BiomeProviderBOP
+                || world.getBiomeProvider() instanceof BiomeProviderRTG;
     }
 
     // TERRAIN_GEN_BUS
@@ -82,193 +310,22 @@ public final class EventHandlerCommon
 
  // TERRAIN_GEN_BUS
     @SubscribeEvent
+    // 底层 API 变动（移植上游新树系统 / T4）：新版 RTGSaplingManager 把整套树苗判定收进了
+    // 静态 RTGSaplingManager.manage(event)，旧版那一长串（countSaplingGroup / is2x2 /
+    // obtuseAngle / finishGeneration + instance 方法）在上游已被删除，故此处按其目标形态重写。
+    // 保留本仓库的 fixLighting 调用（上游在同一位置也调它）。
     public static void variableSaplingGrowTreeRTG(SaplingGrowTreeEvent event) {
 
         final World world = event.getWorld();
-        
-        //Logger.info("trying RTG trees", "");
 
         // skip if RTG saplings are disabled or this world does not use BiomeProviderBOP/RTG
-        if (!RTGConfig.rtgTreesFromSaplings() ||
-            (!(world.getBiomeProvider() instanceof BiomeProviderBOP) &&
-             !(world.getBiomeProvider() instanceof BiomeProviderRTG))) {
+        if (!RTGConfig.rtgTreesFromSaplings() || !isRTGWorld(world)) {
             Logger.debug("[SaplingGrowTreeEvent] Aborting: RTG trees are disabled, or not an RTG dimension");
             return;
         }
 
-        final BlockPos pos = event.getPos();
-        final IBlockState saplingBlock = world.getBlockState(pos);
-        //Logger.trace("Handling SaplingGrowTreeEvent in dim: {}, at: {}, for: {}", world.provider.getDimension(), pos, saplingBlock);
-
-        // Are we dealing with a sapling? Sounds like a silly question, but apparently it's one that needs to be asked.
-        if (!(saplingBlock.getBlock() instanceof BlockSapling)) {
-            Logger.debug("[SaplingGrowTreeEvent] Aborting: Sapling is not a sapling block ({})", saplingBlock.getBlock().getClass().getName());
-            return;
+        if (RTGSaplingManager.manage(event)) {
+            fixLighting(world, new ChunkPos(event.getPos()));
         }
-
-        final Random rand = event.getRand();
-
-        // Should we generate a vanilla tree instead?
-        // TODO: RTGConfig.rtgTreeChance() is obsolete with this system
-        
-        RTGSaplingManager saplingManager = new RTGSaplingManager();//not saving this due to sapling growth being so infrequent
-        
-        
-        if (!saplingManager.manages(saplingBlock)) return;// do nothing if weren't not handling this sapling type
-        
-        int groupSize = countSaplingGroup(world,pos,saplingBlock);
-        
-        //Logger.info("group size{}", groupSize);
-        if (groupSize == 1) return; // lone saplings grow as vanilla
-        
-        if (groupSize ==4) {
-        	// check for 2x2, which we will hand to vanilla for some trees
-        	if (saplingManager.rejectIf2x2(saplingBlock)) {
-        		if (is2x2(world,pos,saplingBlock)) return;
-        	}
-        }
-        
-        //now check to see if this is not in the center of its group
-        //by looking for adjacent directions with more around it
-        
-        BlockPos trunkLocation = pos;
-        for (Direction direction: Direction.list()) {
-        	BlockPos testLocation = direction.moved(pos);
-        	int testCount = countSaplingGroup(world,testLocation,saplingBlock);
-
-            //Logger.info("test size {} {} {}", testCount, pos, testLocation);
-        	if (testCount > groupSize) {
-        		groupSize = testCount;
-        		trunkLocation = testLocation;
-        	}
-        }
-
-        //Logger.info("group size{}", groupSize);
-        
-        // Swamp Willow special code
-        if (saplingManager.couldBeSwampWillow(saplingBlock)) {
-        	if (groupSize == 3) {
-            	if (obtuseAngle(world,trunkLocation,saplingBlock)) {
-            		new TreeRTGSalixMyrtilloides().generate(world, rand, pos);
-            		finishGeneration(event,world,trunkLocation,saplingBlock);
-            		return;
-            	}
-        	}
-        }
-        
-        // Roofed Forest Tree Special Code
-        if (saplingManager.darkOak(saplingBlock)) {
-        	if (groupSize == 2) {        
-        		TreeRTG pentandraTree = new TreeRTGCeibaPentandra();;
-	            pentandraTree.setLogBlock(BlockUtil.getStateLog(EnumType.DARK_OAK));
-	            pentandraTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.DARK_OAK));
-	            pentandraTree.setMaxAllowedObstruction(TreeRTG.ROOFED_FOREST_LIGHT_OBSTRUCTION_LIMIT);
-	            pentandraTree.setMinTrunkSize(2);
-	            pentandraTree.setMaxTrunkSize(3);
-	            pentandraTree.setMinCrownSize(5);
-	            pentandraTree.setMaxCrownSize(8);
-	            pentandraTree.setNoLeaves(false);
-	            pentandraTree.randomizeTreeSize(rand);
-	            pentandraTree.generate(world, rand, pos);
-        		finishGeneration(event,world,trunkLocation,saplingBlock);
-        		return;
-        	}
-        	if (groupSize == 3) {
-                TreeRTG mucronataTree = new TreeRTGRhizophoraMucronata();
-                mucronataTree.setLogBlock(BlockUtil.getStateLog(EnumType.DARK_OAK));
-                mucronataTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.DARK_OAK));
-                mucronataTree.setMaxAllowedObstruction(TreeRTG.ROOFED_FOREST_LIGHT_OBSTRUCTION_LIMIT);
-                mucronataTree.setMinTrunkSize(2);
-                mucronataTree.setMaxTrunkSize(3);
-                mucronataTree.setMinCrownSize(5);
-                mucronataTree.setMaxCrownSize(8);
-                mucronataTree.setNoLeaves(false);
-                mucronataTree.randomizeTreeSize(rand);
-                mucronataTree.generate(world, rand, pos);
-        		finishGeneration(event,world,trunkLocation,saplingBlock);
-        		return;
-        	}
-        	// otherwise we're going to ignore this
-        	return;
-        }
-        DecoVariableTree variableTree = saplingManager.tree(saplingBlock);
-        
-        // Determine height
-        int actualHeight = variableTree.largestVanillaTree() + 1;
-        if (groupSize > 2) {
-        	// 2 is minimum height
-        	actualHeight += (groupSize -3)*5 + rand.nextInt(5);
-        }
-        
-        variableTree.doGenerate(world, rand, trunkLocation, actualHeight, new TreeDensityLimiter(1000000));
-        finishGeneration(event,world,trunkLocation,saplingBlock);
-    }
-    
-    private static void finishGeneration(SaplingGrowTreeEvent event,World world, BlockPos trunkLocation, IBlockState saplingBlock) {
-        event.setResult(Event.Result.DENY);
-        // Sometimes we have to remove the sapling manually because some trees grow around it, leaving the original sapling.
-        if (RTGSaplingManager.similar(world.getBlockState(trunkLocation), saplingBlock)) {
-            world.setBlockState(trunkLocation, Blocks.AIR.getDefaultState(), 2);
-        }
-    	for (Direction direction: Direction.list()) {
-    		BlockPos adjacent = direction.moved(trunkLocation);
-            if (RTGSaplingManager.similar(world.getBlockState(adjacent), saplingBlock)) {
-                world.setBlockState(adjacent, Blocks.AIR.getDefaultState(), 2);
-            }
-    	}
-    	
-    }
-    
-    private static int countSaplingGroup(World world, BlockPos pos,IBlockState saplingBlock) {
-    	if (!RTGSaplingManager.similar(world.getBlockState(pos), saplingBlock)) return  0;
-    	int found = 1;
-    	for (Direction direction: Direction.list()) {
-    		if (RTGSaplingManager.similar(world.getBlockState(direction.moved(pos)), saplingBlock)) {
-    			found++;
-    		}
-    	}
-    	return found;
-    }
-    
-    private static boolean obtuseAngle(World world, BlockPos pos,IBlockState saplingBlock) {
-    	ArrayList<Direction> found = new ArrayList<>();
-    			
-    	for (Direction direction: Direction.list()) {
-    		if (RTGSaplingManager.similar(world.getBlockState(direction.moved(pos)), saplingBlock)) {
-    			found.add(direction);
-    		}
-    	}
-    	if (found.size() == 2) {
-    		//must be two
-    		int different = found.get(1).index - found.get(0).index;
-    		if (different==3) return true;// obtuse angle
-    		if (different==5) return true;// obtuse the other way
-    	}
-    	return false;
-    }
-    
-    private static boolean is2x2(World world, BlockPos pos,IBlockState saplingBlock) {
-    	
-    	// northeast
-    	if (world.getBlockState(pos.north()) == saplingBlock) 
-    		if (world.getBlockState(pos.east()) == saplingBlock)
-        		if (world.getBlockState(pos.east().north()) == saplingBlock) return true;
-
-    	// northwest
-    	if (world.getBlockState(pos.north()) == saplingBlock) 
-    		if (world.getBlockState(pos.west()) == saplingBlock)
-        		if (world.getBlockState(pos.west().north()) == saplingBlock) return true;
-    	// southeast
-    	if (world.getBlockState(pos.south()) == saplingBlock) 
-    		if (world.getBlockState(pos.east()) == saplingBlock)
-        		if (world.getBlockState(pos.east().south()) == saplingBlock) return true;
-
-    	// southwest
-    	if (world.getBlockState(pos.south()) == saplingBlock) 
-    		if (world.getBlockState(pos.west()) == saplingBlock)
-        		if (world.getBlockState(pos.west().south()) == saplingBlock) return true;
-    	
-    	// none of the above
-    	return false;
     }
 }

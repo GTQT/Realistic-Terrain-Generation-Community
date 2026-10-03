@@ -1,17 +1,13 @@
 package rtg.api.world.deco.collection;
 
 import net.minecraft.block.BlockPlanks.EnumType;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.gen.feature.WorldGenTrees;
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.deco.*;
-import rtg.api.world.deco.helper.DecoHelperRandomSplit;
 import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPapyrifera;
 
 import static net.minecraft.block.BlockFlower.EnumFlowerType.HOUSTONIA;
 import static net.minecraft.block.BlockFlower.EnumFlowerType.WHITE_TULIP;

@@ -1,23 +1,27 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
 import biomesoplenty.api.biome.BOPBiomes;
-
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
-
-import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.DecoTreeSet;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
+import rtg.api.world.gen.feature.tree.bop.TreeBOPMediumFir;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusNigra;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGResizable;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 public class RealisticBiomeBOPMapleWoods extends RealisticBiomeBase {
 
@@ -42,11 +46,37 @@ public class RealisticBiomeBOPMapleWoods extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPMapleWoods(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock);
+        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
     }
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        TreeRTGQuercusNigra fancyMaple = new TreeRTGQuercusNigra();
+        fancyMaple.setMaterials(BOPTreeMaterials.maple);
+        fancyMaple.setTrunkProportionVariability(.15f);
+        fancyMaple.setLowestVariableTrunkProportion(.3f);
+        TreeRTGResizable variableMaple = new TreeRTGResizable(fancyMaple);
+        variableMaple.changeAverageHeightSqrt(-.5f);
+        variableMaple.changeHeightNoiseVariability(-.75f);
+        DecoTree mapleDeco = new DecoTree(variableMaple);
+
+        TreeBOPMediumFir scatteredPines = new TreeBOPMediumFir();
+        scatteredPines.setTrunkProportionVariability(.15f);
+        scatteredPines.setMaterials(TreeMaterials.Picker.spruce);
+        scatteredPines.setLowestVariableTrunkProportion(.3f);
+        TreeRTGResizable variablePines = new TreeRTGResizable(scatteredPines);
+        variablePines.changeHeightNoiseVariability(-.75f);
+        DecoTree pineDeco = new DecoTree(variablePines);
+
+        DecoTreeSet trees = new DecoTreeSet();
+        trees.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.0f, 5.0f));
+        trees.add(pineDeco, 3);
+        trees.add(mapleDeco, 4);
+
+        this.treeGenerator = trees;
 
         DecoFallenTree decoFallenTree = new DecoFallenTree();
         decoFallenTree.getDistribution().setNoiseDivisor(80f);
@@ -74,58 +104,9 @@ public class RealisticBiomeBOPMapleWoods extends RealisticBiomeBase {
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainRollingHills(x, y, rtgWorld, river, hillStrength, maxHeight, groundNoiseAmplitudeHills, river);
+            // 照抄 RWG SupportBOP.java  mapleWoods -> TerrainHighland(0f, 140f, 68f, 200f)
+            return terrainHighland(x, y, rtgWorld, river, 0f, 140f, 68f, 200f);
         }
     }
 
-    public static class SurfaceBOPMapleWoods extends SurfaceBase {
-
-        public SurfaceBOPMapleWoods(BiomeConfig config, IBlockState top, IBlockState filler) {
-
-            super(config, top, filler);
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            boolean cliff = c > 1.4f;
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (cliff) {
-                        if (depth > -1 && depth < 2) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (depth < 10) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                    }
-                    else {
-                        if (depth == 0 && k > 61) {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                        else if (depth < 4) {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

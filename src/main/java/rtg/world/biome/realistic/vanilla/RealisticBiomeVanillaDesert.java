@@ -1,13 +1,8 @@
 package rtg.world.biome.realistic.vanilla;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Biomes;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.collection.DecoCollectionDesert;
@@ -16,7 +11,7 @@ import rtg.api.world.gen.RTGChunkGenSettings;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
 
-import java.util.Random;
+import rtg.api.world.surface.SurfaceDesertMountain;
 
 
 public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
@@ -46,8 +41,7 @@ public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-
-        return new SurfaceVanillaDesert(getConfig(), biome.topBlock, biome.fillerBlock);
+        return new SurfaceDesertMountain(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, false, null, 0f, 1.5f, 60f, 65f, 1.5f);
     }
 
     @Override
@@ -68,6 +62,26 @@ public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
         baseBiome().decorator.cactiPerChunk = -999;
     }
 
+    /**
+     * 沙丘（RTG 时代的实现，**没有 RWG 对应物**）。
+     *
+     * <p>它用的是 {@code terrainPolar} 的**参数化**重载 —— 算式与 RWG 的 {@code TerrainPolar}
+     * 逐字相同，只是把 5 个字面量提成形参，好让本群系传入自己的沙丘参数。
+     *
+     * <p>RWG 的沙漠族是 {@code desert\RealisticBiomeDesert → TerrainHilly(150f, 50f, 0f)}，
+     * <b>没有</b>沙丘；RWG 的沙丘在 {@code RealisticBiomeDuneValley → TerrainDunes}。
+     * 本群系保持 RTG 的沙丘实现，理由有两条：
+     * <ol>
+     *   <li>它是 {@code sandDuneHeight} 这个 GUI 滑条（1–10）的**唯一**消费者，
+     *       换成 {@code terrainHilly} 会让该滑条变成死配置；</li>
+     *   <li>视觉上它产出的是沙丘脊线，与"MC 沙漠"的观感相符；换成
+     *       {@code terrainHilly(150,50,0)} 会变成普通的沙漠丘陵。</li>
+     * </ol>
+     * 这是一处**已知偏离**，见 {@code docs/rwg-port-gaps.md} §20。若你要"完全照抄"，
+     * 改法是把下面这行换成
+     * {@code return terrainHilly(x, y, rtgWorld, river, 150f, 50f, 0f, 260f, 68f);}
+     *（与 {@code BOPColdDesert} 现在的写法一致），代价是滑条失效。
+     */
     public static class TerrainVanillaDesert extends TerrainBase {
 
         public TerrainVanillaDesert() {
@@ -92,56 +106,4 @@ public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
         }
     }
 
-    public static class SurfaceVanillaDesert extends SurfaceBase {
-
-        public SurfaceVanillaDesert(BiomeConfig config, IBlockState top, IBlockState fill) {
-
-            super(config, top, fill);
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            boolean water = false;
-            boolean riverPaint = false;
-            boolean grass = false;
-
-            if (river > 0.05f && river + (simplex.noise2f(i / 10f, j / 10f) * 0.1f) > 0.86f) {
-                riverPaint = true;
-
-                if (simplex.noise2f(i / 12f, j / 12f) > 0.25f) {
-                    grass = true;
-                }
-            }
-
-            Block b;
-            for (int k = 255; k > -1; k--) {
-                b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (riverPaint) {
-                        if (grass && depth < 4) {
-                            //primer.setBlockState(x, k, z, Blocks.GRASS.getDefaultState());
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                        else if (depth == 0) {
-                            primer.setBlockState(x, k, z, rand.nextInt(2) == 0 ? topBlock : Blocks.SANDSTONE.getDefaultState());
-                        }
-                    }
-                    else if (depth > -1 && depth < 5) {
-                        primer.setBlockState(x, k, z, topBlock);
-                    }
-                    else if (depth < 8) {
-                        primer.setBlockState(x, k, z, fillerBlock);
-                    }
-                }
-            }
-        }
-    }
 }

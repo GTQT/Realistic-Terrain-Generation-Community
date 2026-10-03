@@ -1,13 +1,14 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import java.util.Random;
-
+import net.minecraft.block.BlockLeaves;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import rtg.api.util.BlockUtil;
+
+import java.util.Random;
 
 
 /**
@@ -72,7 +73,7 @@ public class TreeRTGCocosNucifera extends TreeRTG {
     };
     protected IBlockState trunkLog;
 
-    /**
+    /** decay
      * <b>Cocos Nucifera (Coconut Palm)</b><br><br>
      * <u>Relevant variables:</u><br>
      * logBlock, logMeta, leavesBlock, leavesMeta, trunkSize, crownSize, noLeaves<br><br>
@@ -100,8 +101,8 @@ public class TreeRTGCocosNucifera extends TreeRTG {
 
         this.setLogBlock(BlockUtil.getStateLog(EnumType.JUNGLE));
         this.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.JUNGLE));
-        this.trunkSize = 6;
-        this.crownSize = 5;
+        this.trunkSize = 8;
+        this.crownSize = 7;
     }
 
     @Override
@@ -116,6 +117,9 @@ public class TreeRTGCocosNucifera extends TreeRTG {
         int z = pos.getZ();
 
         SkylightTracker lightTracker = new SkylightTracker(this.furthestLikelyExtension(),pos,world);
+        
+        // these leaves can't be decayable
+        leavesBlock = leavesBlock.withProperty(BlockLeaves.DECAYABLE, false);
         
         this.trunkLog = this.getTrunkLog(this.logBlock);
 
@@ -193,5 +197,10 @@ public class TreeRTGCocosNucifera extends TreeRTG {
                 return 90D;
         }
         return 0D;
+    }
+    
+    public int furthestLikelyExtension() {
+		return (int)((crownSize + trunkSize)*0.3);
+    	
     }
 }

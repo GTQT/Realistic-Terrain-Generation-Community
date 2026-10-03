@@ -1,21 +1,27 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
 import biomesoplenty.api.block.BOPBlocks;
-
-import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
-
-import rtg.api.config.BiomeConfig;
+import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
+import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.DecoTreeSet;
+import rtg.api.world.deco.DecoVariableBirch;
+import rtg.api.world.deco.collection.DecoCollectionBase;
+import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
+import rtg.api.world.gen.feature.tree.bop.TreeBOPJacaranda;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusRobur;
+import rtg.api.world.gen.feature.tree.rtg.TreeRTGResizable;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
 import static rtg.api.world.deco.DecoFallenTree.LogCondition.RANDOM_CHANCE;
 
@@ -43,11 +49,46 @@ public class RealisticBiomeBOPMysticGrove extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPMysticGrove(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock);
+        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
     }
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        TreeRTG oakTree = new TreeRTGQuercusRobur();
+        oakTree.setMinCrownSize(6);
+        oakTree.setMaxCrownSize(10);
+        oakTree.setMinTrunkSize(6);
+        oakTree.setMaxTrunkSize(8);
+        oakTree.setLeafChoice(BOPTreeMaterials.floweringOak());
+        TreeRTGResizable variableOak = new TreeRTGResizable(oakTree);
+        variableOak.changeAverageHeightSqrt(-0.5f);
+        variableOak.changeHeightNoiseVariability(-1);
+        DecoTree oakDeco = new DecoTree(variableOak);
+
+        DecoVariableBirch mysticDeco = new DecoVariableBirch();
+        mysticDeco.changeAverageHeightSqrt(-1);
+        mysticDeco.changeHeightNoiseVariability(-1);
+        mysticDeco.setMaterials(BOPTreeMaterials.magic);
+
+        TreeRTG jacarandaTree = new TreeBOPJacaranda();
+        TreeRTGResizable variableJacaranda = new TreeRTGResizable(jacarandaTree);
+        variableJacaranda.changeAverageHeightSqrt(-0.5f);
+        variableJacaranda.changeHeightNoiseVariability(-1);
+        DecoTree jacarandaDeco = new DecoTree(variableJacaranda);
+
+        DecoTreeSet treeCombination = new DecoTreeSet();
+        treeCombination.add(oakDeco, 2);
+        treeCombination.add(mysticDeco, 1);
+        treeCombination.add(jacarandaDeco, 1);
+        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 3f, 6.0f));
+
+        DecoCollectionBase rtgTreeColl = new DecoCollectionBase(getConfig());
+        rtgTreeColl.addDeco(treeCombination);
+
+        this.treeGenerator = rtgTreeColl;
 
         DecoFallenTree decoFallenTree = new DecoFallenTree();
         decoFallenTree.getDistribution().setNoiseDivisor(80f);
@@ -70,57 +111,9 @@ public class RealisticBiomeBOPMysticGrove extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainPlains(x, y, rtgWorld, river, 160f, 10f, 60f, 200f, 66f);
+            // 推断：RWG 无 mysticGrove；按名字亲缘取 grove 的配方
+            return terrainHighland(x, y, rtgWorld, river, 0f, 140f, 68f, 200f, 0.3f);
         }
     }
 
-    public static class SurfaceBOPMysticGrove extends SurfaceBase {
-
-        public SurfaceBOPMysticGrove(BiomeConfig config, IBlockState top, IBlockState filler) {
-
-            super(config, top, filler);
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            boolean cliff = c > 1.4f;
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (cliff) {
-                        if (depth > -1 && depth < 2) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (depth < 10) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                    }
-                    else {
-                        if (depth == 0 && k > 61) {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                        else if (depth < 4) {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

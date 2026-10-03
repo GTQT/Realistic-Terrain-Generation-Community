@@ -13,7 +13,6 @@ import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.fml.common.Loader;
 import org.apache.logging.log4j.Level;
 import rtg.api.util.Logger;
-import rtg.api.util.NoiseArrayPool;
 import rtg.api.util.UtilityClass;
 import rtg.api.util.storage.SparseList;
 import rtg.api.world.biome.IRealisticBiome;
@@ -40,12 +39,6 @@ public final class RTGAPI {
     private static volatile IRealisticBiome[] BIOME_CACHE = null;
     /** 标记缓存是否已初始化 */
     private static volatile boolean cacheInitialized = false;
-
-    private static final NoiseArrayPool NOISE_POOL = new NoiseArrayPool();
-
-    public static NoiseArrayPool getNoiseArrayPool() {
-        return NOISE_POOL;
-    }
 
 
     private RTGAPI() {
@@ -149,6 +142,24 @@ public final class RTGAPI {
         } else {
             Logger.warn("尝试在RTG生物群系锁定后添加生物群系！忽略: {}", Arrays.toString(biomes));
         }
+    }
+
+    /**
+     * {@link #RTG_BIOMES} 里**真实注册**的群系数。
+     *
+     * <p>⚠ 不要用 {@code RTG_BIOMES.size()}：{@code SparseList extends ArrayList}，
+     * 它的 {@code size()} 是**按群系 id 索引的数组长度**（= 最大 id + 1），中间的空位是
+     * {@code null} 填充。实测它返回 169，而真正注册的只有 127 个 ——
+     * 这个数字在日志里会被读成"169 个群系"，本轮为此白查了一轮（见 CHANGELOG）。
+     */
+    public static int rtgBiomeCount() {
+        int n = 0;
+        for (final Map.Entry<Biome, IRealisticBiome> e : RTG_BIOMES) {
+            if (e != null) {
+                n++;
+            }
+        }
+        return n;
     }
 
     public static void initPatchBiome(Biome biome) {

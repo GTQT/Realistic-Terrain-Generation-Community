@@ -1,43 +1,29 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
 import biomesoplenty.api.biome.BOPBiomes;
-
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoFallenTree;
-import rtg.api.world.deco.DecoFlowersRTG;
-import rtg.api.world.deco.DecoShrub;
-import rtg.api.world.deco.DecoTree;
+import rtg.api.world.deco.*;
 import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.deco.helper.DecoHelper5050;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPiceaSitchensis;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGPinusPonderosa;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.event.EventHandlerCommon;
 
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ALLIUM;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.BLUE_ORCHID;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.DANDELION;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.HOUSTONIA;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.ORANGE_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.OXEYE_DAISY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.PINK_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.POPPY;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.RED_TULIP;
-import static net.minecraft.block.BlockFlower.EnumFlowerType.WHITE_TULIP;
+import static net.minecraft.block.BlockFlower.EnumFlowerType.*;
 
 
 public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
@@ -63,11 +49,35 @@ public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPWoodland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock);
+        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
     }
 
     @Override
     public void initDecos() {
+
+        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
+
+        DecoVariableTree oaks = new DecoVariableOak();
+        oaks.changeLocalNoiseVariability(0.5f);
+        oaks.setSaplingChance(.2f);
+
+        DecoVariableTree spruceBirch = new DecoVariableBirch();
+        spruceBirch.changeLocalNoiseVariability(0.5f);
+        spruceBirch.setSaplingChance(.2f);
+
+        TreeMaterials spruceBirchMaterials = new TreeMaterials(
+                "Birch",
+                TreeMaterials.Picker.spruce.log,
+                TreeMaterials.Picker.birch.leaves,
+                TreeMaterials.Picker.spruce.branches);
+        spruceBirch.setMaterials(spruceBirchMaterials);
+
+        DecoTreeSet treeCombination = new DecoTreeSet();
+        treeCombination.add(oaks, 2);
+        treeCombination.add(spruceBirch, 1);
+        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 2.5f, 5.5f));
+
+        this.treeGenerator = treeCombination;
         this.addDecoCollection(new DecoCollectionWoodland(this.getConfig()));
     }
 
@@ -87,58 +97,8 @@ public class RealisticBiomeBOPWoodland extends RealisticBiomeBase {
 
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-
-            return terrainHighland(x, y, rtgWorld, river, start, width, height, base - 62f);
-        }
-    }
-
-    public static class SurfaceBOPWoodland extends SurfaceBase {
-
-        public SurfaceBOPWoodland(BiomeConfig config, IBlockState top, IBlockState filler) {
-
-            super(config, top, filler);
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            boolean cliff = c > 1.4f;
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (cliff) {
-                        if (depth > -1 && depth < 2) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (depth < 10) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                    }
-                    else {
-                        if (depth == 0 && k > 61) {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                        else if (depth < 4) {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
+            // 照抄 RWG SupportBOP.java  woodland -> TerrainHighland(0f, 140f, 68f, 200f)  [由偏离版 terrainHighlandLegacy 拨回忠实版]
+            return terrainHighland(x, y, rtgWorld, river, 0f, 140f, 68f, 200f);
         }
     }
 

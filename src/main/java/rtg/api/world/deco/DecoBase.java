@@ -8,8 +8,6 @@ import rtg.api.util.ChunkInfo;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Random;
 
 
@@ -19,7 +17,7 @@ import java.util.Random;
  *
  * @author WhichOnesPink
  */
-public abstract class DecoBase {
+public abstract class DecoBase extends AbstractDeco {
 
     private boolean checkRiver;
     private float minRiver; // Minimum river value required to generate.
@@ -108,7 +106,19 @@ public abstract class DecoBase {
         return new BlockPos(pos.x * 16 + 8, 0, pos.z * 16 + 8);
     }
 
+    // 底层 API 变动（移植上游新树系统 / T3）：上游 DecoBase 有 getTreePos，DecoTreeSet 依赖它。
+    // 实现与 getOffsetPos 相同（历史上是两个名字）。逐行照抄上游。
+    public static BlockPos getTreePos(final ChunkPos pos) {
+        return new BlockPos(pos.x * 16 + 8, 0, pos.z * 16 + 8);
+    }
+
     public static int getRangedRandom(Random rand, int min, int max) {
         return min + rand.nextInt(max - min + 1);
+    }
+
+    // 底层 API 变动（移植上游新树系统）：新版 TreeRTG.jigger() 依赖这个静态方法，
+    // 上游 DecoBase 有、本仓库此前没有。逐行照抄上游实现。
+    public static double jigger(Random rand, double range) {
+        return range - rand.nextDouble() * 2.0 * range;
     }
 }

@@ -6,6 +6,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import rtg.api.util.Logger;
+
 @Mixin(TrailManager.class)
 public abstract class TrailManagerMixin {
 
@@ -19,7 +21,7 @@ public abstract class TrailManagerMixin {
             remap = false
     )
     private static void skipRemoteTrailCheck(CallbackInfo ci) {
-        System.out.println("Skip remote trail check");
+        Logger.debug("Skip remote trail check");
         // 直接取消原方法执行
         ci.cancel();
     }

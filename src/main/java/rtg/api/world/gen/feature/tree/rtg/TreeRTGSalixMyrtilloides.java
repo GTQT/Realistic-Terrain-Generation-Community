@@ -1,14 +1,12 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import java.util.Random;
-
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-
-import rtg.api.util.Logger;
 import rtg.RTGConfig;
+
+import java.util.Random;
 
 
 /**
@@ -51,6 +49,7 @@ public class TreeRTGSalixMyrtilloides extends TreeRTG {
             return false;
         }
 
+        if (pos.getY()<62) return false; //not in deep water
         int x = pos.getX();
         int y = pos.getY();
         int z = pos.getZ();
@@ -59,10 +58,10 @@ public class TreeRTGSalixMyrtilloides extends TreeRTG {
         
         SkylightTracker lightTracker = new SkylightTracker(this.furthestLikelyExtension(),pos,world);
 
-        int height = 9;
-        int leaveheight = 3;
-        int branches = 4;
-        int branchLenght = 4;
+        int height = 13;
+        int leaveheight = 5;
+        int branches = 6;
+        int branchLength = 6;
 
         for (int i = 0; i < height; i++) {
             this.placeTrunkBlock(world, new BlockPos(x, y + i, z), this.generateFlag, lightTracker);
@@ -82,17 +81,17 @@ public class TreeRTGSalixMyrtilloides extends TreeRTG {
             yd = (float) Math.sin(dir * Math.PI / 180f);
             m = false;
 
-            while (c < branchLenght) {
+            while (c < branchLength) {
                 c++;
                 hd += 0.5f;
 
                 this.placeLogBlock(world,
-                    new BlockPos(x + (int) (c * xd), y + (int) hd, z + (int) (c * yd)), this.trunkLog, this.generateFlag, lightTracker
+                    new BlockPos(x + (int) (c * xd), y + (int) hd, z + (int) (c * yd)), this.branchBlock, this.generateFlag, lightTracker
                 );
             }
 
-            while (c < branchLenght) {
-                if (c > branchLenght / 2 && !m) {
+            while (c < branchLength) {
+                if (c > branchLength / 2 && !m) {
                     m = true;
                     createLeavesAroundBranch(world, rand, x + (int) (c * xd), y + (int) hd, z + (int) (c * yd), 2, 1, lightTracker);
                 }
@@ -152,44 +151,4 @@ public class TreeRTGSalixMyrtilloides extends TreeRTG {
         }
     }
 
-    /*@Override
-    protected boolean isGroundValid(World world, BlockPos trunkPos, boolean sandAllowed) {
-
-        int x = trunkPos.getX();
-        int y = trunkPos.getY();
-        int z = trunkPos.getZ();
-        IBlockState cb;
-        BlockPos posTemp;
-        boolean earth = false;
-        boolean water = false;
-
-        Logger.info("acceptable");
-        for (IBlockState example: validGroundBlocks) {
-            Logger.info("{}",example.toString());
-        }
-        Logger.info("end");
-        for (int c1 = -2; c1 <= 2; c1++) {
-            for (int c3 = -2; c3 <= 2; c3++) {
-                for (int c2 = -1; c2 <= 1; c2++) {
-                    posTemp = new BlockPos(x + c1, y + c2, z + c3);
-                    cb = world.getBlockState(posTemp);
-                    if (cb == Blocks.WATER.getDefaultState()) {
-                        water = true;
-                    } else {
-	                    for (IBlockState example: validGroundBlocks) {
-	                        boolean match = example.equals(cb);
-	                        if (match) earth = true;
-	                        Logger.info("{} {} {}",example.toString(), cb.toString(), match);
-	                    }
-                    }
-                }
-            }
-        }
-
-        if (!(earth && water)) {
-            return false;
-        }
-
-        return true;
-    }*/
 }

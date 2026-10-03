@@ -10,12 +10,10 @@ import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
 import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.ISimplexData2D;
-import rtg.api.util.noise.SimplexData2D;
-import rtg.api.util.noise.SimplexNoise;
-import rtg.api.util.noise.VoronoiResult;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.deco.AbstractDeco;
 import rtg.api.world.deco.DecoBase;
+import rtg.api.world.deco.collection.DecoCollectionBase;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceRiverOasis;
@@ -27,12 +25,11 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Objects;
+import java.util.Random;
 
 
 public abstract class RealisticBiomeBase implements IRealisticBiome {
 
-    private static final float INV_12 = 1f / 12f;
-    private static final float INV_8 = 1f / 8f;
     private static final double INV_240 = 1.0 / 240.0;
     private static final double INV_80 = 1.0 / 80.0;
     private static final double INV_30 = 1.0 / 30.0;
@@ -49,6 +46,17 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
     // TODO: [1.12] To be removed. All trees need to be a Deco and be added through #addDeco.
     @Deprecated
     private final Collection<TreeRTG> rtgTrees;
+
+    /**
+     * 树装饰集合（移植上游新树系统 / T5）。
+     *
+     * <p>上游把"这个群系的树"单独放在这个字段里，由各群系在 {@code initDecos()} 里指派
+     * （{@code treeGenerator = new DecoCollectionXxxTrees(getConfig())} 这类），
+     * 再由 {@code IRealisticBiome.rDecorate} 在 {@code allowVanillaTrees()} 为假时调用它。
+     *
+     * <p>默认是**空集合**（不是 null）：这样接线之前行为完全不变。
+     */
+    protected AbstractDeco treeGenerator;
 
     public RealisticBiomeBase(@Nonnull final Biome baseBiome) {
         this(baseBiome, RiverType.NORMAL, BeachType.NORMAL);
@@ -85,6 +93,8 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         this.surfaceRiver = new SurfaceRiverOasis(config);
         this.decos = new ArrayList<>();
         this.rtgTrees = new ArrayList<>();
+        // 上游同款默认值：空集合（DecoCollectionBase 本身不产生任何装饰）
+        this.treeGenerator = new DecoCollectionBase(this.config);
 
         initDecos();
 
@@ -151,6 +161,18 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         return this.rtgTrees;
     }
 
+    /**
+     * 树装饰集合（移植上游新树系统 / T5）。
+     *
+     * <p>对齐上游 {@code RealisticBiomeBase:169-171}：返回 {@code treeGenerator}。
+     * 注意上游 {@code IRealisticBiome} 里**没有**给这个方法的 default 实现，
+     * 每个实现类都要提供；本仓库只有这一个实现类，故在此覆写。
+     */
+    @Override
+    public AbstractDeco getTreeDecos() {
+        return this.treeGenerator;
+    }
+
     @Override
     public ResourceLocation baseBiomeResLoc() {
         return baseBiomeResLoc;
@@ -161,162 +183,83 @@ public abstract class RealisticBiomeBase implements IRealisticBiome {
         return this.baseBiomeId;
     }
 
+    /**
+     * RWG {@code rwg/biomes/realistic/RealisticBiomeBase.generateMapGen}（L186-198）的**逐行照抄**。
+     *
+     * <pre>
+     * RWG：                                              rtgc：
+     *   int k = 5;                                        同名同值
+     *   mapRand.setSeed(seed);                            seed → worldSeed
+     *   long l  = (mapRand.nextLong() / 2L) * 2L + 1L;    逐字
+     *   long l1 = (mapRand.nextLong() / 2L) * 2L + 1L;    逐字
+     *   for (baseX = chunkX - k; baseX &lt;= chunkX + k; …   逐字
+     *     for (baseY = chunkY - k; …)                     逐字（baseY → baseZ，仅是命名）
+     *       mapRand.setSeed((long) baseX * l + (long) baseY * l1 ^ seed);
+     *       rMapGen(…, baseX, baseY, chunkX, chunkY, …);  逐字（形参名见接口注释的「顺序的坑」）
+     * </pre>
+     *
+     * <p><b>本方法的语义</b>：枚举以当前区块为中心、半径 {@code k = 5} 的 11×11 = 121 个
+     * **候选地标中心**（{@code baseX/baseZ}），每个候选点用「世界种子 ⊕ (baseX·l + baseZ·l1)」
+     * 重新播种 {@code mapRand}，然后交给 {@link #rMapGen} 决定是否在**当前区块**
+     * （{@code chunkX/chunkZ}）落方块。因此地标会「从远处糊过来」：某个候选中心离本区块再远，
+     * 只要它自己的种子通过了门控，就会把属于它的那部分锥体画进本区块。
+     *
+     * <p>{@code l}/{@code l1} 是 RWG 的两条奇偶性为奇的「跳跃步长」——{@code mapRand} 先被
+     * {@code setSeed(worldSeed)} 归一，故这两个值只依赖世界种子，**与区块无关**；
+     * 加上每个候选点的 {@code setSeed}，整段逻辑对每个群系都是自足的纯函数
+     * （不依赖其它群系是否也跑了 {@code generateMapGen}）。
+     *
+     * <p>rtgc 侧的差异只有一处，且不在本方法体内：调用点（{@code ChunkGeneratorRTG.provideChunk}）
+     * 由父级接线，见 {@link IRealisticBiome#generateMapGen} 的说明。
+     * <p>{@code mapRand} 必须是调用方复用的实例（RWG 是 {@code ChunkGeneratorRealistic.mapRand}）：
+     * 本方法一开始就 {@code setSeed}，所以复用不会串状态。
+     */
+    @Override
+    public void generateMapGen(RTGWorld rtgWorld, ChunkPrimer primer, Random mapRand, long worldSeed,
+            int chunkX, int chunkZ, float[] noise) {
+        int k = 5;
+        mapRand.setSeed(worldSeed);
+        long l = (mapRand.nextLong() / 2L) * 2L + 1L;
+        long l1 = (mapRand.nextLong() / 2L) * 2L + 1L;
+        for (int baseX = chunkX - k; baseX <= chunkX + k; baseX++) {
+            for (int baseZ = chunkZ - k; baseZ <= chunkZ + k; baseZ++) {
+                mapRand.setSeed((long) baseX * l + (long) baseZ * l1 ^ worldSeed);
+                rMapGen(rtgWorld, primer, mapRand, baseX, baseZ, chunkX, chunkZ, noise);
+            }
+        }
+    }
+
+    /**
+     * RWG 的 {@code RealisticBiomeBase.rNoise} 是**原样透传**：
+     * {@code return terrain.generateNoise(perlin, cell, x, y, ocean, border, river);}
+     * —— 对 {@code border} / {@code river} 不做任何再加工。
+     *
+     * <p><b>rtgc 原先在此挂了一整套 RTG 时代的河道／湖泊变换（{@code newrNoise}）：
+     * {@code lakePressure} → {@code lakeToRiverProportions} →
+     * {@code riverAdjustedforDepthDifference} → {@code riverFlattening}。
+     * 默认配置下该变换实测把 RWG 的 {@code river} <b>反相</b>：</b>
+     *
+     * <pre>
+     *   RWG 输入（0 = 河心，1 = 内陆）   地形函数实收
+     *            0.00                      1.00
+     *            0.50                      0.52
+     *            1.00                      0.04
+     * </pre>
+     *
+     * 而所有已移植的地形函数都按 RWG 约定写作 {@code m = noise * strength * river}
+     * （陆地 = 1）：于是陆地上山体项被削到 4%、世界被压成平板，河心反而拿到满幅山体
+     * （沿每条河长出山墙）。<b>这正是"公式照抄了却不像 RWG"的根因</b>，故整套变换已删除。
+     *
+     * <p>本方法现在与 RWG 逐字同构。唯一保留的 rtgc 配置项是关掉本群系的河流
+     * （{@code ALLOW_RIVERS}）；RWG 无此开关，而它的默认值为 {@code true}，
+     * 因此默认行为与 RWG 完全一致。
+     */
     @Override
     public float rNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        return newrNoise(rtgWorld, x, y, border, river);
-    }
 
-    public float newrNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
-        // river is [0,1] where 1 = strongest river
-        // Convert to internal convention: 0 = water, 1 = land
-        final float riverAmount = 1f - river;
+        final float effectiveRiver = this.getConfig().ALLOW_RIVERS.get() ? river : 1f;
 
-        final boolean allowRivers = this.getConfig().ALLOW_RIVERS.get();
-        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
-        final float riverFlatteningAddend = RTGWorld.RIVER_FLATTENING_ADDEND;
-
-        if (!allowRivers) {
-            float borderForRiver = Math.min(border * 2f, 1f);
-            float weakened = 1f - (1f - borderForRiver) * (1f - riverAmount);
-            return terrain.generateNoise(rtgWorld, x, y, border, weakened);
-        }
-
-        float lakeStrength = lakePressure(rtgWorld, x, y, border,
-                rtgWorld.getLakeFrequency(),
-                rtgWorld.getLakeBendSizeLarge(),
-                rtgWorld.getLakeBendSizeMedium(),
-                rtgWorld.getLakeBendSizeSmall());
-
-        float adjustedLake = lakeToRiverProportions(lakeStrength,
-                rtgWorld.getLakeShoreLevel(),
-                rtgWorld.getLakeDepressionLevel());
-
-        float riverVal = Math.max(0f, RTGWorld.riverAdjustedforDepthDifference(riverAmount));
-
-        if (adjustedLake < actualRiverProportion) {
-            adjustedLake = Math.max(0f, (adjustedLake - actualRiverProportion) * 2f + actualRiverProportion);
-        }
-
-        float combinedRiver;
-        if (riverVal < 1f && adjustedLake < 1f) {
-            float leastLowering = Math.min(adjustedLake, riverVal);
-            float denominator = (1f - riverVal) / riverVal + (1f - adjustedLake) / adjustedLake;
-            combinedRiver = 1f / (denominator + 1f);
-            combinedRiver = (combinedRiver + leastLowering) * 0.5f;
-        } else {
-            combinedRiver = Math.min(adjustedLake, riverVal);
-        }
-
-        float invertedRiver = 1f - combinedRiver;
-        invertedRiver = invertedRiver * (invertedRiver / (invertedRiver + 0.05f) * 1.05f);
-        combinedRiver = 1f - invertedRiver;
-
-        float riverFlattening = Math.max(0f, combinedRiver * (1f + riverFlatteningAddend) - riverFlatteningAddend);
-
-        float terrainNoise = terrain.generateNoise(rtgWorld, x, y, border, riverFlattening);
-        return erodedNoise(rtgWorld, x, y, combinedRiver, border, terrainNoise);
-    }
-
-    public float erodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        final float lakeBottom = RTGWorld.LAKE_BOTTOM;
-        final float erosionThreshold = 0.3f;
-
-        float riverFlattening = 1f - river;
-        riverFlattening -= (1f - erosionThreshold);
-
-        if (riverFlattening < 0f || biomeHeight <= lakeBottom) {
-            return biomeHeight;
-        }
-
-        riverFlattening /= erosionThreshold;
-        float r = 1f - riverFlattening;
-
-        if (r < 1f) {
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-            float irregularity = simplex.noise2f(x * 0.083333f, y * 0.083333f) * 2f +
-                    simplex.noise2f(x * 0.125f, y * 0.125f);
-
-            irregularity *= (1f + r);
-            float lakeBottomWithIrregularity = lakeBottom + irregularity;
-
-            return biomeHeight * r + lakeBottomWithIrregularity * (1f - r);
-        }
-
-        return biomeHeight;
-    }
-
-    public float oldErodedNoise(RTGWorld rtgWorld, int x, int y, float river, float border, float biomeHeight) {
-        float r;
-        // river of actualRiverProportions now maps to 1;
-        float riverFlattening = 1f - river;
-        riverFlattening = riverFlattening - (1 - RTGWorld.ACTUAL_RIVER_PROPORTION);
-        // return biomeHeight if no river effect
-        if (riverFlattening < 0) {
-            return biomeHeight;
-        }
-        // what was 1 set back to 1;
-        riverFlattening /= RTGWorld.ACTUAL_RIVER_PROPORTION;
-
-        // back to usual meanings: 1 = no river 0 = river
-        r = 1f - riverFlattening;
-
-        if ((r < 1f && biomeHeight > 55f)) {
-            float irregularity = rtgWorld.simplexInstance(0).noise2f(x * INV_12, y * INV_12) * 2f + rtgWorld.simplexInstance(0).noise2f(x * INV_8, y * INV_8);
-            // less on the bottom and more on the sides
-            irregularity = irregularity * (1 + r);
-            return (biomeHeight * (r)) + ((55f + irregularity)) * (1f - r);
-        } else {
-            return biomeHeight;
-        }
-    }
-
-    @Override
-    public float lakePressure(RTGWorld rtgWorld, int x, int y, float border, float lakeInterval,
-                              float largeBendSize, float mediumBendSize, float smallBendSize) {
-
-        if (!this.getConfig().ALLOW_SCENIC_LAKES.get()) {
-            return 1f;
-        }
-
-        final double invLakeInterval = 1.0 / lakeInterval;
-
-        double pX = x;
-        double pY = y;
-        ISimplexData2D jitterData = SimplexData2D.newDisk();
-
-        // 使用预计算的倒数
-        rtgWorld.simplexInstance(1).multiEval2D(x * INV_240, y * INV_240, jitterData);
-        pX += jitterData.getDeltaX() * largeBendSize;
-        pY += jitterData.getDeltaY() * largeBendSize;
-
-        rtgWorld.simplexInstance(0).multiEval2D(x * INV_80, y * INV_80, jitterData);
-        pX += jitterData.getDeltaX() * mediumBendSize;
-        pY += jitterData.getDeltaY() * mediumBendSize;
-
-        rtgWorld.simplexInstance(4).multiEval2D(x * INV_30, y * INV_30, jitterData);
-        pX += jitterData.getDeltaX() * smallBendSize;
-        pY += jitterData.getDeltaY() * smallBendSize;
-
-        VoronoiResult lakeResults = rtgWorld.cellularInstance(0).eval2D(pX * invLakeInterval, pY * invLakeInterval);
-        return (float) (1.0d - lakeResults.interiorValue());
-    }
-
-    public float lakeToRiverProportions(float pressure, float shoreLevel, float topLevel) {
-        final float actualRiverProportion = RTGWorld.ACTUAL_RIVER_PROPORTION;
-
-        if (pressure > topLevel) {
-            return 1f;
-        }
-
-        if (pressure < shoreLevel) {
-            return (pressure / shoreLevel) * actualRiverProportion;
-        }
-
-        // 预计算分母倒数，用乘法代替除法
-        float invRange = 1f / (topLevel - shoreLevel);
-        float proportion = (pressure - shoreLevel) * invRange;
-
-        return actualRiverProportion + proportion * (1f - actualRiverProportion);
+        return terrain.generateNoise(rtgWorld, x, y, border, effectiveRiver);
     }
 
     @Override

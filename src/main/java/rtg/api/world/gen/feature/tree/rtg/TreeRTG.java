@@ -1,25 +1,20 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockDirt;
-import net.minecraft.block.BlockLog;
-import net.minecraft.block.BlockPlanks;
-import net.minecraft.block.BlockSand;
+import net.minecraft.block.*;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import net.minecraft.world.gen.feature.WorldGenAbstractTree;
 import rtg.RTGConfig;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.Logger;
-import rtg.api.util.RTGTreeData;
+import rtg.api.util.ChunkInfo;
 import rtg.api.world.deco.DecoBase;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.function.Function;
 
 /**
  * The base class for all RTG trees.
@@ -27,35 +22,44 @@ import java.util.Random;
  * @author WhichOnesPink
  * @see <a href="http://imgur.com/a/uoJsU">RTG Tree Gallery</a>
  */
-public abstract class TreeRTG extends WorldGenAbstractTree {
+public abstract class TreeRTG extends AbstractTreeRTG {
 	
 	public static final int ROOFED_FOREST_LIGHT_OBSTRUCTION_LIMIT = 6;
 
-    protected IBlockState logBlock;
-    protected IBlockState leavesBlock;
-    protected IBlockState branchBlock;
-    protected int trunkSize;
-    protected int crownSize;
-    protected boolean noLeaves;
+    protected IBlockState logBlock = Blocks.LOG.getDefaultState();
+    protected IBlockState leavesBlock =Blocks.LEAVES.getDefaultState();
+    protected IBlockState branchBlock = Blocks.LOG.getStateFromMeta(12);
+    protected int trunkSize = 2;
+    protected int crownSize = 4;;
+    protected boolean noLeaves = false;
 
-    protected IBlockState saplingBlock;
+    protected int generateFlag = 19;
 
-    protected int generateFlag;
-
-    protected int minTrunkSize;
-    protected int maxTrunkSize;
-    protected int minCrownSize;
-    protected int maxCrownSize;
+    // These need to default to zero as they're only used when generating trees from saplings.
+    protected int minTrunkSize = 0;
+    protected int maxTrunkSize = 0;
+    protected int minCrownSize = 0;
+    protected int maxCrownSize = 0;
     
     protected float lowestVariableTrunkProportion = 0.25f;
     protected float trunkProportionVariability = 0.25f;
     protected int trunkReserve = 0;
+    protected int absoluteMinimumTrunk = 4;
+    protected int crownLimit = 256;
+    protected int crownLimitVariability = 0;
 
     protected ArrayList<IBlockState> validGroundBlocks;
     protected ArrayList<Material> canGrowIntoMaterials;
 
     private boolean allowBarkCoveredLogs;
     protected int maxAllowedObstruction = 4;
+    
+    protected boolean canGrowInWater = false;
+    
+    protected Function<Random,IBlockState> leafChoice = new Function<Random,IBlockState>() {
+    	@Override
+    	public IBlockState apply(Random applied) {return leavesBlock;}
+    };
 
     public TreeRTG(boolean notify) {
 
@@ -65,23 +69,6 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
     public TreeRTG() {
 
         this(false);
-
-        this.setLogBlock(Blocks.LOG.getDefaultState());
-        this.setLeavesBlock(Blocks.LEAVES.getDefaultState());
-        this.setBranchBlock(Blocks.LOG.getStateFromMeta(12));
-        this.trunkSize = 2;
-        this.crownSize = 4;
-        this.setNoLeaves(false);
-
-        this.saplingBlock = Blocks.SAPLING.getDefaultState();
-
-        this.generateFlag = 19;
-
-        // These need to default to zero as they're only used when generating trees from saplings.
-        this.setMinTrunkSize(0);
-        this.setMaxTrunkSize(0);
-        this.setMinCrownSize(0);
-        this.setMaxCrownSize(0);
 
         // Each tree sub-class is responsible for using (or not using) this list as part of its generation logic.
         this.validGroundBlocks = new ArrayList<>(Arrays.asList(
@@ -104,6 +91,7 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         ));
 
         this.allowBarkCoveredLogs = RTGConfig.barkCoveredLogs();
+        
     }
     
     public TreeRTG(TreeRTG model) {
@@ -115,8 +103,6 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         this.trunkSize = model.trunkSize;
         this.crownSize = model.crownSize;
         this.setNoLeaves(model.noLeaves);
-
-        this.saplingBlock = model.getSaplingBlock();
 
         this.generateFlag = model.generateFlag;
 
@@ -144,6 +130,20 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
     public int furthestLikelyExtension() { 
     	return 5;
     }
+    
+    public void doVariableGenerate(Random rand, ChunkInfo chunkInfo, BlockPos column, int y, TreeDensityLimiter treesRemaining) {
+		float neededSpace = estimatedSize();
+		if (treesRemaining.test(neededSpace, rand)) {
+			boolean success = generate(chunkInfo.world(), rand, column.up(y));
+			if (!success) {
+				treesRemaining.occupy(0.1f);// a little bit to block infinite loops
+			} else {
+				treesRemaining.occupy(neededSpace);
+			}
+			return;
+		}
+		return;
+	}
 
     public void buildTrunk(World world, Random rand, int x, int y, int z, SkylightTracker lightTracker) {
 
@@ -163,6 +163,15 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
 
     }
 
+    public void leafLine(World world, Random rand, RTGBranch branch, int distanceFromLog, SkylightTracker lightTracker) {
+    	// places leaves in a line;
+    	// by convention the first block is assumed to be already placed.
+    	while(distanceFromLog<6&&branch.notDone()) {
+    		if (!this.placeLeavesBlock(world, branch.movedOrthogonally(), lightTracker)) {return;}
+    		distanceFromLog ++;
+    	}
+    }
+    
     public void buildLeaves(World world, Random rand, int x, int y, int z, int size, SkylightTracker lightTracker) {
 
     }
@@ -174,7 +183,10 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
 
     protected boolean isGroundValid(World world, BlockPos trunkPos, boolean sandAllowed) {
 
-        IBlockState g = world.getBlockState(new BlockPos(trunkPos.getX(), trunkPos.getY() - 1, trunkPos.getZ()));
+    	BlockPos plantPos = new BlockPos(trunkPos.getX(), trunkPos.getY() - 1, trunkPos.getZ());
+        IBlockState g = world.getBlockState(plantPos);
+        
+        if (g.getBlock().canSustainPlant(g, world, plantPos, net.minecraft.util.EnumFacing.UP, (net.minecraft.block.BlockSapling)Blocks.SAPLING)) return true;
 
         if (g.getBlock() == Blocks.SAND && !sandAllowed) {
             return false;
@@ -196,25 +208,42 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         }
 
         for (int i = 0; i < trunkPos.size(); i++) {
-            if (!this.isGroundValid(world, trunkPos.get(i))) {
-                return false;
+            if (this.isGroundValid(world, trunkPos.get(i))) {
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
-
-    /*protected void placeLogBlock(World world, BlockPos pos, IBlockState logBlock, int generateFlag) {
+    
+    protected boolean placeLogBlock(World world, BlockPos pos, IBlockState alternateLogBlock, int generateFlag, SkylightTracker tracker) {
 
         if (this.isReplaceable(world, pos)) {
-            world.setBlockState(pos, logBlock, generateFlag);
+        	return tracker.testPlace(world, pos, alternateLogBlock, generateFlag);
         }
-    }*/
-
-    protected boolean placeLogBlock(World world, BlockPos pos, IBlockState logBlock, int generateFlag, SkylightTracker tracker) {
+        return false;
+    }
+    
+    protected boolean placeLogBlock(World world, BlockPos pos, int generateFlag, SkylightTracker tracker) {
 
         if (this.isReplaceable(world, pos)) {
-        	return tracker.testPlace(world, pos, logBlock, generateFlag);
+        	return tracker.testPlace(world, pos, branchBlock, generateFlag);
+        }
+        return false;
+    }
+    
+    protected boolean placeLogBlock(World world, BlockPos pos, SkylightTracker tracker) {
+
+        if (this.isReplaceable(world, pos)) {
+        	return tracker.testPlace(world, pos, branchBlock, generateFlag);
+        }
+        return false;
+    }
+    
+    protected boolean placeBranchBlock(World world, BlockPos pos, SkylightTracker tracker) {
+
+        if (this.isReplaceable(world, pos)) {
+        	return tracker.testPlace(world, pos, branchBlock, generateFlag);
         }
         return false;
     }
@@ -235,6 +264,14 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         return false;
     }
     
+    protected boolean placeTrunkBlock(World world, BlockPos pos, SkylightTracker tracker) {
+
+        if (this.isReplaceable(world, pos)) {
+        	return tracker.testTrunk(world, pos, logBlock, generateFlag);
+        }
+        return false;
+    }
+    
     protected boolean placeLeavesBlock(World world, BlockPos pos, IBlockState leavesBlock, int generateFlag, SkylightTracker tracker) {
 
         if (world.isAirBlock(pos)) {
@@ -244,6 +281,22 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         // count as successful if already that tree. Logs and branches don't block because of problems getting away from the base trunk
     }
 
+    protected boolean placeLeavesBlock(World world, BlockPos pos, int generateFlag, SkylightTracker tracker) {
+        return placeLeavesBlock(world,pos,this.leavesBlock,generateFlag,tracker);
+    }
+    
+    protected boolean placeLeavesBlock(World world, BlockPos pos, SkylightTracker tracker) {
+        return placeLeavesBlock(world,pos,this.leavesBlock,19,tracker);
+    }
+    
+    protected boolean placeLeavesBlock(World world, BlockPos pos, Random rand, SkylightTracker tracker) {
+        return placeLeavesBlock(world,pos,leafChoice.apply(rand),19,tracker);
+    }
+    
+    protected IBlockState getLeaves(Random rand) {
+    	return this.leafChoice.apply(rand);
+    }
+    
     @Override
     public boolean isReplaceable(World world, BlockPos pos) {
 
@@ -262,7 +315,9 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         if (block instanceof BlockPlanks) {
             return false;
         }
-
+        if (canGrowInWater) {
+        	if (block.equals(Blocks.WATER)) return true;
+        }
         Material material = block.getDefaultState().getMaterial();
 
         for (int i = 0; i < this.canGrowIntoMaterials.size(); i++) {
@@ -325,6 +380,13 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         this.leavesBlock = leavesBlock;
         return this;
     }
+    
+    public TreeRTG setMaterials(TreeMaterials materials) {
+    	this.branchBlock = materials.branches;
+    	this.leavesBlock = materials.leaves;
+    	this.logBlock = materials.log;
+    	return this;
+    }
 
     public int getTrunkSize() {
 
@@ -356,17 +418,6 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
     public TreeRTG setNoLeaves(boolean noLeaves) {
 
         this.noLeaves = noLeaves;
-        return this;
-    }
-
-    public IBlockState getSaplingBlock() {
-
-        return saplingBlock;
-    }
-
-    public TreeRTG setSaplingBlock(IBlockState saplingBlock) {
-
-        this.saplingBlock = saplingBlock;
         return this;
     }
 
@@ -419,6 +470,10 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
         return maxCrownSize;
     }
 
+    public void setAbsoluteMinimumTrunk(int newSize) {
+    	this.absoluteMinimumTrunk = newSize;
+    }
+    
     public TreeRTG setMaxCrownSize(int maxCrownSize) {
 
         this.maxCrownSize = maxCrownSize;
@@ -467,27 +522,66 @@ public abstract class TreeRTG extends WorldGenAbstractTree {
     	this.crownSize = DecoBase.getRangedRandom(rand, minCrownSize, maxCrownSize);
     }
     
-    protected static class FractionalBlockPos {
-    	double x;
-    	double y;
-    	double z;
-    	
-    	FractionalBlockPos(BlockPos start) {
-    		x = (double)start.getX() + 0.5;
-    		y = (double)start.getY() + 0.5;
-    		z = (double)start.getZ() + 0.5;
-    	}
-    	
-    	FractionalBlockPos(FractionalBlockPos copied) {
-    		this.x = copied.x;
-    		this.y = copied.y;
-    		this.z = copied.z;
-    	}
-    	
-    	BlockPos location() {
-    		return new BlockPos(Math.floor(x),(int)y,Math.floor(z));
-    	}
-    
+    public void setTreeSize(int actualHeight, Random random) {
+		float proportionTrunk  = getLowestVariableTrunkProportion() + random.nextFloat()*getTrunkProportionVariability();
+		int trunkHeight = (int)(proportionTrunk*(actualHeight-getTrunkReserve()))+getTrunkReserve();
+		if (trunkHeight < absoluteMinimumTrunk) trunkHeight = absoluteMinimumTrunk;
+	    
+		setTrunkSize(trunkHeight);
+		setCrownSize(actualHeight-trunkHeight);
+		if (crownSize <= crownLimit) return;
+		
+		int effectiveLimit = crownLimit + random.nextInt(crownLimitVariability +1);
+		if (crownSize <= effectiveLimit) {
+			int extra = crownSize - effectiveLimit;
+			crownSize -= extra;
+			trunkSize += extra;
+		}
     }
     
+    public boolean canGrowInWater() {
+    	return canGrowInWater;
+    }
+    
+    public void setCanGrowInWater(boolean value) {
+    	canGrowInWater = value;
+    }
+    
+    protected boolean inAir(World world, BlockPos below) {
+    	IBlockState state = world.getBlockState(below);
+    	if (state.getBlock().equals(Blocks.WATER)) return canGrowInWater;
+    	if (state.getLightOpacity()<15) return true;
+    	if (state.getBlock().equals(Blocks.LOG)) return true;
+    	if (state.getBlock().equals(Blocks.LOG2)) return true;
+    	return false;
+    }
+    
+    protected BlockPos dropToGround(World world, BlockPos pos) {
+    	BlockPos result = pos;
+    	BlockPos below = pos.add(0, -1, 0);
+    	while (inAir(world,below)&&below.getY()>50) {
+    		result = below;
+    		below = below.add(0, -1, 0);;
+    	}
+    	return result;
+    }
+    
+    public final double jigger(Random random, double range) {return DecoBase.jigger(random, range);}
+
+    public void setLeafChoice(Function<Random,IBlockState> newChoice) {leafChoice = newChoice;}
+    
+	protected void placeOrthogonal(World world, BlockPos pos, int distance, SkylightTracker tracker) {
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()+distance, pos.getY(), pos.getZ()), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()-distance, pos.getY(), pos.getZ()), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX(), pos.getY(), pos.getZ()+distance), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX(), pos.getY(), pos.getZ()+distance), tracker);
+	}
+	
+	protected void placeDiagonal(World world, BlockPos pos, int distance, SkylightTracker tracker) {
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()+distance, pos.getY(), pos.getZ()+distance), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()-distance, pos.getY(), pos.getZ()-distance), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()+distance, pos.getY(), pos.getZ()-distance), tracker);
+		this.placeLeavesBlock(world, new BlockPos(pos.getX()-distance, pos.getY(), pos.getZ()+distance), tracker);
+	}
+	
 }

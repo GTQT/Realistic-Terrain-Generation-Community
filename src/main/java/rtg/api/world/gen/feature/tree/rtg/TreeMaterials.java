@@ -1,11 +1,15 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import java.util.Random;
-
+import net.minecraft.block.BlockLog;
+import net.minecraft.block.BlockLog.EnumAxis;
+import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
+import rtg.api.util.BlockUtil;
 import rtg.api.world.RTGWorld;
+
+import java.util.Random;
 
 public class TreeMaterials {
 	public final String name;
@@ -19,6 +23,18 @@ public class TreeMaterials {
 		this.branches = branches;
 	}
 	
+	public TreeMaterials(String name, IBlockState log, IBlockState leaves)  {
+		this(name,log,leaves,branches(log));
+	}
+	
+	public static IBlockState branches(IBlockState log) {
+		try {
+			return log.withProperty(BlockLog.LOG_AXIS, EnumAxis.NONE);
+		} catch (Exception e) {
+		}
+		return log;
+	}
+	
 	public boolean equals(Object compared) {
 		if (!(compared instanceof TreeMaterials)) return false;
 		TreeMaterials comparedMaterials = (TreeMaterials)compared;
@@ -27,18 +43,30 @@ public class TreeMaterials {
 		if (!this.branches.equals(comparedMaterials.branches)) return false;
 		return true;
 	}
+	public static final TreeMaterials jungle = new TreeMaterials(
+			"Dark Oak",
+			BlockUtil.getStateLog(EnumType.JUNGLE),
+			BlockUtil.getStateLeaf(EnumType.JUNGLE),
+			BlockUtil.getStateLog(EnumType.JUNGLE).withProperty(BlockLog.LOG_AXIS, EnumAxis.NONE));
+	
+
+	public static final TreeMaterials spruce = new TreeMaterials(
+			"Spruce",
+			Blocks.LOG.getStateFromMeta(1),
+			Blocks.LEAVES.getStateFromMeta(1),
+			Blocks.LOG.getStateFromMeta(13));
 	
 	public static class Picker {
-		public static final TreeMaterials spruce = new TreeMaterials(
-				"Spruce",
-				Blocks.LOG.getStateFromMeta(1),
-				Blocks.LEAVES.getStateFromMeta(1),
-				Blocks.LOG.getStateFromMeta(13));
 		public static final TreeMaterials oak = new TreeMaterials(
 				"Oak",
 				Blocks.LOG.getStateFromMeta(0),
 				Blocks.LEAVES.getStateFromMeta(0),
-				Blocks.LOG.getStateFromMeta(12));
+				Blocks.LOG.getStateFromMeta(12));	
+		public static final TreeMaterials spruce = new TreeMaterials(
+						"Spruce",
+						Blocks.LOG.getStateFromMeta(1),
+						Blocks.LEAVES.getStateFromMeta(1),
+						Blocks.LOG.getStateFromMeta(13));
 		public static final TreeMaterials birch = new TreeMaterials(
 				"Birch",
 				Blocks.LOG.getStateFromMeta(2),
@@ -49,6 +77,12 @@ public class TreeMaterials {
 				Blocks.LOG2.getStateFromMeta(0),
 				Blocks.LEAVES2.getStateFromMeta(0),
 				Blocks.LOG2.getStateFromMeta(12));
+		
+		public static final TreeMaterials darkOak = new TreeMaterials(
+				"Dark Oak",
+				BlockUtil.getStateLog(EnumType.DARK_OAK),
+				BlockUtil.getStateLeaf(EnumType.DARK_OAK),
+				Blocks.LOG2.getStateFromMeta(13));
 		
 		public final TreeMaterials forNoise(float noise) {
 			if (noise <= -1) return spruce;

@@ -84,13 +84,25 @@ public class SpacedCellularNoise implements CellularNoise {
         return (xDist * xDist) + (yDist * yDist);
     }
 
+    /**
+     * {@link #eval2D} 内部对输入坐标的缩放因子。
+     * <p>
+     * 本类把点铺得比常规 Voronoi "密约五倍"，故在入口把坐标除以该因子来抵消
+     * （见 {@link #eval2D} 的注释）。**这一点对距离换算至关重要**：
+     * {@link VoronoiResult} 记录的是该内部空间里的距离，换算回调用方坐标系需**乘回**本因子，
+     * 否则宽度会差 5 倍。
+     *
+     * @since 1.0.8
+     */
+    public static final double COORDINATE_SCALE = 5.0d;
+
     @Override
     public VoronoiResult eval2D(double x, double y) {
 
         // this algorithm places the points about five times more frequently
         // so I'm adjusting the passed values rather than recalibrating all the routings
-        x = x / 5.0;
-        y = y / 5.0;
+        x = x / COORDINATE_SCALE;
+        y = y / COORDINATE_SCALE;
 
         int xInt = (x > 0.0 ? (int) x : (int) x - 1);
         int yInt = (y > 0.0 ? (int) y : (int) y - 1);

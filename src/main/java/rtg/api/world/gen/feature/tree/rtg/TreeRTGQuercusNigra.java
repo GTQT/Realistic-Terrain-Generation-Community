@@ -2,14 +2,14 @@ package rtg.api.world.gen.feature.tree.rtg;
 /**
  * Quercus Nigra (Water Oak)
  */
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Random;
 
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import rtg.api.util.Logger;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Random;
 
 
 public class TreeRTGQuercusNigra extends TreeRTG {
@@ -48,8 +48,8 @@ public class TreeRTGQuercusNigra extends TreeRTG {
     public TreeRTGQuercusNigra() {
 
         super();
-        this.crownSize = 12;
-        this.trunkSize = 4;
+        this.crownSize = 20;
+        this.trunkSize = 5;
         
     }
     
@@ -167,7 +167,7 @@ public class TreeRTGQuercusNigra extends TreeRTG {
 	
 	public float estimatedSize() {
 
-    	float branchLength= this.shortestBranch + this.branchLengthening*((float)crownSize)*1.3f; // came out a bit sparse
+    	float branchLength= this.shortestBranch + this.branchLengthening*((float)crownSize)*1.1f; // came out a bit sparse
     	branchLength *= 1.1;// leaf branches
     	return branchLength*branchLength/16f;
 	}
@@ -387,4 +387,3 @@ public class TreeRTGQuercusNigra extends TreeRTG {
     }
     
 }
-

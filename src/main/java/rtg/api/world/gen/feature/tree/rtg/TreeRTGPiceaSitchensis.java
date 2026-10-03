@@ -1,11 +1,11 @@
 package rtg.api.world.gen.feature.tree.rtg;
 
-import java.util.Random;
-
 import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import rtg.api.util.BlockUtil;
+
+import java.util.Random;
 
 
 /**
@@ -35,6 +35,9 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
      * decoTree.setNoLeaves(false);<br>
      * this.addDeco(decoTree);
      */
+	
+	private float sizeDivider = 20f;
+	
     public TreeRTGPiceaSitchensis() {
 
         super();
@@ -48,8 +51,8 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
     }
 	public float estimatedSize() {
 
-    	float branchLength= (crownSize/4) + 1;
-    	return branchLength*branchLength/30f;
+    	float branchLength= (crownSize/3) + 1;
+    	return branchLength*branchLength/sizeDivider;
 	}
 	
 	@Override
@@ -58,6 +61,8 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
     	float extension = 2f;
     	return (int)(extension + branchLength);
 	}
+	
+	public void setSizeDivider(float newDivider) {sizeDivider = newDivider;}
 	
     @Override
     public boolean generate(World world, Random rand, BlockPos pos) {
@@ -81,7 +86,7 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
         int pX = 0;
         int pZ = 0;
         for (i = 0; i < this.crownSize; i++) {
-            if (rand.nextInt(2) <= 0 && i < this.crownSize - 2) {
+            if (rand.nextInt(2) <= 0 && i < this.crownSize - 1) {
                 int dX = -1 + rand.nextInt(3);
                 int dZ = -1 + rand.nextInt(3);
 
@@ -100,10 +105,10 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
                 pX = dX;
                 pZ = dZ;
                 
-                int leafSize = i < this.crownSize - 3 ? 2 : 1;//(crownSize - i)/4 + 1
+                int leafSize = i < this.crownSize - 6 ? 2 : 1;//(crownSize - i)/4 + 1
                 
-                int branchSize = (crownSize +2 - i)/4 ;//i < this.crownSize - 10 ? 2 : 1,
-                branchSize = (crownSize - i -3)/3;
+                int branchSize = (crownSize +1 - i)/4 ;//i < this.crownSize - 10 ? 2 : 1,
+                branchSize = (crownSize - i -4)/3;
                 if (branchSize<0) branchSize = 0;
 
                 buildBranch(world, rand, x, y, z, dX, dZ, branchSize, leafSize, lightTracker);
@@ -131,7 +136,7 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
             }
             this.placeLogBlock(world, new BlockPos(x, y, z), this.logBlock, this.generateFlag, lightTracker);
 
-            if (i < this.crownSize - 2) {
+            if (i < this.crownSize - 1) {
                 if (rand.nextBoolean()) {
                     buildLeaves(world, x, y, z + 1, lightTracker);
                 }
@@ -160,6 +165,14 @@ public class TreeRTGPiceaSitchensis extends TreeRTG {
     }
 
     public void buildBranch(World world, Random rand, int x, int y, int z, int dX, int dZ, int logLength, int leaveSize, SkylightTracker lightTracker) {
+    	
+    	if ((dX!=0)&&(dZ!=0)) {
+    		// reduce log length for diagonal
+    		float exactLength = logLength;
+    		exactLength *= .71;// 1/sqrt(2);
+    		logLength = Math.round(exactLength);
+    		//logLength = 0;
+    	}
 
         for (int i = -2; i <= 2; i++) {
             for (int j = -2; j <= 2; j++) {

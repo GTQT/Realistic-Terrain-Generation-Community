@@ -715,7 +715,43 @@ public final class RTGChunkGenSettings {
             catch (Exception ignore) {
             }
 
+            clamp(settings);
+
             return settings;
+        }
+
+        /**
+         * 把反序列化后的数值夹到各自的有效区间。
+         * <p>
+         * 此前本方法**不做任何范围校验**，手改世界预设 JSON 即可注入任意值。最典型的坏值
+         * {@code riverFrequency = 0} 会让 {@link RTGChunkGenSettings#getRiverSeparation}
+         * 除零得到 {@code Infinity}，并把河谷阈值归零，使整个河网失效（表现为"世界里没有河"）。
+         * <p>
+         * 区间与原版世界创建界面滑条一致；唯一有意收紧的是 {@code riverFrequency} 的下界
+         * （滑条允许 0，这里取 0.05 以消除除零路径）。
+         */
+        private static void clamp(final Factory s) {
+            s.seaLevel = clampInt(s.seaLevel, 31, 95);
+            s.riverSizeMult = clampFloat(s.riverSizeMult, 0.5f, 2.0f);
+            s.riverFrequency = clampFloat(s.riverFrequency, 0.05f, 8.0f);
+            s.riverBendMult = clampFloat(s.riverBendMult, 0.5f, 2.0f);
+            s.riverCutOffAmpl = clampFloat(s.riverCutOffAmpl, 0.0f, 2.0f);
+            s.riverCutOffScale = clampFloat(s.riverCutOffScale, 50.0f, 750.0f);
+            s.RTGlakeSizeMult = clampFloat(s.RTGlakeSizeMult, 0.0f, 2.0f);
+            s.RTGlakeFreqMult = clampFloat(s.RTGlakeFreqMult, 0.0f, 2.0f);
+            s.RTGlakeShoreBend = clampFloat(s.RTGlakeShoreBend, 0.0f, 2.0f);
+            s.snowLayerTemp = clampFloat(s.snowLayerTemp, 0.05f, 0.15f);
+            s.sandDuneHeight = clampInt(s.sandDuneHeight, 1, 10);
+            s.bedrockLayers = clampInt(s.bedrockLayers, 1, 10);
+            s.boulderMult = clampFloat(s.boulderMult, 0.2f, 5.0f);
+        }
+
+        private static int clampInt(final int value, final int min, final int max) {
+            return value < min ? min : (value > max ? max : value);
+        }
+
+        private static float clampFloat(final float value, final float min, final float max) {
+            return value < min ? min : (value > max ? max : value);
         }
 
         @Override

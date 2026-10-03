@@ -1,20 +1,24 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
-import java.util.Random;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
 
-import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceOcean;
 import rtg.api.world.terrain.TerrainBase;
 
 
+/**
+ * BOP 的珊瑚礁 —— RWG 侧对应 {@code SupportBOP.java:44-48} 的
+ * {@code new RealisticBiomeBOPOcean(BOPCBiomes.coralReef, …)}。
+ *
+ * <p><b>它不是海洋槽位群系</b>：RWG 把它赋给 {@code Support.oceanShallowCoral} 这个
+ * **patch 钩子**（热带浅海里 {@code -150 < continent < -20 && patch > .07} 的那些斑块），
+ * 而不是任何 {@code oceanShallow*}/{@code oceanDeep*} 槽位。
+ * rtgc 侧对应 {@code RtgBiomeCategorizer.oceanPatchFor}。
+ */
 public class RealisticBiomeBOPCoralReef extends RealisticBiomeBase {
 
     public RealisticBiomeBOPCoralReef(final Biome biome) { super(biome); }
@@ -24,7 +28,12 @@ public class RealisticBiomeBOPCoralReef extends RealisticBiomeBase {
 
     @Override
     public void initConfig() {
-
+        // 与 rtgc 其余海洋群系一致（RWG 的海洋没有河/湖）
+        this.getConfig().SURFACE_WATER_LAKE_MULT.set(0.0f);
+        this.getConfig().ALLOW_RIVERS.set(false);
+        this.getConfig().ALLOW_SCENIC_LAKES.set(false);
+        this.getConfig().addProperty(this.getConfig().ALLOW_SPONGE).set(true);
+        this.getConfig().addProperty(this.getConfig().SURFACE_MIX_BLOCK).set("");
     }
 
     @Override
@@ -35,7 +44,37 @@ public class RealisticBiomeBOPCoralReef extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceBOPCoralReef(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock);
+        // RWG 的 `RealisticBiomeBOPOcean extends RealisticBiomeOcean` 没有覆写 `rReplace`
+        // ⇒ 海底 = 海洋那份（shallow → sand，6 格厚），此前用的是陆地版 SurfaceMountainSnow。
+        return new SurfaceOcean(getConfig(), true);
+    }
+
+    // ==================================================================
+    // RWG 的海洋装饰延迟 + BOP 珊瑚/海草清理
+    // ==================================================================
+
+    /** 见 {@code IRealisticBiome#defersVanillaDecorateUntilAfterIce}：RWG 里只有 BOP 海洋为 true。 */
+    @Override
+    public boolean defersVanillaDecorateUntilAfterIce() {
+        return true;
+    }
+
+    /**
+     * RWG {@code RealisticBiomeBOPOcean:23-33}：
+     * 先按原样跑 {@code Biome.decorate}（BOP 自己的装饰器，放珊瑚/海草），
+     * 再对 34×34 范围做一遍"站不住就换回水"的清理。
+     *
+     * <p>门控 {@code strength > 0.3f} 与 RWG 一致 —— 只有该海洋群系在本区块**占主导**时才动手，
+     * 免得一个边缘群系跑过来把主导群系的水下装饰删掉。
+     */
+    @Override
+    public void rDecorateAfterIce(final RTGWorld rtgWorld, final java.util.Random rand,
+                                  final int chunkX, final int chunkZ, final float strength) {
+        if (strength <= 0.3f) {
+            return;
+        }
+        vanillaDecorate(rtgWorld, rand, new net.minecraft.util.math.ChunkPos(chunkX >> 4, chunkZ >> 4));
+        rtg.api.util.OceanDecorationSanitizer.sanitize(rtgWorld.world(), chunkX, chunkZ, baseBiome());
     }
 
     public static class TerrainBOPCoralReef extends TerrainBase {
@@ -86,57 +125,10 @@ public class RealisticBiomeBOPCoralReef extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainOceanCanyon(x, y, rtgWorld, river, height, border, strength, heightLength, booRiver);
+            // RWG `SupportBOP.java:44-48`：coralReef 走的是 `RealisticBiomeBOPOcean`
+            // ⇒ 地形 = `RealisticBiomeOcean.rNoise`（浅海海底 y≈52），RWG 没有为它写陆地地形。
+            return terrainOcean(x, y, rtgWorld, true);
         }
     }
 
-    public static class SurfaceBOPCoralReef extends SurfaceBase {
-
-        public SurfaceBOPCoralReef(BiomeConfig config, IBlockState top, IBlockState filler) {
-
-            super(config, top, filler);
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            float c = TerrainBase.calcCliff(x, z, noise, river);
-            boolean cliff = c > 1.4f;
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (cliff) {
-                        if (depth > -1 && depth < 2) {
-                            if (rand.nextInt(3) == 0) {
-
-                                primer.setBlockState(x, k, z, hcCobble());
-                            }
-                            else {
-
-                                primer.setBlockState(x, k, z, hcStone());
-                            }
-                        }
-                        else if (depth < 10) {
-                            primer.setBlockState(x, k, z, hcStone());
-                        }
-                    }
-                    else {
-                        if (depth == 0 && k > 61) {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                        else if (depth < 4) {
-                            primer.setBlockState(x, k, z, fillerBlock);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

@@ -6,7 +6,6 @@ import net.minecraft.client.resources.I18n;
 import net.minecraft.util.ResourceLocation;
 import org.lwjgl.opengl.GL11;
 import rtg.RTG;
-import rtg.api.RTGAPI;
 
 
 public final class WorldTypeMessageGUI extends GuiScreen

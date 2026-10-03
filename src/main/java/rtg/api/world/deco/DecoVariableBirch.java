@@ -1,7 +1,6 @@
 package rtg.api.world.deco;
 
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaNigra;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPapyrifera;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGBetulaPendula;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGCupressusSempervirens;
 

@@ -1,7 +1,5 @@
 package rtg.api.world.deco;
 
-import java.util.Random;
-
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
@@ -14,15 +12,16 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 import rtg.RTGConfig;
 import rtg.api.event.DecorateBiomeEventRTG;
 import rtg.api.util.BlockUtil;
-import rtg.api.util.ChunkInfo;
-import rtg.api.util.Logger;
 import rtg.api.util.BlockUtil.MatchType;
+import rtg.api.util.ChunkInfo;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.feature.WorldGenShrubRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeDensityLimiter;
+import rtg.api.world.gen.feature.tree.rtg.TreeMaterials;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+
+import java.util.Random;
 
 /**
  * Variable Trees
@@ -64,6 +63,48 @@ abstract public class DecoVariableTree extends DecoTree {
 	
 	public void  changeHeightNoiseVariability(float change) {
 		heightNoiseVariability += change;
+	}
+
+	// ===== 移植上游新树系统（BOP 群系接线需要）：上游 DecoVariableTree 有的访问器 =====
+	// 上游实现里这些都在，本仓库此前只留了 changeAverageHeightSqrt / changeHeightNoiseVariability
+	// 两个，导致 BOPOrchard / BOPWoodland / BOPMysticGrove 那批群系的树配置无法照抄。
+	// 逐行照抄上游；**不动**本类里那些本地调优过的树高常量（tallTreeMinimumHeight 等）。
+
+	public void setLeafChoice(java.util.function.Function<Random, net.minecraft.block.state.IBlockState> newChoice) {
+		tallTree.setLeafChoice(newChoice);
+		mediumTree.setLeafChoice(newChoice);
+		smallTree.setLeafChoice(newChoice);
+	}
+
+	public void setTallTree(TreeRTG tree) {tallTree = tree;}
+
+	public void setMediumTree(TreeRTG tree) {mediumTree = tree;}
+
+	public void setSmallTree(TreeRTG tree) {smallTree = tree;}
+
+	public TreeRTG getTallTree() {return tallTree;}
+
+	public TreeRTG getMediumTree() {return mediumTree;}
+
+	public TreeRTG getSmallTree() {return smallTree;}
+
+	// 上游同款：允许各群系把"小树"的门槛降到 0（冰原的散生云杉就用它）。
+	public void setSmallTreeMinimumHeight(int newHeight) {
+		smallTreeMinimumHeight = newHeight;
+	}
+
+	public TreeMaterials getMaterials() {return materials;}
+
+	public void setMaterials(TreeMaterials newMaterials) {
+		materials = newMaterials;
+	}
+
+	public void  changeLocalNoiseVariability(float change) {
+		localHeightSqrtVariability += change;
+	}
+
+	public void setSaplingChance(float newChance) {
+		saplingChance = newChance;
 	}
 	
 	public int smallestSaplingHeight() {
@@ -185,28 +226,32 @@ abstract public class DecoVariableTree extends DecoTree {
 			actualHeight = vanillaTreeMinimumHeight + rand.nextInt(actualHeight-vanillaTreeMinimumHeight);
 		}
 		// the generate step is separated out because 
-		doGenerate(chunkInfo.world(),rand,column.up(y),actualHeight,treesRemaining);
+		// 底层 API 变动：父类 DecoTree 也有一个 doGenerate(Random, RTGWorld, ChunkInfo, BlockPos, int)，
+		// 不加 this. 会被解析到父类那个重载上。显式限定为本类的 5 参版本。
+		this.doGenerate(chunkInfo.world(),rand,column.up(y),actualHeight,treesRemaining);
 		return;
 	}
 	
-	public void doGenerate(World world, Random rand, BlockPos pos, int actualHeight, TreeDensityLimiter treesRemaining) {
+	public boolean doGenerate(World world, Random rand, BlockPos pos, int actualHeight, TreeDensityLimiter treesRemaining) {
 		if (actualHeight >tallTreeMinimumHeight+rand.nextInt(tallTreeMinimumVariability)) {
-			this.generateTallTree(world, rand, pos, actualHeight, materials,treesRemaining);
+			return this.generateTallTree(world, rand, pos, actualHeight, materials,treesRemaining);
 		} else if (actualHeight >mediumTreeMinimumHeight+rand.nextInt(mediumTreeMinimumVariability)) {
-			this.generateMediumTree(world, rand, pos, actualHeight, materials,treesRemaining);
+			return this.generateMediumTree(world, rand, pos, actualHeight, materials,treesRemaining);
 		} else if (actualHeight >smallTreeMinimumHeight+rand.nextInt(smallTreeMinimumVariability)) {
-			this.generateSmallTree(world, rand, pos, actualHeight, materials,treesRemaining);
+			return this.generateSmallTree(world, rand, pos, actualHeight, materials,treesRemaining);
 		} else if (actualHeight >vanillaTreeMinimumHeight+rand.nextInt(vanillaTreeMinimumVariability)) {
 			if (treesRemaining.allowed(0.5f, rand))  {
-			    vanillaTree().generate(world, rand, pos);
+			    return vanillaTree().generate(world, rand, pos);
 			}
+			return false;
 		} else {
 			if (treesRemaining.allowed(0.7f, rand))  {
-			    new WorldGenShrubRTG(actualHeight,materials.log,materials.leaves,false).generate(world, rand, pos);
+			    return new WorldGenShrubRTG(actualHeight,materials.log,materials.leaves,false).generate(world, rand, pos);
 			}
+			return false;
 		}
-	return;
 }
+
     @Override
     @Deprecated
     public boolean properlyDefined() {
@@ -215,52 +260,46 @@ abstract public class DecoVariableTree extends DecoTree {
         return true;
     }
     
-	private void generateTallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
-		float proportionTrunk  = tallTree.getLowestVariableTrunkProportion() + random.nextFloat()*tallTree.getTrunkProportionVariability();
-		int trunkHeight = (int)(proportionTrunk*(actualHeight-tallTree.getTrunkReserve()))+tallTree.getTrunkReserve();
-		if (trunkHeight < 4) trunkHeight = 4;
+	private boolean generateTallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
 		
 		tallTree.setLogBlock(materials.log);
         tallTree.setLeavesBlock(materials.leaves);
         tallTree.setBranchBlock(materials.branches);
-        tallTree.setTrunkSize(trunkHeight);
-        tallTree.setCrownSize(actualHeight-trunkHeight);
+        tallTree.setTreeSize(actualHeight, random);
         tallTree.setNoLeaves(false);
         if (treesRemaining.allowed(tallTree.estimatedSize(), random)) {
-		    tallTree.generate(world, random, pos);
+		    return tallTree.generate(world, random, pos);
         }
+        return false;
 	}
 	
-	private void generateMediumTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
-		float proportionTrunk  = mediumTree.getLowestVariableTrunkProportion() + random.nextFloat()*mediumTree.getTrunkProportionVariability();
-		int trunkHeight = (int)(proportionTrunk*(actualHeight-mediumTree.getTrunkReserve()))+mediumTree.getTrunkReserve();
-		if (trunkHeight < 4) trunkHeight = 4;
+	private boolean generateMediumTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {
 		
 		mediumTree.setLogBlock(materials.log);
 		mediumTree.setLeavesBlock(materials.leaves);
 		mediumTree.setBranchBlock(materials.branches);
-        mediumTree.setTrunkSize(trunkHeight);
-        mediumTree.setCrownSize(actualHeight-trunkHeight);
+        mediumTree.setTreeSize(actualHeight, random);
         mediumTree.setNoLeaves(false);
         if (treesRemaining.allowed(mediumTree.estimatedSize(), random)) {
-             mediumTree.generate(world, random, pos);
+             return mediumTree.generate(world, random, pos);
         }
+        return false;
 	}
 	
-	private void generateSmallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {		
-		float proportionTrunk  = smallTree.getLowestVariableTrunkProportion() + random.nextFloat()*smallTree.getTrunkProportionVariability();
-		int trunkHeight = (int)(proportionTrunk*(actualHeight-smallTree.getTrunkReserve()))+smallTree.getTrunkReserve();
-		if (trunkHeight < 4) trunkHeight = 4;
+	private boolean generateSmallTree(World world, Random random, BlockPos pos,int actualHeight, TreeMaterials materials, TreeDensityLimiter treesRemaining) {		
+
+		smallTree.setTreeSize(actualHeight, random);
 	
 	    smallTree.setLogBlock(materials.log);
 		smallTree.setLeavesBlock(materials.leaves);
 		smallTree.setBranchBlock(materials.branches);
-		smallTree.setTrunkSize(trunkHeight);
-	    smallTree.setCrownSize(actualHeight-trunkHeight+2);// need a bit more crown for this algo
+	    smallTree.setCrownSize(smallTree.getCrownSize()+2);// need a bit more crown for this algo
+	    //smallTree.setCrownSize(2);
 	    smallTree.setNoLeaves(false);
 	    if (treesRemaining.allowed(smallTree.estimatedSize(), random)){
-		    smallTree.generate(world, random, pos);
+		    return smallTree.generate(world, random, pos);
 	    }
+	    return false;
 	}
 	
 	public int largestVanillaTree() {return this.smallTreeMinimumHeight + this.smallTreeMinimumVariability -1;}

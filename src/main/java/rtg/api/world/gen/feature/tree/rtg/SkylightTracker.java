@@ -5,7 +5,7 @@ import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
-class SkylightTracker {
+public class SkylightTracker {
 	
 	private final int distance;
 	private final int width;
@@ -20,13 +20,13 @@ class SkylightTracker {
 	private final boolean [] [] trunk;  // indicating where dark blocks go to the ground and light cannot pass underneath.
 	private final BlockPos base;
 
-	int tolerableObstruction = 4;
+	int tolerableObstruction = 5;
 	private int hopelesslyDark = 15;
 	
 	private int lightingHeight = 50; // check this many blocks up for light obstructions
 	
 	
-	SkylightTracker( int distance, BlockPos base, World world) {
+	public SkylightTracker( int distance, BlockPos base, World world) {
 		
 		// add on some distance for tracking 
 		distance += 4;
@@ -51,7 +51,7 @@ class SkylightTracker {
 		setLighting(world);
 		initialSpread();
 	}
-	SkylightTracker( int distance, BlockPos base, World world, int tolerableObstruction) {
+	public SkylightTracker( int distance, BlockPos base, World world, int tolerableObstruction) {
 		
 		this(distance,base,world);
 		this.tolerableObstruction = tolerableObstruction;
@@ -359,8 +359,13 @@ class SkylightTracker {
 							obstruction = 255;
 							break;// we're done, it's dark
 						}
+						//ignore water
+						if (examined.getBlock().equals(Blocks.WATER)) examined = Blocks.AIR.getDefaultState();
 						obstruction += examined.getLightOpacity();
-						if (obstruction > 14) break;// we're done, it's dark
+						if (obstruction > 1) {
+							obstruction = 255;
+							break;// we're done, it's dark
+						}
 						up ++;
 					}
 				}
@@ -452,7 +457,8 @@ class SkylightTracker {
 		if (!inArray(baseX,baseZ)) return true;// if outside of examined area ignore.
 		// make the change temporarily to test. May need to be undone before exiting procedure;
 		int oldDirectOpacity = directOpacity [baseX][baseZ] ;
-		directOpacity [baseX][baseZ] += placed.getLightOpacity();
+		// for now treat everything as opaque because of lighting rules
+		directOpacity [baseX][baseZ] += 15;//placed.getLightOpacity();
 		// max 255
 		if (directOpacity [baseX][baseZ] >255)   directOpacity [baseX][baseZ] = 255;
 		if (this.lightDirection [baseX][baseZ] != OrthogonalDirection.CENTER&&!spotlight.trunk()) {
@@ -571,7 +577,10 @@ class SkylightTracker {
 				boolean looking = true; 
 				int y = lowest[localX][localZ] - 1;
 				if (y>=254) continue; // this tree didn't place any blocks there
-				while (y>62) {
+				// 偏离上游（有意）：上游此处硬编码 62，本仓库的水面高度由 WaterLevel 统一裁决
+				// （RWG 重写引入的单一真相源；地形代码里 61.5/62/63/64.5 等字面量都归它管）。
+				// 硬编码会在 seaLevel 被改配置时静默失配，故保留本仓库的写法。
+				while (y > rtg.api.world.WaterLevel.current().waterSurfaceTop()) {
 					BlockPos position = new BlockPos(base.getX()-distance + localX, y,base.getZ()-distance + localZ);
 					if (world.getBlockState(position).getLightOpacity()>10) {
 						if (looking) {

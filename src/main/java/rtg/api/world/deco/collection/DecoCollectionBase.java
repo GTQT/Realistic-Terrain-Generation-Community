@@ -1,11 +1,17 @@
 package rtg.api.world.deco.collection;
 
-import java.util.ArrayList;
-
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.ChunkPos;
 import rtg.api.config.BiomeConfig;
+import rtg.api.util.ChunkInfo;
+import rtg.api.world.RTGWorld;
+import rtg.api.world.biome.IRealisticBiome;
+import rtg.api.world.deco.AbstractDeco;
 import rtg.api.world.deco.DecoBase;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
+
+import java.util.ArrayList;
+import java.util.Random;
 
 
 /**
@@ -15,7 +21,7 @@ import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 //              are added the same as in IRealisticBiome#addDeco
 // Zeno: Restored. Nobody is ever going to do this.
 
-public class DecoCollectionBase {
+public class DecoCollectionBase extends AbstractDeco {
 
     public ArrayList<DecoBase> decos;
     public ArrayList<TreeRTG> rtgTrees;
@@ -26,6 +32,12 @@ public class DecoCollectionBase {
         this.config = config;
         this.decos = new ArrayList<DecoBase>();
         this.rtgTrees = new ArrayList<TreeRTG>();
+    }
+
+    // 底层 API 变动（移植上游新树系统 / T3）：上游 DecoCollectionBase 有这个访问器，
+    // 新的 DecoCollection*Trees 工厂会用它读 ALLOW_LOGS 等配置。逐行照抄上游。
+    protected BiomeConfig getConfig() {
+        return config;
     }
 
     public DecoCollectionBase addDeco(DecoBase deco) {
@@ -93,5 +105,15 @@ public class DecoCollectionBase {
         }
 
         return leafBlocks;
+    }
+
+    // 底层 API 变动（移植上游新树系统 / T5）：上游 DecoCollectionBase extends AbstractDeco
+    // 并实现 generate（逐个跑集合里的 deco）。逐行照抄上游 DecoCollectionBase.java:55-59。
+    @Override
+    public void generate(final IRealisticBiome biome, final RTGWorld rtgWorld, final Random rand,
+                         final ChunkPos chunkPos, final float river, final boolean hasVillage, ChunkInfo chunkInfo) {
+        for (AbstractDeco deco : decos) {
+            deco.generate(biome, rtgWorld, rand, chunkPos, river, hasVillage, chunkInfo);
+        }
     }
 }

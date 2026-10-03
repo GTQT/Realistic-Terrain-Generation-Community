@@ -9,6 +9,7 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.WaterLevel;
 
 
 public class SurfaceGeneric extends SurfaceBase {
@@ -32,7 +33,7 @@ public class SurfaceGeneric extends SurfaceBase {
             else if (b == Blocks.STONE) {
                 depth++;
 
-                if (depth == 0 && k > 61) {
+                if (depth == 0 && k > WaterLevel.current().surfaceTopMin()) {
                     primer.setBlockState(x, k, z, topBlock);
                 }
                 else if (depth < 4) {

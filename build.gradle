@@ -63,6 +63,15 @@ java {
     }
 }
 
+// Offline worldgen verification harnesses (see docs/terrain-port-roadmap.md Phase 0.1).
+// These only touch MC-free noise math, so they run without a game process.
+sourceSets {
+    preview {
+        compileClasspath += main.output + main.compileClasspath
+        runtimeClasspath += output + main.output + main.runtimeClasspath
+    }
+}
+
 configurations {
     embed
     implementation.extendsFrom(embed)
@@ -286,6 +295,99 @@ String parserChangelog() {
         throw new GradleException('publish_with_changelog is true, but the changelog for the latest version is empty!')
     }
     return parsedChangelog
+}
+
+tasks.register('calibrateVolcanoPlacement', JavaExec) {
+    group = 'verification'
+    description = 'Measures volcano / lava-cave landmark density with the restored RWG switches'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.VolcanoPlacementCalibration'
+    maxHeapSize = '1g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+tasks.register('calibrateCellularNoise', JavaExec) {
+    group = 'verification'
+    description = 'Compares rtgc VoronoiResult.rwgCellDistance() against a faithful port of RWG CellNoise(noise) (C-5)'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.CellularNoiseCalibration'
+    maxHeapSize = '1g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 噪声后端标定：RWG 的经典 Perlin（rwg/util/PerlinNoise.java 的逐行移植）vs rtgc 的 OpenSimplex。
+// 这是"公式逐行抄对了、地形却不像 RWG"的根因所在：同一常数下两者的幅值差一倍，
+// 而地形函数普遍对噪声做平方（m *= m / 35），于是起伏差到四倍。
+tasks.register('calibrateNoiseBackend', JavaExec) {
+    group = 'verification'
+    description = 'Compares PerlinNoise vs OpenSimplexNoise amplitude, feature scale and flatness'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.NoiseBackendCalibration'
+    maxHeapSize = '1g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 气候带标定：验证 RWG ChunkManagerRealistic 的气候系统（限值可达性、边界距离量纲），
+// 并量出「极端边界」（= RealisticBiomeMountainChain 的覆盖面）占世界多少面积。
+tasks.register('calibrateClimateBands', JavaExec) {
+    group = 'verification'
+    description = 'Validates RWG climate limits/units and measures the mountain-chain coverage fraction'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.ClimateBandCalibration'
+    maxHeapSize = '1g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 大陆场标定：验证 RWG ContinentalNoise + RwgLayoutConfig 默认值的海陆比、阈值带占比，
+// 并确认 averageLandmarksPerTypeAndContinent = 0 确实关闭了全部地标。
+tasks.register('calibrateContinentalField', JavaExec) {
+    group = 'verification'
+    description = 'Measures the RWG continental field: land/ocean ratio, layout threshold bands, landmark shutdown'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.api.util.noise.ContinentalFieldCalibration'
+    maxHeapSize = '2g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 新布局的分支分配标定：切换世界生成之前，量出海洋/滨海/海岸/岛屿/气候边界/极端边界各占多少。
+tasks.register('calibrateLayoutApportionment', JavaExec) {
+    group = 'verification'
+    description = 'Measures which layout branch would handle each column, before cutting worldgen over to it'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.world.biome.LayoutApportionmentCalibration'
+    maxHeapSize = '2g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 边界池改动的数值验收：用动态代理桩跑真正的 RtgBiomeLayout，验证
+//   A) 旧 C1 的"镜像核心池"对群系选择是恒等变换（0 差异）
+//   B) 本轮改动（RWG 方向池成员）的差异只落在气候边界列
+//   C) 山地链变体数从"每个陆地群系各一条"回到 RWG 的量级
+tasks.register('calibrateBorderPools', JavaExec) {
+    group = 'verification'
+    description = 'Numerically verifies the border-pool rework against the real RtgBiomeLayout (proxy stubs)'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.world.biome.BorderPoolEquivalenceCalibration'
+    maxHeapSize = '2g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+// 地下河/天窗的**频率**实测：四级门控（河网带 → 隧道/交汇带 → 山地链宿主 → 天窗三因子）
+// 各自的命中率与交集，用生产环境的池大小建桩跑真正的 RtgBiomeLayout。
+tasks.register('calibrateRiverTunnels', JavaExec) {
+    group = 'verification'
+    description = 'Measures how often each underground-river gate passes (why tunnels/skylights are rare)'
+    dependsOn previewClasses
+    classpath = sourceSets.preview.runtimeClasspath
+    mainClass = 'rtg.world.biome.RiverTunnelFrequencyCalibration'
+    maxHeapSize = '2g'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
 }
 
 tasks.register('generateMixinJson') {

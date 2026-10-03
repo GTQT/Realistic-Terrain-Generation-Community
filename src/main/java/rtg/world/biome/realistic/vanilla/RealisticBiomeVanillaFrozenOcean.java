@@ -1,19 +1,13 @@
 package rtg.world.biome.realistic.vanilla;
 
-import java.util.Random;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Biomes;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkPrimer;
-import rtg.api.config.BiomeConfig;
-import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceOcean;
 
 
 public class RealisticBiomeVanillaFrozenOcean extends RealisticBiomeBase {
@@ -41,8 +35,11 @@ public class RealisticBiomeVanillaFrozenOcean extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-
-        return new SurfaceVanillaFrozenOcean(getConfig(), Blocks.SAND.getDefaultState(), Blocks.SAND.getDefaultState(), Blocks.GRAVEL.getDefaultState(), 20f, 0.2f);
+        // RWG `Support.java:156-160`：`oceanShallowSnow = new RealisticBiomeOcean(baseOceanCold, true, …)`
+        // ⇒ **浅海**海底 = 沙 6 格（`rReplace`：shallow ? sand : gravel）。
+        // 此前这里用陆地版 `SurfaceMountainSnow(topBlock, fillerBlock, true, SAND, 0.2f)`：
+        // 只有顶层 1 格沙、下面 5 格砾石（`frozen_ocean` 的 fillerBlock 是砾石）。
+        return new SurfaceOcean(this.getConfig(), true);
     }
 
     @Override
@@ -58,61 +55,11 @@ public class RealisticBiomeVanillaFrozenOcean extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            return terrainOcean(x, y, rtgWorld, river, 50f);
+            // 依据：RWG biomes/realistic/ocean/RealisticBiomeOcean.rNoise —— 浅海海底 y≈52
+            // （rtgc 此前接的是 land 用的 terrainFlatLakes / BOP 陆地版的 swamp mountain，
+            //  导致海洋只有 1 格水；kelp 更是把山地地形带进了海里。）
+            return terrainOcean(x, y, rtgWorld, true);
         }
     }
 
-    public static class SurfaceVanillaFrozenOcean extends SurfaceBase {
-
-        private IBlockState mixBlock;
-        private float width;
-        private float height;
-        private float mixCheck;
-
-        public SurfaceVanillaFrozenOcean(BiomeConfig config, IBlockState top, IBlockState filler, IBlockState mix, float mixWidth, float mixHeight) {
-
-            super(config, top, filler);
-
-            mixBlock = this.getConfigBlock(config.SURFACE_MIX_BLOCK.get(), mix);
-
-            width = mixWidth;
-            height = mixHeight;
-        }
-
-        @Override
-        public void paintTerrain(ChunkPrimer primer, int i, int j, int x, int z, int depth, RTGWorld rtgWorld, float[] noise, float river, Biome[] base) {
-
-            Random rand = rtgWorld.rand();
-            SimplexNoise simplex = rtgWorld.simplexInstance(0);
-
-            for (int k = 255; k > -1; k--) {
-                Block b = primer.getBlockState(x, k, z).getBlock();
-                if (b == Blocks.AIR) {
-                    depth = -1;
-                }
-                else if (b == Blocks.STONE) {
-                    depth++;
-
-                    if (depth == 0 && k > 0 && k < 63) {
-                        mixCheck = simplex.noise2f(i / width, j / width);
-
-                        if (mixCheck > height) // > 0.27f, i / 12f
-                        {
-                            primer.setBlockState(x, k, z, mixBlock);
-                        }
-                        else {
-                            primer.setBlockState(x, k, z, topBlock);
-                        }
-                    }
-                    else if (depth < 4 && k < 63) {
-                        primer.setBlockState(x, k, z, fillerBlock);
-                    }
-                    else if (depth == 0 && k < 69) {
-                        primer.setBlockState(x, k, z, Blocks.SAND.getDefaultState());
-
-                    }
-                }
-            }
-        }
-    }
 }

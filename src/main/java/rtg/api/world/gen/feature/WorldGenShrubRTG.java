@@ -1,15 +1,15 @@
 package rtg.api.world.gen.feature;
 
-import java.util.Random;
-
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.gen.feature.WorldGenerator;
-
 import rtg.RTGConfig;
+
+import java.util.Random;
+import java.util.function.Function;
 
 
 public class WorldGenShrubRTG extends WorldGenerator {
@@ -19,9 +19,32 @@ public class WorldGenShrubRTG extends WorldGenerator {
     private IBlockState leaveBlock;
     private boolean varSand;
 
+    /**
+     * 移植上游新树系统（BOP 群系接线需要）：叶子可按 Random **逐块**选取，
+     * 而不是整丛同一种叶子。上游有 5 参构造器与这个字段。
+     *
+     * <p>默认实现返回 {@link #leaveBlock}，所以**不传 leafChoice 的老调用点行为完全不变**。
+     * 本仓库额外保留了下面的 {@code reset(...)}（对象重用池），上游没有这个优化。
+     */
+    protected Function<Random, IBlockState> leafChoice = new Function<Random, IBlockState>() {
+        public IBlockState apply(Random applied) {
+            return leaveBlock;
+        }
+    };
+
     public WorldGenShrubRTG(int size, IBlockState log, IBlockState leav, boolean sand) {
 
         reset(size, log, leav, sand);
+    }
+
+    /**
+     * 上游同款 5 参构造器（带逐块叶子选择）。
+     */
+    public WorldGenShrubRTG(int size, IBlockState log, IBlockState leav, boolean sand,
+                            Function<Random, IBlockState> _leafChoice) {
+
+        reset(size, log, leav, sand);
+        leafChoice = _leafChoice;
     }
 
     // ====== 新增：重置参数以复用对象，避免反复new ======
@@ -31,6 +54,15 @@ public class WorldGenShrubRTG extends WorldGenerator {
 
         logBlock = log;
         leaveBlock = leav;
+    }
+
+    /**
+     * 带逐块叶子选择的重置重载（供 {@code DecoShrub} 复用池使用）。
+     */
+    public void reset(int size, IBlockState log, IBlockState leav, boolean sand,
+                      Function<Random, IBlockState> _leafChoice) {
+        reset(size, log, leav, sand);
+        leafChoice = _leafChoice;
     }
 
     @Override
@@ -49,19 +81,19 @@ public class WorldGenShrubRTG extends WorldGenerator {
             int rZ = rand.nextInt(width * 2) - width;
 
             if (i == 0 && varSize > 4) {
-                buildLeaves(world, x + rX, y, z + rZ, 3);
+                buildLeaves(world, rand, x + rX, y, z + rZ, 3);
             }
             else if (i == 1 && varSize > 2) {
-                buildLeaves(world, x + rX, y, z + rZ, 2);
+                buildLeaves(world, rand, x + rX, y, z + rZ, 2);
             }
             else {
-                buildLeaves(world, x + rX, y + rY, z + rZ, 1);
+                buildLeaves(world, rand, x + rX, y + rY, z + rZ, 1);
             }
         }
         return true;
     }
 
-    public void buildLeaves(World world, int x, int y, int z, int size) {
+    public void buildLeaves(World world, Random rand, int x, int y, int z, int size) {
 
         IBlockState b = world.getBlockState(new BlockPos(x, y - 2, z));
         IBlockState b1 = world.getBlockState(new BlockPos(x, y - 1, z));
@@ -86,7 +118,7 @@ public class WorldGenShrubRTG extends WorldGenerator {
                     for (int j = -1; j <= 1; j++) {
                         for (int k = -size; k <= size; k++) {
                             if (Math.abs(i) + Math.abs(j) + Math.abs(k) <= size) {
-                                buildBlock(world, x + i, y + j, z + k, leaveBlock);
+                                buildBlock(world, x + i, y + j, z + k, leafChoice.apply(rand));
                             }
                         }
                     }

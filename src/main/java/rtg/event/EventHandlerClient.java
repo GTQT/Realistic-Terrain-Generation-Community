@@ -4,14 +4,13 @@ import net.minecraft.client.gui.GuiCreateWorld;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
-
 import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.event.world.ChunkEvent;
+import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.relauncher.Side;
-
 import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.world.biome.IRealisticBiome;
@@ -70,14 +69,45 @@ public final class EventHandlerClient
                 ids[lz << 4 | lx] = rb == null ? 0 : net.minecraft.world.biome.Biome.getIdForBiome(rb.baseBiome());
             }
         }
-        if (chunk instanceof org.dimdev.jeid.INewChunk) {
-            ((org.dimdev.jeid.INewChunk) chunk).setIntBiomeArray(ids);
+        /*
+         * REID（JEID/NEID）是可选的：类路径上没有它时，**`instanceof` 本身**就会抛
+         * NoClassDefFoundError（引用类型也要解析），从而把整个区块加载事件打断。
+         * 报错实例：别人机器上未装 REID，背包/多人客户端里一进世界就刷
+         *   NoClassDefFoundError: org/dimdev/jeid/INewChunk
+         *     at EventHandlerClient.backfillChunk(EventHandlerClient.java:73)
+         *
+         * 故这里按"REID 是否真的加载"来守卫，与 ChunkGeneratorRTG 的 useIntBiomeArray
+         * 判断保持同一口径；没有 REID 时跳过 int 数组、只走下面的原版 byte 数组路径。
+         */
+        if (Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid")) {
+            setIntBiomeArray(chunk, ids);
         }
         final byte[] bytes = new byte[256];
         for (int i = 0; i < 256; i++) {
             bytes[i] = (byte) ids[i];
         }
         chunk.setBiomeArray(bytes);
+    }
+
+    /**
+     * 只负责把 int 群系数组塞给 REID 的 {@code INewChunk}。
+     *
+     * <p><b>为什么单独一个方法</b>：JVM 校验一个方法时就会解析它引用的类。如果把
+     * {@code instanceof org.dimdev.jeid.INewChunk} 直接写在上面的 {@code backfillChunk} 里，
+     * 未装 REID 的环境可能在**类校验阶段**就抛 NoClassDefFoundError，把整个区块加载打断。
+     * 隔离到本方法后，只有调用方（已确认 REID 加载）才会触发解析。
+     *
+     * <p>外面再兜一层 {@code NoClassDefFoundError}：运行时若实际未提供该 jar、
+     * 或该类被改名，退回原版 byte 数组路径即可，不该让区块加载失败。
+     */
+    private static void setIntBiomeArray(final Chunk chunk, final int[] ids) {
+        try {
+            if (chunk instanceof org.dimdev.jeid.INewChunk) {
+                ((org.dimdev.jeid.INewChunk) chunk).setIntBiomeArray(ids);
+            }
+        } catch (NoClassDefFoundError ignored) {
+            // 见方法注释。
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST) // We want to be last so that our handler avoids race conditions with other mods

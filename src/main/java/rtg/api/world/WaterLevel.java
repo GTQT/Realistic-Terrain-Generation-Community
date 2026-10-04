@@ -67,7 +67,7 @@ public final class WaterLevel {
         return seaLevel + 1.5f;
     }
 
-    /** 表层顶块的最低高度门槛（原字面量 61，见 {@code SurfaceGeneric} / {@code SurfaceRiverOasis}）。 */
+    /** 表层顶块的最低高度门槛（原字面量 61，见 {@code SurfaceRiverOasis}）。 */
     public int surfaceTopMin() {
         return seaLevel - 2;
     }

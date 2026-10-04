@@ -1,16 +1,15 @@
 package rtg.api.world.surface;
 
-import java.util.Random;
-
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.terrain.TerrainBase;
+
+import java.util.Random;
 
 
 /**
@@ -41,7 +40,7 @@ import rtg.api.world.terrain.TerrainBase;
  * 与普通沙滩一致（RWG 的单一 {@code CoastDunes} 本来就不区分它们）。
  *
  * <p>{@code k > 68} 也是 RWG 的字面量，**没有**换成 {@code WaterLevel} ——
- * 与 {@link SurfaceDesert} 里保留 {@code k > 61} 同一口径。
+ * 与 {@code SurfaceRiverOasis} 里保留字面量高度门槛同一口径。
  *
  * <p>唯一的管线适配：悬崖判定用 {@code TerrainBase.calcCliff(x, z, noise, river)}
  * （RWG 的 {@code CliffCalculator.calc} 只有 3 参，rtgc 的地表统一走 4 参版）。
@@ -51,13 +50,11 @@ public class SurfaceCoastDunes extends SurfaceBase {
     /** RWG 的崖壁阈值：{@code cliff > 1.3f}（沙漠是 2.8f，沿海沙丘更低）。 */
     private static final float CLIFF_THRESHOLD = 1.3f;
 
-    /** RWG 的字面量：该高度以上给草，以下给沙。 */
-    private static final int SAND_TOP_Y = 68;
+    // SAND_TOP_Y / GRASS / DIRT 原本用于 RWG 的"沙线以上长草、草下垫土"。
+    // 按用户要求（带沙群系不出现泥土）已统一成沙丘剖面，这三个成员随之不再需要。
 
-    private static final IBlockState GRASS = Blocks.GRASS.getDefaultState();
     private static final IBlockState SAND = Blocks.SAND.getDefaultState();
     private static final IBlockState SANDSTONE = Blocks.SANDSTONE.getDefaultState();
-    private static final IBlockState DIRT = Blocks.DIRT.getDefaultState();
     private static final IBlockState STONE = Blocks.STONE.getDefaultState();
     private static final IBlockState COBBLESTONE = Blocks.COBBLESTONE.getDefaultState();
 
@@ -67,7 +64,7 @@ public class SurfaceCoastDunes extends SurfaceBase {
      */
     public SurfaceCoastDunes(final BiomeConfig config) {
 
-        super(config, GRASS, DIRT);
+        super(config, SAND, SANDSTONE);
     }
 
     @Override
@@ -97,21 +94,20 @@ public class SurfaceCoastDunes extends SurfaceBase {
                     }
                 } else {
                     if (depth == 0) {
-                        if (k > SAND_TOP_Y) {
-                            primer.setBlockState(x, k, z, GRASS);
-                        } else {
-                            primer.setBlockState(x, k, z, SAND);
-                            sand = true;
-                        }
+                        /*
+                         * rtgc 有意偏离 RWG（用户要求：带沙的群系不许出现泥土）。
+                         * RWG 原文是 `k > 68 ? grass : sand`（沙线以上长草），配套下面是泥土。
+                         * 这里统一成**沙丘剖面**：沙线以上也是沙，下面沙→砂岩，
+                         * 于是这些海滩（vanilla beach/stone_beach、BOP gravel/white/origin beach）
+                         * 不再出现草与泥土。
+                         */
+                        primer.setBlockState(x, k, z, SAND);
+                        sand = true;
                     } else if (depth < 5) {
-                        if (sand) {
-                            if (depth < 4) {
-                                primer.setBlockState(x, k, z, SAND);
-                            } else {
-                                primer.setBlockState(x, k, z, SANDSTONE);
-                            }
+                        if (depth < 4) {
+                            primer.setBlockState(x, k, z, SAND);
                         } else {
-                            primer.setBlockState(x, k, z, DIRT);
+                            primer.setBlockState(x, k, z, SANDSTONE);
                         }
                     }
                 }

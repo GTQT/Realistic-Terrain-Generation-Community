@@ -1,19 +1,18 @@
 package rtg.api.world.surface;
 
-import java.util.Random;
-
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.EnumDyeColor;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.BlockUtil;
 import rtg.api.util.noise.PerlinNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.terrain.TerrainBase;
+
+import java.util.Random;
 
 
 /**
@@ -57,7 +56,13 @@ public class SurfaceMesa extends SurfaceBase {
                              final Biome[] base) {
 
         final Random rand = rtgWorld.rand();
-        final IBlockState dirt = Blocks.DIRT.getDefaultState();
+        /*
+         * rtgc 有意偏离 RWG（用户要求：带沙的群系不许出现泥土）。
+         * RWG 原文在这几处放的是 {@code Blocks.dirt}（造出恶地里的"土色夹层"）；
+         * 台地群系的表层是沙（{@code RealisticBiomeVanillaMesa} 传的就是 Blocks.SAND），
+         * 故统一改为沙，陶瓦（clayColorForHeight）的层次保持不变。
+         */
+        final IBlockState sand = Blocks.SAND.getDefaultState();
 
         final float c = TerrainBase.calcCliff(x, z, noise, river);
         final boolean cliff = c > 1.3f;
@@ -78,18 +83,18 @@ public class SurfaceMesa extends SurfaceBase {
                             primer.setBlockState(x, k, z, clayColorForHeight(k));
                         } else if (k > 77) {
                             if (rand.nextInt(5) == 0) {
-                                primer.setBlockState(x, k, z, dirt);
+                                primer.setBlockState(x, k, z, sand);
                             } else {
                                 primer.setBlockState(x, k, z, depth == 0 ? topBlock : fillerBlock);
                             }
                         } else if (k < 69) {
-                            primer.setBlockState(x, k, z, dirt);
+                            primer.setBlockState(x, k, z, sand);
                         } else if (k < 78) {
                             if (depth == 0) {
                                 if (k < 72 && rand.nextInt(k - 69 + 1) == 0) {
-                                    primer.setBlockState(x, k, z, dirt);
+                                    primer.setBlockState(x, k, z, sand);
                                 } else if (rand.nextInt(5) == 0) {
-                                    primer.setBlockState(x, k, z, dirt);
+                                    primer.setBlockState(x, k, z, sand);
                                 } else {
                                     primer.setBlockState(x, k, z, topBlock);
                                 }

@@ -414,7 +414,7 @@ public final class RTGChunkGenSettings {
 
         public static RTGChunkGenSettings.Factory jsonToFactory(String generatorSettings) {
 
-            if (generatorSettings.isEmpty()) {
+            if (generatorSettings == null || generatorSettings.isEmpty()) {
                 return new RTGChunkGenSettings.Factory();
             }
             try {
@@ -422,7 +422,14 @@ public final class RTGChunkGenSettings {
                 reader.setLenient(true);
                 return JSON_ADAPTER.getAdapter(Factory.class).read(reader);
             }
-            catch (IOException ex) {
+            catch (IOException | RuntimeException ex) {
+                // RuntimeException 也必须一起吞掉，否则服务端起不来。
+                // 世界的 generatorOptions 由服务端宿主决定，不保证是本模组的 JSON：
+                // Bukkit / CraftBukkit 系服务端（含 CatRoom）会把 server.properties 的 level-type
+                // 原样写进世界设置，而本模组在 GUI 里正是引导管理员设 level-type=rtgc
+                // （WorldTypeRTG 的注册名 = MODID）。此时 Gson 抛的是 IllegalStateException
+                // ——那是 RuntimeException，原来只捕 IOException 接不住，
+                // 异常会一路穿过 RTGWorld.<init> 掀翻 MinecraftServer#loadAllWorlds。
                 Logger.error("Error parsing chunk generator settings: {}", ex.getMessage());
                 Logger.error("Settings: {}", generatorSettings);
                 return new RTGChunkGenSettings.Factory();
@@ -580,8 +587,29 @@ public final class RTGChunkGenSettings {
         @Override
         public Factory deserialize(JsonElement element, Type type, JsonDeserializationContext context) {
 
-            JsonObject json = element.getAsJsonObject();
             Factory settings = new Factory();
+
+            // ⚠ 世界的 generatorOptions 不保证是本模组的设置 JSON，这里必须先判类型再取对象。
+            //
+            // 实际踩到的路径（服务端崩溃：Not a JSON Object: "rtgc"）：
+            //   服务端按本模组 GUI 的引导在 server.properties 里设了 level-type=rtgc，
+            //   Bukkit / CraftBukkit 系宿主（CatRoom、Cleanroom+Bukkit 混合端）把这个字符串
+            //   原样存进世界的 generatorOptions；JsonReader 是 lenient 的，于是 "rtgc"
+            //   被解析成一个 JSON **字符串**原语而不是对象。
+            //   原来这里无条件 getAsJsonObject() ⇒ IllegalStateException；该行又在 try 之外，
+            //   而 jsonToFactory 只捕获 IOException ⇒ 异常直达 MinecraftServer#loadAllWorlds，
+            //   服务端在加载世界时就崩，根本进不了 tick 循环。
+            //   同一条路径客户端也会走（WorldTypeRTG#getBiomeProvider → RTGWorld.getInstance）。
+            //
+            // 处理：非对象一律当作"宿主没有提供本模组的设置"，回落默认值继续生成。
+            if (element == null || !element.isJsonObject()) {
+                Logger.warn("[RTG] 世界的 generatorOptions 不是本模组的设置 JSON（实际值：{}），"
+                        + "已按默认设置继续。若你没手写过设置，这只是服务端 level-type 的字符串，可以忽略。",
+                        element);
+                return settings;
+            }
+
+            JsonObject json = element.getAsJsonObject();
 
             try {
 // TODO: [Generator settings] Disable fixedBiome and biomeSize for now as they require modification to the GenLayer classes to work.

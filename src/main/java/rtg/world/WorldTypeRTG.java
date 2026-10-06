@@ -1,5 +1,7 @@
 package rtg.world;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.DimensionType;
 import net.minecraft.world.World;
@@ -92,7 +94,40 @@ public final class WorldTypeRTG extends WorldType {
             }
         }
         final WorldInfo wi = world.getWorldInfo();
-        return new ChunkGeneratorOverworld(world, wi.getSeed(), wi.isMapFeaturesEnabled(), wi.getGeneratorOptions());
+        return new ChunkGeneratorOverworld(world, wi.getSeed(), wi.isMapFeaturesEnabled(), sanitizeGeneratorOptions(wi.getGeneratorOptions()));
+    }
+
+    /**
+     * 把世界的 {@code generatorOptions} 清洗成 {@link ChunkGeneratorOverworld} 能吃的东西。
+     *
+     * <p>原版 {@code ChunkGeneratorOverworld} 的构造器会把第 4 个实参交给
+     * {@code ChunkGeneratorSettings.Factory.jsonToFactory}，而原版那个反序列化方法的**第一条指令**
+     * 就是 {@code element.getAsJsonObject()}（同样没有 {@code isJsonObject} 判断，见
+     * {@code ChunkGeneratorSettings$Serializer#deserialize} 的 offset 1）。也就是说非对象的 JSON
+     * 在这里照样抛 {@code IllegalStateException}：这不是本模组的 bug，而是原版的固有行为，
+     * 所以只能不给它喂这种字符串。
+     *
+     * <p>而世界的这个字符串**不保证是 JSON**：Bukkit / CraftBukkit 系宿主会把
+     * {@code server.properties} 的 {@code level-type}（= 本模组 WorldType 注册名 {@code rtgc}）
+     * 原样写进世界的 {@code generatorOptions}。同一条路径上本模组自己的
+     * {@code RTGChunkGenSettings.Factory.jsonToFactory} 已做类型守卫，这里再堵住原版这一条 ——
+     * 非白名单维度和客户端都会走到本行。
+     *
+     * <p>非 JSON 对象一律退回 {@code ""}（原版对非 {@code CUSTOMIZED} 世界本来也只该拿到空串 ⇒
+     * 用默认设置）。是合法 JSON 对象时原样转发，行为不变。
+     */
+    private static String sanitizeGeneratorOptions(String generatorOptions) {
+
+        if (generatorOptions == null || generatorOptions.isEmpty()) {
+            return "";
+        }
+        try {
+            final JsonElement element = new JsonParser().parse(generatorOptions);
+            return element != null && element.isJsonObject() ? generatorOptions : "";
+        }
+        catch (final RuntimeException ex) {
+            return "";
+        }
     }
 
     @Override

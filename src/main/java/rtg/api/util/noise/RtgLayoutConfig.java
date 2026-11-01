@@ -23,9 +23,9 @@ package rtg.api.util.noise;
  *
  * @since 1.0.10
  */
-public final class RwgLayoutConfig {
+public final class RtgLayoutConfig {
 
-    private RwgLayoutConfig() {}
+    private RtgLayoutConfig() {}
 
     // ---- 大陆 ----
     /** 大陆宽度下限（格）。RWG 默认 {@code 2700f}。 */
@@ -59,7 +59,7 @@ public final class RwgLayoutConfig {
      * 每个大陆每种地标的平均数量。RWG 默认 {@code 0.25f}（照抄）。
      * <p>
      * 这是地标子系统的**唯一开关**：{@code ContinentalNoise.sampleLandform} 里
-     * 地标采样被包在 {@code if (continent >= 0D && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f)}
+     * 地标采样被包在 {@code if (continent >= 0D && RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f)}
      * 中。置 0 之后该分支永不进入，于是火山与熔岩洞**完全不会出现**。
      * <p>
      * <b>历史</b>：这条一度是 {@code 0f} —— 用户先前明确要求删除火山与地标，

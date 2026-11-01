@@ -79,7 +79,7 @@ public final class RtgLayoutAccess {
                 fresh.setTerrainWorld(terrainWorld);
             }
             final RtgBiomeCategorizer.Report report = RtgBiomeCategorizer.apply(fresh);
-            // 边界三池的内容来自 `RtgBiomeCategorizer.RWG_PLACEMENTS`（照抄 RWG 的显式标注），
+            // 边界三池的内容来自 `RtgBiomeCategorizer.RTG_PLACEMENTS`（照抄 RWG 的显式标注），
             // 没标到的气候/方向由 `getLandBiomeAt` 落到核心池 —— 与 RWG 的 fall-through 一致。
             // 本轮（同版本 1.0.33）删除了 `mirrorCoreIntoBorders()`：它对群系选择是恒等变换，
             // 却会把核心池灌进极端边界池，把 RWG 的 6 个山地链放大成 104 个。

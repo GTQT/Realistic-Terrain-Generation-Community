@@ -8,16 +8,18 @@ import rtg.api.util.BlockUtil;
 import rtg.api.util.Distribution;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.*;
+import rtg.api.world.deco.DecoCrop;
+import rtg.api.world.deco.DecoFlowersRTG;
+import rtg.api.world.deco.DecoShrub;
+import rtg.api.world.deco.DecoTree;
 import rtg.api.world.deco.helper.DecoHelperThisOrThat;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
 import rtg.api.world.gen.feature.tree.rtg.TreeRTGQuercusRobur;
 import rtg.api.world.surface.SurfaceBase;
+import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
 
-
 import static net.minecraft.block.BlockFlower.EnumFlowerType.*;
-import rtg.api.world.surface.SurfaceGrassland;
 
 
 public class RealisticBiomeVanillaPlains extends RealisticBiomeBase {
@@ -137,7 +139,7 @@ public class RealisticBiomeVanillaPlains extends RealisticBiomeBase {
         @Override
         public float generateNoise(RTGWorld rtgWorld, int x, int y, float border, float river) {
 
-            // **推断**：RWG 没有"MC 平原"这个对应物（它的 RWG_CONTINENT 模式只用自造群系）。
+            // **推断**：RWG 没有"MC 平原"这个对应物（它的 RTG_CONTINENT 模式只用自造群系）。
             // 依据是 RWG 里承担"平坦陆地"角色的 TerrainGrasslandFlats
             //（RealisticBiomeSavanna / RealisticBiomeHotForest / RealisticBiomeDarkRedwoodPlains 都用它）。
             return terrainGrasslandFlats(x, y, rtgWorld, river);

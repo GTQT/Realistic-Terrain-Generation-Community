@@ -4,10 +4,11 @@ package rtg.world.biome.realistic.vanilla;
 import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
+import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceCoastDunes;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.world.biome.RtgCoastDecos;
 
 
 public class RealisticBiomeVanillaStoneBeach extends RealisticBiomeBase {
@@ -40,6 +41,14 @@ public class RealisticBiomeVanillaStoneBeach extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // RWG `coast/RealisticBiomeCoastDunes.rDecorate`（同暖海岸，水草带）。
+        RtgCoastDecos.addCoastDunes(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     public static class TerrainVanillaStoneBeach extends TerrainBase {

@@ -4,18 +4,13 @@ import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-import net.minecraft.world.gen.feature.WorldGenTrees;
-import rtg.api.util.Distribution;
 import rtg.api.util.PlateauUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoTree;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
-import rtg.api.world.deco.collection.DecoCollectionMesa;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMesa;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgMesaDecos;
 
 
 public class RealisticBiomeVanillaMesaPlateauFM extends RealisticBiomeBase {
@@ -65,18 +60,13 @@ public class RealisticBiomeVanillaMesaPlateauFM extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionMesa(this.getConfig()));
+        // RWG `savanna/RealisticBiomeMesaPlains.rDecorate`（地形 TerrainMesa 同源）。
+        RtgMesaDecos.addMesaPlains(this);
+    }
 
-        DecoTree decoTree = new DecoTree(new WorldGenTrees(false));
-        decoTree.setLoops(16);
-        decoTree.setTreeType(DecoTree.TreeType.WORLDGEN);
-        decoTree.setDistribution(new Distribution(24f, 1f, 0f));
-        decoTree.setTreeConditionChance(1);
-        decoTree.setTreeConditionFloat(4f);
-        decoTree.setTreeConditionNoise(0f);
-        decoTree.setMinY(74);
-        addDeco(decoTree);
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

@@ -910,7 +910,7 @@ public abstract class TerrainBase {
      * {@code VoronoiResult} 的距离位于 cellular 噪声的内部空间，需乘回
      * {@link SpacedCellularNoise#COORDINATE_SCALE}，再乘单元间距。
      *
-     * <p>⚠ 本方法目前**零调用者**（隧道实现已改走布局的 `RwgCellNoise`）。保留的理由：
+     * <p>⚠ 本方法目前**零调用者**（隧道实现已改走布局的 `RtgCellNoise`）。保留的理由：
      * {@code src/preview} 的 {@code CellularNoiseCalibration} 用同一套换算**离线复核**
      * 隧道/洞厅的面积覆盖率，这里的公式是那次复核的对照物。
      */
@@ -927,14 +927,14 @@ public abstract class TerrainBase {
     /**
      * RWG 等价的 cell 距离（C-5）。
      * <p>
-     * {@link VoronoiResult#rwgCellDistance()} 即 RWG {@code CellNoise.noise()} 的等价量
+     * {@link VoronoiResult#rtgCellDistance()} 即 RWG {@code CellNoise.noise()} 的等价量
      * （RWG 侧 {@code useDistance = true}，返回 {@code √(dx²+dz²)/√2}；已离线逐点验证，均值比 0.9004）。
      * <p>
      * 移植前此处用的是 {@link VoronoiResult#getShortestDistance()}（平方距离，幅值仅约 1/38.7），
      * 该分支已删除。
      */
     public static float cellDistance(final VoronoiResult voronoi) {
-        return (float) voronoi.rwgCellDistance();
+        return (float) voronoi.rtgCellDistance();
     }
 
     /**

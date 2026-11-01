@@ -1,12 +1,7 @@
 package rtg.api.world;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-
 import net.minecraft.world.World;
 import net.minecraft.world.gen.ChunkProviderServer;
-
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -18,6 +13,10 @@ import rtg.api.util.noise.PerlinNoise;
 import rtg.api.util.noise.SimplexNoise;
 import rtg.api.util.noise.SpacedCellularNoise;
 import rtg.api.world.gen.RTGChunkGenSettings;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
 
 
 /**
@@ -74,7 +73,7 @@ public final class RTGWorld {
         this.chunkSeedZ = chunkSeedRand.nextLong() / 2L * 2L + 1L;
 
         // 噪声后端 = RWG 的经典 Perlin。RWG 的实际默认就是它：
-        // RwgWorldSavedData.noiseImplementation 字段初值 = UNKNOWN，
+        // RtgWorldSavedData.noiseImplementation 字段初值 = UNKNOWN，
         // NoiseSelector 把 UNKNOWN / DYNAMICPERLIN 都映射为 useOpenSimplex = false，
         // 于是 NoiseGeneratorWrapper.noise2() 转发给 PerlinNoise.noise2()。
         // 地形常数是照 RWG 抄的，而 RWG 那套常数调的是经典 Perlin 场 —— 后端一致才谈得上"照抄"。

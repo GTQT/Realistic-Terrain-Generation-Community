@@ -47,21 +47,21 @@ public final class RtgBiomeLayout {
     private static final int BIOME_CACHE_MAX = 4096;
     private static final float RIVER_BED = 59f;
     /**
-     * 地下河隧道带的宽度标尺（RWG 是 {@code 9}，即 {@code 9/1250}）。**rtgc 改过两次，最终与河道同宽**：
+     * 地下河隧道带的宽度标尺：**RWG 原值 {@code 9}**（{@code 9/1250} 个 cell）。
      *
-     * <ol>
-     *   <li>RWG 的 {@code 9} 在 rtgc 的地形下"太稀"（覆盖率 2.93%），一度放宽到 {@code 25}（8.1%）；</li>
-     *   <li>但 {@code 25/1250 = 0.02} 只有**河道雕刻带** {@code 50/1300 ≈ 0.0385} 的 <b>1/1.92 宽</b> ⇒
-     *       地下河从山口露出水面时，水宽从河道的 ~48 格**突然收到**隧道的 ~25 格
-     *       —— 用户实机看到的"地下河与普通河流过渡生硬，因为河流的宽度不一致，出现宽度断层"。</li>
-     * </ol>
+     * <p>{@code RtgCellNoise.border()} 里的 {@code c} 是 {@code dNeighbour - dCandidate}
+     * （≈ 2 × 到 Voronoi 边界的距离），所以换算成方块是：半宽
+     * {@code (9 / 1250) / 2 × 1250 ≈ 4.5} 格，即一条 **约 9 格宽**的窄洞。
      *
-     * 现在取 {@code 50 × 1250 / 1300}：把河道那条带在 {@code RIVER_SEPARATION = 1250} 的量纲下
-     * **等值换算**过来 ⇒ 两条带**同宽**，地下河填满同一段河谷，接壤处不再有台阶。
-     * 频率不再靠"把带收窄"来压，而是靠门控收紧（见 {@code UndergroundRiver.HOST_MIN} /
-     * {@code MIN_DRY_HEIGHT} 与 {@code ChunkGeneratorRTG.MOUNTAIN_CHAIN_INFLUENCE_RADIUS}）。
+     * <p>rtgc 曾两次放宽它（{@code 25}、然后与河道等宽的 {@code 50 × 1250 / 1300 ≈ 48}），
+     * 目的是消除"地下河出山时水宽突变"。**那是治错了地方**：宽度突变只是表象，真正的问题是
+     * 门控把非山地也判成山、且地形没有按 RWG 的 {@code fade} 抬回山体高度，于是隧道口开在
+     * 平坦河谷正中。门控改回 RWG 的 {@code mountainChainRiverHost} 之后，洞口只出现在山体
+     * 内部；RWG 的窄洞在山口自然收成"拱形洞门"（{@code tunnelCurve} 的圆帽），不再有断层。
+     *
+     * <p>因此这里**照抄 RWG**，不再保留等宽补偿。
      */
-    private static final double TUNNEL_BAND_WIDTH = 50D * 1250D / 1300D;
+    private static final double TUNNEL_BAND_WIDTH = 9D;
     private static final float RIVER_WARP_DIVISOR = 240f;
     private static final float RIVER_WARP_STRENGTH = 220f;
     private static final double RIVER_SEPARATION = 1250D;
@@ -72,9 +72,9 @@ public final class RtgBiomeLayout {
     private final PerlinNoise perlin;
     private final PerlinNoise climateWarp;
     /** 必须保持 false：返回哈希而非距离。 */
-    private final RwgCellNoise biomecell;
+    private final RtgCellNoise biomecell;
     /** 必须 setUseDistance(true)：cell.border()/junction() 要求线性距离语义。 */
-    private final RwgCellNoise cell;
+    private final RtgCellNoise cell;
     private final PoissonPointNoise smallBiomePoints;
     private final ContinentalNoise continents;
     private final float climateWidth;
@@ -144,8 +144,8 @@ public final class RtgBiomeLayout {
 
         this.perlin = new PerlinNoise(seed);
         this.climateWarp = new PerlinNoise(seed ^ 0xBB67AE8584CAA73BL);
-        this.biomecell = new RwgCellNoise(seed, (short) 0);
-        this.cell = new RwgCellNoise(seed, (short) 0);
+        this.biomecell = new RtgCellNoise(seed, (short) 0);
+        this.cell = new RtgCellNoise(seed, (short) 0);
         this.cell.setUseDistance(true);
         this.smallBiomePoints = new PoissonPointNoise(seed ^ 0x510E527FADE682D1L, 1020D, 4);
         this.continents = new ContinentalNoise(seed ^ 0x6A09E667F3BCC909L);
@@ -198,19 +198,19 @@ public final class RtgBiomeLayout {
     }
 
     static int landmassX(final int x) {
-        return x + RwgLayoutConfig.landmassOffsetX;
+        return x + RtgLayoutConfig.landmassOffsetX;
     }
 
     static int landmassZ(final int z) {
-        return z + RwgLayoutConfig.landmassOffsetZ;
+        return z + RtgLayoutConfig.landmassOffsetZ;
     }
 
     static int biomeX(final int x) {
-        return x + RwgLayoutConfig.biomeOffsetX;
+        return x + RtgLayoutConfig.biomeOffsetX;
     }
 
     static int biomeZ(final int z) {
-        return z + RwgLayoutConfig.biomeOffsetZ;
+        return z + RtgLayoutConfig.biomeOffsetZ;
     }
 
     /**
@@ -534,7 +534,7 @@ public final class RtgBiomeLayout {
         return getRiverStrength(x, y, pX, pY);
     }
 
-    /** 地下河隧道强度 {@code [0,1]}。带宽是 rtgc 调过的（见 {@link #TUNNEL_BAND_WIDTH}）。 */
+    /** 地下河隧道强度 {@code [0,1]}。带宽照抄 RWG：{@link #TUNNEL_BAND_WIDTH} = {@code 9}。 */
     public float getRiverTunnelStrength(final int x, final int y) {
         final float warpedX = x + perlin.noise1(y / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH;
         final float warpedY = y + perlin.noise1(x / RIVER_WARP_DIVISOR) * RIVER_WARP_STRENGTH;
@@ -634,8 +634,8 @@ public final class RtgBiomeLayout {
         if (center == Long.MIN_VALUE || !canGenerateLavaCaveAt(x, z)) {
             return Long.MIN_VALUE;
         }
-        final int centerX = (int) (center >> 32) - RwgLayoutConfig.landmassOffsetX;
-        final int centerZ = (int) center - RwgLayoutConfig.landmassOffsetZ;
+        final int centerX = (int) (center >> 32) - RtgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) center - RtgLayoutConfig.landmassOffsetZ;
         return (long) centerX << 32 | centerZ & 0xffffffffL;
     }
 
@@ -653,8 +653,8 @@ public final class RtgBiomeLayout {
         }
 
         final long center = continents.getLavaCaveCenterCoordinates(shiftedX, shiftedZ);
-        final int centerX = (int) (center >> 32) - RwgLayoutConfig.landmassOffsetX;
-        final int centerZ = (int) center - RwgLayoutConfig.landmassOffsetZ;
+        final int centerX = (int) (center >> 32) - RtgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) center - RtgLayoutConfig.landmassOffsetZ;
         final boolean eligible = getNoiseAt(centerX, centerZ) > 63f;
         if (lavaCaveEligibilityMap.size() > LANDMARK_CACHE_MAX) {
             lavaCaveEligibilityMap.clear();
@@ -682,8 +682,8 @@ public final class RtgBiomeLayout {
         }
 
         final long centerCoordinates = continents.getVolcanoCenterCoordinates(landmassX, landmassZ);
-        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
-        final int centerZ = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final int centerX = (int) (centerCoordinates >> 32) - RtgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) centerCoordinates - RtgLayoutConfig.landmassOffsetZ;
         final boolean eligible = !hasRiverNearVolcano(centerX, centerZ)
                 && RealisticBiomeIslandVolcano.volcanoIsland.canGenerateAtHeight(getVolcanoBaseHeight(x, y));
         if (volcanoEligibilityMap.size() > LANDMARK_CACHE_MAX) {
@@ -734,8 +734,8 @@ public final class RtgBiomeLayout {
             return cached;
         }
         final long centerCoordinates = continents.getVolcanoCenterCoordinates(landmassX, landmassZ);
-        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
-        final int centerY = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final int centerX = (int) (centerCoordinates >> 32) - RtgLayoutConfig.landmassOffsetX;
+        final int centerY = (int) centerCoordinates - RtgLayoutConfig.landmassOffsetZ;
         final int climate = getClimateAt(centerX, centerY);
         IRealisticBiome biome = continents.isIslandVolcano(landmassX, landmassZ)
                 ? selectIslandBiome(1, climate, centerX, centerY)
@@ -775,8 +775,8 @@ public final class RtgBiomeLayout {
         if (centerCoordinates == Long.MIN_VALUE) {
             return null;
         }
-        final int centerX = (int) (centerCoordinates >> 32) - RwgLayoutConfig.landmassOffsetX;
-        final int centerZ = (int) centerCoordinates - RwgLayoutConfig.landmassOffsetZ;
+        final int centerX = (int) (centerCoordinates >> 32) - RtgLayoutConfig.landmassOffsetX;
+        final int centerZ = (int) centerCoordinates - RtgLayoutConfig.landmassOffsetZ;
         final int climate = getClimateAt(centerX, centerZ);
         IRealisticBiome biome = continents.isIslandVolcano(shiftedX, shiftedZ)
                 ? selectIslandBiome(1, climate, centerX, centerZ)

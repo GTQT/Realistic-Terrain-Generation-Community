@@ -20,7 +20,7 @@ import java.util.Random;
  *
  * by mncat77 and jtjj222. <----------
  */
-public class RwgCellNoise {
+public class RtgCellNoise {
 
     private static final double SQRT_2 = 1.4142135623730950488;
     private static final double SQRT_3 = 1.7320508075688772935;
@@ -31,7 +31,7 @@ public class RwgCellNoise {
     private long seedOffset;
     private short distanceMethod;
 
-    public RwgCellNoise(long seed, short distanceMethod) {
+    public RtgCellNoise(long seed, short distanceMethod) {
         this.seed = seed;
         this.seedOffset = new Random(seed).nextLong();
         this.distanceMethod = distanceMethod;
@@ -119,7 +119,7 @@ public class RwgCellNoise {
             double xDist = xCandidate - x;
             double zDist = zCandidate - z;
             return (float) getDistance2D(xDist, zDist);
-        } else return ((float) RwgCellNoise
+        } else return ((float) RtgCellNoise
                 .valueNoise2D((int) (Math.floor(xCandidate)), (int) (Math.floor(zCandidate)), seed));
     }
 
@@ -343,7 +343,7 @@ public class RwgCellNoise {
             double zDist = zCandidate - z;
 
             return getDistance(xDist, yDist, zDist);
-        } else return ((double) RwgCellNoise.valueNoise3D(
+        } else return ((double) RtgCellNoise.valueNoise3D(
                 (int) (Math.floor(xCandidate)),
                 (int) (Math.floor(yCandidate)),
                 (int) (Math.floor(zCandidate)),

@@ -5,9 +5,9 @@ import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgSnowDecos;
 
 
 public class RealisticBiomeVanillaIceMountains extends RealisticBiomeBase {
@@ -42,6 +42,14 @@ public class RealisticBiomeVanillaIceMountains extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // RWG `land/RealisticBiomeSnowHills.rDecorate`（地形/地表/装饰同源）。
+        RtgSnowDecos.addSnowHills(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     /**

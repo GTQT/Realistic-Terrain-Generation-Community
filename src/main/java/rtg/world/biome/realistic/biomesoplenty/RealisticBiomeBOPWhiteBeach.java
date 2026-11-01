@@ -8,6 +8,7 @@ import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceCoastDunes;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgCoastDecos;
 
 
 /**
@@ -32,7 +33,16 @@ public class RealisticBiomeBOPWhiteBeach extends RealisticBiomeBase {
     public RealisticBiomeBOPWhiteBeach(final Biome biome) { super(biome); }
 
     @Override
-    public void initDecos() {}
+    public void initDecos() {
+
+        // RWG `coast/RealisticBiomeCoastDunes.rDecorate`（水草带）。
+        RtgCoastDecos.addCoastDunes(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
+    }
 
     @Override
     public void initConfig() {

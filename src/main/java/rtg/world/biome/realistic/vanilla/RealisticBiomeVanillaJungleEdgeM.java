@@ -1,16 +1,13 @@
 package rtg.world.biome.realistic.vanilla;
 
-import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
-import rtg.api.util.BlockUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoFallenTree;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgJungleDecos;
 
 
 public class RealisticBiomeVanillaJungleEdgeM extends RealisticBiomeBase {
@@ -45,17 +42,13 @@ public class RealisticBiomeVanillaJungleEdgeM extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        DecoFallenTree decoFallenTree = new DecoFallenTree();
-        decoFallenTree.setLoops(1);
-        decoFallenTree.getDistribution().setNoiseDivisor(100f);
-        decoFallenTree.getDistribution().setNoiseFactor(6f);
-        decoFallenTree.getDistribution().setNoiseAddend(0.8f);
-        decoFallenTree.setLogConditionChance(6);
-        decoFallenTree.setLogBlock(BlockUtil.getStateLog(EnumType.JUNGLE));
-        decoFallenTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.JUNGLE));
-        decoFallenTree.setMinSize(3);
-        decoFallenTree.setMaxSize(6);
-        this.addDeco(decoFallenTree, this.getConfig().ALLOW_LOGS.get());
+        // 推断：变体与基准 JungleEdge / JungleHills 同源（RWG `land/RealisticBiomeJungleHills`）。
+        RtgJungleDecos.addJungleHills(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

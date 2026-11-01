@@ -37,8 +37,8 @@ public class ContinentalNoise {
     private final double islandWidthRange;
     private final double voronoiRadius;
     private final double continentDilation;
-    private final RwgNoiseGenerator warpX;
-    private final RwgNoiseGenerator warpY;
+    private final RtgNoiseGenerator warpX;
+    private final RtgNoiseGenerator warpY;
     private final double warpScale;
     private final double warpStrength;
     private final double offsetX;
@@ -95,34 +95,34 @@ public class ContinentalNoise {
 
     public ContinentalNoise(long seed) {
         this.seed = seed;
-        minimumContinentWidth = Math.min(RwgLayoutConfig.minimumContinentWidth, RwgLayoutConfig.maximumContinentWidth);
-        double maximumContinentWidth = Math.max(RwgLayoutConfig.minimumContinentWidth, RwgLayoutConfig.maximumContinentWidth);
-        minimumIslandWidth = Math.min(RwgLayoutConfig.minimumIslandWidth, RwgLayoutConfig.maximumIslandWidth);
-        maximumIslandWidth = Math.max(RwgLayoutConfig.minimumIslandWidth, RwgLayoutConfig.maximumIslandWidth);
+        minimumContinentWidth = Math.min(RtgLayoutConfig.minimumContinentWidth, RtgLayoutConfig.maximumContinentWidth);
+        double maximumContinentWidth = Math.max(RtgLayoutConfig.minimumContinentWidth, RtgLayoutConfig.maximumContinentWidth);
+        minimumIslandWidth = Math.min(RtgLayoutConfig.minimumIslandWidth, RtgLayoutConfig.maximumIslandWidth);
+        maximumIslandWidth = Math.max(RtgLayoutConfig.minimumIslandWidth, RtgLayoutConfig.maximumIslandWidth);
         islandWidthRange = maximumIslandWidth - minimumIslandWidth;
         continentWidthRange = maximumContinentWidth - minimumContinentWidth;
         double averageContinentWidth = (minimumContinentWidth + maximumContinentWidth) * 0.5D;
-        voronoiRadius = averageContinentWidth + RwgLayoutConfig.averageOceanWidth;
+        voronoiRadius = averageContinentWidth + RtgLayoutConfig.averageOceanWidth;
         continentDilation = continentDilation(
                 minimumContinentWidth,
                 maximumContinentWidth,
                 voronoiRadius,
-                RwgLayoutConfig.minimumOceanWidth,
-                RwgLayoutConfig.maximumOceanFraction);
+                RtgLayoutConfig.minimumOceanWidth,
+                RtgLayoutConfig.maximumOceanFraction);
         warpScale = WARP_SCALE;
         warpStrength = WARP_STRENGTH;
         warpX = new PerlinNoise(seed ^ 0x243F6A8885A308D3L);
         warpY = new PerlinNoise(seed ^ 0x13198A2E03707344L);
         // Prevent the largest two continents from overlapping; later rounds fill the remaining holes.
-        points = new PoissonPointNoise(seed, maximumContinentWidth * 2D + RwgLayoutConfig.minimumOceanWidth, POISSON_ROUNDS);
+        points = new PoissonPointNoise(seed, maximumContinentWidth * 2D + RtgLayoutConfig.minimumOceanWidth, POISSON_ROUNDS);
         islands = new IslandPointNoise(
                 seed ^ 0xA4093822299F31D0L,
                 points,
                 maximumContinentWidth,
-                RwgLayoutConfig.minimumIslandWidth,
-                RwgLayoutConfig.maximumIslandWidth,
-                RwgLayoutConfig.minimumOceanWidth,
-                RwgLayoutConfig.islandPlacementChance);
+                RtgLayoutConfig.minimumIslandWidth,
+                RtgLayoutConfig.maximumIslandWidth,
+                RtgLayoutConfig.minimumOceanWidth,
+                RtgLayoutConfig.islandPlacementChance);
         continentVolcanoes = new ContinentLandmarkNoise(
                 seed,
                 seed ^ CONTINENT_VOLCANO_SEED_SALT,
@@ -130,7 +130,7 @@ public class ContinentalNoise {
                 minimumContinentWidth,
                 maximumContinentWidth,
                 voronoiRadius,
-                RwgLayoutConfig.averageLandmarksPerTypeAndContinent,
+                RtgLayoutConfig.averageLandmarksPerTypeAndContinent,
                 VOLCANO_ISLAND_RADIUS);
         continentLavaCaves = new ContinentLandmarkNoise(
                 seed,
@@ -139,7 +139,7 @@ public class ContinentalNoise {
                 minimumContinentWidth,
                 maximumContinentWidth,
                 voronoiRadius,
-                RwgLayoutConfig.averageLandmarksPerTypeAndContinent,
+                RtgLayoutConfig.averageLandmarksPerTypeAndContinent,
                 LAVA_CAVE_INFLUENCE_RADIUS);
 
         double[] origin = new double[5];
@@ -239,7 +239,7 @@ public class ContinentalNoise {
         result.lavaCaveCenterZ = 0D;
         result.lavaCaveLocalX = 0f;
         result.lavaCaveLocalZ = 0f;
-        if (continent >= 0D && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+        if (continent >= 0D && RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
             double[] volcano = continentVolcanoSamples.get();
             continentVolcanoes.sample(warpedX + offsetX, warpedY + offsetY, volcano);
             if (Double.isFinite(volcano[0])) {
@@ -296,7 +296,7 @@ public class ContinentalNoise {
             result.islandLocalX = (float) (x - center[2]);
             result.islandLocalZ = (float) (y - center[3]);
             result.volcano = getIslandSizeTier(result.islandWidth) == 1
-                    && random01(result.islandSeedX, result.islandSeedZ, 17) < RwgLayoutConfig.largeIslandVolcanoChance;
+                    && random01(result.islandSeedX, result.islandSeedZ, 17) < RtgLayoutConfig.largeIslandVolcanoChance;
             if (result.volcano) {
                 result.volcanoIsland = true;
                 result.volcanoKey = (long) result.islandSeedX << 32 | result.islandSeedZ & 0xffffffffL;

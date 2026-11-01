@@ -101,7 +101,7 @@ public class VoronoiResult {
      *
      * @since 1.0.8
      */
-    public final double rwgCellDistance() {
+    public final double rtgCellDistance() {
         return Math.sqrt(shortestDistance) * SpacedCellularNoise.COORDINATE_SCALE / SQRT_2;
     }
 

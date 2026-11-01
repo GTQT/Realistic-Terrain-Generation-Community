@@ -5,10 +5,11 @@ import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgSnowDecos;
 
 
 public class RealisticBiomeVanillaRiver extends RealisticBiomeBase {
@@ -39,6 +40,14 @@ public class RealisticBiomeVanillaRiver extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
+
+        // RWG `land/RealisticBiomeSnowRivers.rDecorate`（地形/地表/装饰同源）。
+        RtgSnowDecos.addSnowRivers(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     public static class TerrainVanillaRiver extends TerrainBase {

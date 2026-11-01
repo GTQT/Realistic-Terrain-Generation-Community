@@ -6,7 +6,7 @@ import biomesoplenty.api.block.BOPBlocks;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-import rtg.api.util.noise.RwgCellNoise;
+import rtg.api.util.noise.RtgCellNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.deco.DecoFallenTree;
@@ -100,7 +100,7 @@ public class RealisticBiomeBOPTropicalIsland extends RealisticBiomeBase {
      *                        baseX, baseY, chunkX, chunkY,
      *                        perlin, cell, noise);                Block[]+metadata → primer；
      *                                                             perlin → rtgWorld.simplexInstance(0)；
-     *                                                             cell   → new RwgCellNoise(worldSeed, (short)0)
+     *                                                             cell   → new RtgCellNoise(worldSeed, (short)0)
      *   }
      * </pre>
      *
@@ -146,7 +146,7 @@ public class RealisticBiomeBOPTropicalIsland extends RealisticBiomeBase {
                 mapRand.setSeed((long) chunkX * i1 + (long) chunkZ * j1 ^ rtgWorld.world().getSeed());
 
                 MapVolcano.build(primer, rtgWorld.world(), mapRand, baseX, baseZ, chunkX, chunkZ,
-                        rtgWorld.simplexInstance(0), new RwgCellNoise(rtgWorld.seed(), (short) 0), noise);
+                        rtgWorld.simplexInstance(0), new RtgCellNoise(rtgWorld.seed(), (short) 0), noise);
             }
         }
     }

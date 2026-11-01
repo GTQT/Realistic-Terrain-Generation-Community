@@ -4,12 +4,11 @@ import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.deco.collection.DecoCollectionDesert;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgDesertDecos;
 
 
 public class RealisticBiomeVanillaDesertHills extends RealisticBiomeBase {
@@ -49,8 +48,13 @@ public class RealisticBiomeVanillaDesertHills extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionDesert(this.getConfig()));
+        // RWG `desert/RealisticBiomeDesertMountains.rDecorate`（地形 TerrainHilly 230/120/0 同源）。
+        RtgDesertDecos.addDesertMountains(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

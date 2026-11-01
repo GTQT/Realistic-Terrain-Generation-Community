@@ -6,14 +6,10 @@ import net.minecraft.world.biome.Biome;
 import rtg.api.util.PlateauUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.*;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
-import rtg.api.world.deco.collection.trees.DecoCollectionSavannaTrees;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGAcaciaBucheri;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMesa;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgSavannaDecos;
 
 
 public class RealisticBiomeVanillaSavannaPlateau extends RealisticBiomeBase {
@@ -56,55 +52,8 @@ public class RealisticBiomeVanillaSavannaPlateau extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-
-        DecoBoulder decoBoulder1 = new DecoBoulder();
-        decoBoulder1.setBoulderBlock(Blocks.COBBLESTONE.getDefaultState());
-        decoBoulder1.setMaxY(80);
-        decoBoulder1.setChance(24);
-        this.addDeco(decoBoulder1);
-
-        DecoBoulder decoBoulder2 = new DecoBoulder();
-        decoBoulder2.setBoulderBlock(Blocks.COBBLESTONE.getDefaultState());
-        decoBoulder1.setMinY(110);
-        decoBoulder2.setChance(24);
-        this.addDeco(decoBoulder2);
-
-        DecoShrub acaciaShrub = new DecoShrub();
-        acaciaShrub.setLogBlock(Blocks.LOG2.getDefaultState());
-        acaciaShrub.setLeavesBlock(Blocks.LEAVES2.getDefaultState());
-        acaciaShrub.setMaxY(160);
-        acaciaShrub.setLoopMultiplier(2f);
-        acaciaShrub.setChance(9);
-        this.addDeco(acaciaShrub);
-
-        TreeRTG acaciaTree = new TreeRTGAcaciaBucheri();
-        acaciaTree.setLogBlock(Blocks.LOG2.getDefaultState());
-        acaciaTree.setLeavesBlock(Blocks.LEAVES2.getDefaultState());
-        acaciaTree.setMinTrunkSize(12);
-        acaciaTree.setMaxTrunkSize(16);
-        //this.addTree(acaciaTree);
-
-        DecoTree acaciaTrees = new DecoTree(acaciaTree);
-        acaciaTrees.setStrengthFactorForLoops(2f);
-        acaciaTrees.setTreeType(DecoTree.TreeType.RTG_TREE);
-        acaciaTrees.setTreeCondition(DecoTree.TreeCondition.RANDOM_CHANCE);
-        acaciaTrees.setTreeConditionChance(12);
-        acaciaTrees.setMaxY(90);
-        //this.addDeco(acaciaTrees);
-        this.addDeco(new DecoVariableAcacia());
-
-        DecoCactus decoCactus = new DecoCactus();
-        decoCactus.setMaxY(160);
-        decoCactus.setLoops(60);
-        decoCactus.setChance(8);
-        this.addDeco(decoCactus, this.getConfig().ALLOW_CACTUS.get());
-
-        DecoDoubleGrass decoDoubleGrass = new DecoDoubleGrass();
-        decoDoubleGrass.setMaxY(128);
-        decoDoubleGrass.setStrengthFactor(3f);
-        this.addDeco(decoDoubleGrass);
-        this.treeGenerator = new DecoCollectionSavannaTrees(this.getConfig());
+        // 推断：RWG 无 plateau 概念，变体按“同族”接 `savanna/RealisticBiomeSavannaForest`。
+        RtgSavannaDecos.addSavannaForest(this);
     }
 
     @Override

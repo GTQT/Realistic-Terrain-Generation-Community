@@ -4,12 +4,11 @@ package rtg.world.biome.realistic.vanilla;
 import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.deco.collection.DecoCollectionExtremeHillsCommon;
-import rtg.api.world.deco.collection.DecoCollectionExtremeHillsPlus;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgJungleDecos;
 
 
 public class RealisticBiomeVanillaExtremeHillsPlus extends RealisticBiomeBase {
@@ -44,8 +43,15 @@ public class RealisticBiomeVanillaExtremeHillsPlus extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
-        this.addDecoCollection(new DecoCollectionExtremeHillsPlus(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionExtremeHillsCommon(this.getConfig()));
+
+        // 依据：地形是 RWG `land/RealisticBiomeJungleHills -> TerrainHilly(230f,120f,50f)`，
+        // 装饰沿用同一来源（RWG 的 ExtremeHillsPlus 没有独立条目）。
+        RtgJungleDecos.addJungleHills(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     /**

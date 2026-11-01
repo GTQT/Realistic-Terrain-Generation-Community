@@ -4,7 +4,7 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkPrimer;
-import rtg.api.util.noise.RwgCellNoise;
+import rtg.api.util.noise.RtgCellNoise;
 import rtg.api.util.noise.SimplexNoise;
 
 import java.util.Random;
@@ -48,7 +48,7 @@ import java.util.Random;
 public class MapVolcano {
 
     public static void build(ChunkPrimer primer, World world, Random mapRand, int baseX, int baseY,
-            int chunkX, int chunkY, SimplexNoise perlin, RwgCellNoise cell, float[] noise) {
+            int chunkX, int chunkY, SimplexNoise perlin, RtgCellNoise cell, float[] noise) {
         int i, j;
         float distance, height, obsidian;
         IBlockState b;

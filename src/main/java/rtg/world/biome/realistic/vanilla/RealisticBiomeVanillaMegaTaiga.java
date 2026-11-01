@@ -1,20 +1,24 @@
 package rtg.world.biome.realistic.vanilla;
 
-import net.minecraft.block.BlockPlanks.EnumType;
 import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import rtg.api.util.BlockUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.*;
-import rtg.api.world.deco.collection.DecoCollectionMegaTaiga;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgRedwoodDecos;
 
 
+/**
+ * 原版巨型针叶林。装饰接 RWG {@code land/RealisticBiomeRedwood.rDecorate}
+ * （巨型松树 + 小松/橡树/白桦 + 倒木/灌木/野麦/南瓜/花/草）。
+ *
+ * <p>推断说明：RWG 的 Redwood 实际是巨型松树，地形 `TerrainHilly(230,120,90)`；
+ * rtgc 的 MegaTaiga 地形走的是 TaigaHills 的 `TerrainMountainRiver`，但“巨型针叶林”
+ * 这一观感与 RWG Redwood 最接近，故装饰取它。
+ */
 public class RealisticBiomeVanillaMegaTaiga extends RealisticBiomeBase {
 
     public static Biome biome = Biomes.REDWOOD_TAIGA;
@@ -45,43 +49,12 @@ public class RealisticBiomeVanillaMegaTaiga extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        DecoBoulder decoBoulder = new DecoBoulder();
-        decoBoulder.setBoulderBlock(Blocks.MOSSY_COBBLESTONE.getDefaultState());
-        decoBoulder.setChance(16);
-        decoBoulder.setMaxY(95);
-        decoBoulder.setStrengthFactor(3f);
-        this.addDeco(decoBoulder);
+        RtgRedwoodDecos.addRedwood(this);
+    }
 
-        this.addDecoCollection(new DecoCollectionMegaTaiga(this.getConfig()));
-
-        DecoFallenTree decoFallenTree = new DecoFallenTree();
-        decoFallenTree.getDistribution().setNoiseDivisor(100f);
-        decoFallenTree.getDistribution().setNoiseFactor(6f);
-        decoFallenTree.getDistribution().setNoiseAddend(0.8f);
-        decoFallenTree.setLogConditionChance(6);
-        decoFallenTree.setLogBlock(BlockUtil.getStateLog(EnumType.SPRUCE));
-        decoFallenTree.setLeavesBlock(BlockUtil.getStateLeaf(EnumType.SPRUCE));
-        decoFallenTree.setMinSize(3);
-        decoFallenTree.setMaxSize(6);
-        this.addDeco(decoFallenTree, this.getConfig().ALLOW_LOGS.get());
-
-        DecoShrub decoShrub = new DecoShrub();
-        decoShrub.setMaxY(100);
-        decoShrub.setLoopMultiplier(1f);
-        decoShrub.setChance(10);
-        this.addDeco(decoShrub);
-
-        //decoBaseBiomeDecorations.setEqualsZeroChance(3);
-
-        DecoMushrooms decoMushrooms = new DecoMushrooms();
-        decoMushrooms.setMaxY(90);
-        decoMushrooms.setRandomFloat(3f);
-        this.addDeco(decoMushrooms);
-
-        DecoPumpkin decoPumpkin = new DecoPumpkin();
-        decoPumpkin.setMaxY(90);
-        decoPumpkin.setRandomFloat(20f);
-        this.addDeco(decoPumpkin);
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     public static class TerrainVanillaMegaTaiga extends TerrainBase {
@@ -96,5 +69,4 @@ public class RealisticBiomeVanillaMegaTaiga extends RealisticBiomeBase {
             return terrainMountainRiver(x, y, rtgWorld, river);
         }
     }
-
 }

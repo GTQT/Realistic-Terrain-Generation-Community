@@ -5,12 +5,10 @@ import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
-import rtg.api.world.deco.collection.DecoCollectionSavanna;
-import rtg.api.world.deco.collection.trees.DecoCollectionSavannaTrees;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMesa;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgSavannaDecos;
 
 
 public class RealisticBiomeVanillaSavannaM extends RealisticBiomeBase {
@@ -54,9 +52,8 @@ public class RealisticBiomeVanillaSavannaM extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionSavanna(this.getConfig()));
-        this.treeGenerator = new DecoCollectionSavannaTrees(this.getConfig());
+        // 推断：M 变体按“同族”接 RWG `savanna/RealisticBiomeSavannaForest`。
+        RtgSavannaDecos.addSavannaForest(this);
     }
 
     @Override

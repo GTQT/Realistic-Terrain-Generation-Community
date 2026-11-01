@@ -26,7 +26,7 @@ import java.util.Random;
  * @author Justin Couch
  * @version $Revision: 1.4 $
  */
-public class PerlinNoise implements SimplexNoise, RwgNoiseGenerator {
+public class PerlinNoise implements SimplexNoise, RtgNoiseGenerator {
 
     private Random rand;
 

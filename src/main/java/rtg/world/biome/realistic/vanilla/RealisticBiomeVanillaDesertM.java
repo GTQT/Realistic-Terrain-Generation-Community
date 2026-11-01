@@ -5,12 +5,10 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionDesert;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgDesertDecos;
 
 
 public class RealisticBiomeVanillaDesertM extends RealisticBiomeBase {
@@ -51,8 +49,13 @@ public class RealisticBiomeVanillaDesertM extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionDesert(this.getConfig()));
+        // 推断：M 变体无 RWG 对应，按沙漠族山地档（DesertMountains）接。
+        RtgDesertDecos.addDesertMountains(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

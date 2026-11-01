@@ -10,7 +10,7 @@ package rtg.api.world;
  * 导致调整海平面只改变水面高度，沙滩线、悬崖带、河流水面、表层门槛全部不动。
  * 本类把这些值统一派生自 {@link #seaLevel()}。
  * <p>
- * <b>为什么是静态</b>：{@code TerrainBase.calcCliff()} 与 {@code TerrainBase.rwgRiverBed()}
+ * <b>为什么是静态</b>：{@code TerrainBase.calcCliff()} 与 {@code TerrainBase.rtgRiverBed()}
  * 被约 300 个群系类调用，改签名会波及数百个文件。二者都是无 {@code RTGWorld} 参数的静态方法，
  * 因此这里用"生成期当前水位"的静态持有者桥接。
  * <p>

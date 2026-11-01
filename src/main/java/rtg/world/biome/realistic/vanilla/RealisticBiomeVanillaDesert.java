@@ -1,23 +1,30 @@
 package rtg.world.biome.realistic.vanilla;
 
 import net.minecraft.init.Biomes;
+import net.minecraft.init.Blocks;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
+import net.minecraft.world.gen.feature.*;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionDesert;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
+import rtg.api.world.deco.DecoRtgDecorator;
 import rtg.api.world.gen.RTGChunkGenSettings;
+import rtg.api.world.gen.feature.*;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceDesertMountain;
+import rtg.api.world.terrain.TerrainBase;
 
 
 public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
 
     public static Biome biome = Biomes.DESERT;
     public static Biome river = Biomes.RIVER;
+
+    /** RWG {@code DecoBlob} 认定的可落地表。 */
+    private static final java.util.Collection<net.minecraft.block.Block> BLOB_GROUND =
+            java.util.Collections.unmodifiableCollection(java.util.Arrays.asList(
+                    Blocks.GRASS, Blocks.DIRT, Blocks.STONE, Blocks.GRAVEL, Blocks.SAND));
 
     public RealisticBiomeVanillaDesert() {
 
@@ -53,8 +60,101 @@ public class RealisticBiomeVanillaDesert extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionDesert(this.getConfig()));
+        // RWG `desert/RealisticBiomeDesert.rDecorate`，strength = 1。
+        this.addDeco(new DecoRtgDecorator((world, rand, chunkX, chunkZ, river, rtgWorld) -> {
+
+            if (rand.nextInt(4) == 0) {
+                final int i1 = chunkX + rand.nextInt(16) + 8;
+                final int j1 = chunkZ + rand.nextInt(16) + 8;
+                final int k1 = world.getHeight(i1, j1);
+                if (k1 < 85) {
+                    new WorldGenBlob(Blocks.COBBLESTONE.getDefaultState(), 0, BLOB_GROUND, false)
+                            .generate(world, rand, new BlockPos(i1, k1, j1));
+                }
+            }
+
+            if (river > 0.7f) {
+                if (river > 0.86f) {
+                    for (int b33 = 0; b33 < 10; b33++) {
+                        final int j6 = chunkX + rand.nextInt(16) + 8;
+                        final int k10 = chunkZ + rand.nextInt(16) + 8;
+                        final int z52 = world.getHeight(j6, k10);
+
+                        if (z52 < 100f || (z52 < 120f && rand.nextInt(10) == 0)) {
+                            final WorldGenerator worldgenerator = rand.nextInt(4) != 0
+                                    ? new WorldGenShrub(Blocks.LOG.getDefaultState(), Blocks.LEAVES.getDefaultState())
+                                    : new WorldGenSavannah(1);
+                            worldgenerator.generate(world, rand, new BlockPos(j6, z52, k10));
+                        }
+                    }
+                }
+
+                for (int k18 = 0; k18 < 12; k18++) {
+                    final int k21 = chunkX + rand.nextInt(16) + 8;
+                    final int j23 = rand.nextInt(160);
+                    final int k24 = chunkZ + rand.nextInt(16) + 8;
+                    if (j23 < 120f) {
+                        new WorldGenRtgCacti(false).generate(world, rand, new BlockPos(k21, j23, k24));
+                    }
+                }
+
+                for (int f25 = 0; f25 < 2; f25++) {
+                    final int i18 = chunkX + rand.nextInt(16) + 8;
+                    final int i23 = chunkZ + rand.nextInt(16) + 8;
+                    new WorldGenReed().generate(world, rand, new BlockPos(i18, 60 + rand.nextInt(8), i23));
+                }
+
+                if (rand.nextInt(28) == 0) {
+                    final int j16 = chunkX + rand.nextInt(16) + 8;
+                    final int j18 = rand.nextInt(128);
+                    final int j21 = chunkZ + rand.nextInt(16) + 8;
+                    new WorldGenPumpkin().generate(world, rand, new BlockPos(j16, j18, j21));
+                }
+
+                for (int f23 = 0; f23 < 3; f23++) {
+                    final int j15 = chunkX + rand.nextInt(16) + 8;
+                    final int j17 = rand.nextInt(128);
+                    final int j20 = chunkZ + rand.nextInt(16) + 8;
+                    new WorldGenRtgFlowers(new int[] { 9, 9, 9, 9, 3, 3, 3, 3, 3, 2, 2, 2, 11, 11, 11 })
+                            .generate(world, rand, new BlockPos(j15, j17, j20));
+                }
+
+                for (int l14 = 0; l14 < 15; l14++) {
+                    final int l19 = chunkX + rand.nextInt(16) + 8;
+                    final int k22 = rand.nextInt(128);
+                    final int j24 = chunkZ + rand.nextInt(16) + 8;
+
+                    if (rand.nextInt(6) == 0) {
+                        new WorldGenRtgGrass(net.minecraft.block.BlockDoublePlant.EnumPlantType.GRASS)
+                                .generate(world, rand, new BlockPos(l19, k22, j24));
+                    } else {
+                        new WorldGenRtgGrass(WorldGenRtgGrass.tallGrass())
+                                .generate(world, rand, new BlockPos(l19, k22, j24));
+                    }
+                }
+            }
+
+            for (int k18 = 0; k18 < 5; k18++) {
+                final int k21 = chunkX + rand.nextInt(16) + 8;
+                final int j23 = 64 + rand.nextInt(64);
+                final int k24 = chunkZ + rand.nextInt(16) + 8;
+                if (j23 < 120f) {
+                    new WorldGenRtgCacti(false).generate(world, rand, new BlockPos(k21, j23, k24));
+                }
+            }
+
+            for (int i15 = 0; i15 < 1; i15++) {
+                final int i17 = chunkX + rand.nextInt(16) + 8;
+                final int i20 = 64 + rand.nextInt(64);
+                final int l22 = chunkZ + rand.nextInt(16) + 8;
+                new WorldGenDeadBush().generate(world, rand, new BlockPos(i17, i20, l22));
+            }
+        }));
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

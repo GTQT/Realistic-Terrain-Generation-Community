@@ -1,15 +1,14 @@
 package rtg.world.gen;
 
-import java.util.Random;
-
 import net.minecraft.block.BlockVine;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-
 import rtg.api.world.RTGWorld;
+
+import java.util.Random;
 
 
 /**
@@ -145,7 +144,7 @@ public final class RiverCaveVines {
      * （洞顶那一格 → {@link #MIN_Y}，即水面之上那一格）：
      *
      * <ul>
-     *   <li><b>隧道段</b>：洞顶多在 63–70（{@code 62 + round(√tunnel × 8)}）⇒ 可用 1–8 格，
+     *   <li><b>隧道段</b>：洞顶多在 62–73（{@code 62 + round(√(s(2-s)) × 11)}，RWG 原式）⇒ 可用 1–11 格，
      *       长度均值 ≈4.5，最长的那一株**正好触到水面**（约 1/8 的藤会到水面）；</li>
      *   <li><b>洞厅段</b>：洞顶可到 80–100 ⇒ 可用十几到三十几格，偶尔出现垂到水面的长藤帘。</li>
      * </ul>

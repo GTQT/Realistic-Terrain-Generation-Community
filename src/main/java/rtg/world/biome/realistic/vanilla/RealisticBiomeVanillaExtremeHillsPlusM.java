@@ -3,12 +3,11 @@ package rtg.world.biome.realistic.vanilla;
 
 import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
-import rtg.api.world.deco.collection.DecoCollectionExtremeHillsCommon;
-import rtg.api.world.deco.collection.DecoCollectionExtremeHillsPlusM;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgForestDecos;
 
 
 public class RealisticBiomeVanillaExtremeHillsPlusM extends RealisticBiomeBase {
@@ -41,8 +40,15 @@ public class RealisticBiomeVanillaExtremeHillsPlusM extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
-        this.addDecoCollection(new DecoCollectionExtremeHillsPlusM(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionExtremeHillsCommon(this.getConfig()));
+
+        // 推断：RWG 无此变体；地形是 Grand Mountain（森林山地），装饰取最接近的
+        // forest/RealisticBiomeWoodMountains（其 rDecorate 与 WoodHills 相同）。
+        RtgForestDecos.addWoodHills(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
 }

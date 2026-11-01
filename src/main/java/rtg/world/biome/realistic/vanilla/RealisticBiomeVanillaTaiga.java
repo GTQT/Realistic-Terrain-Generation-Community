@@ -5,11 +5,11 @@ import net.minecraft.init.Biomes;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.deco.collection.DecoCollectionTaiga;
-import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
 import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainSnow;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgTaigaDecos;
 
 
 public class RealisticBiomeVanillaTaiga extends RealisticBiomeBase {
@@ -44,7 +44,8 @@ public class RealisticBiomeVanillaTaiga extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        this.addDecoCollection(new DecoCollectionTaiga(this.getConfig(), 10f));
+        // RWG `land/RealisticBiomeTaigaHills.rDecorate`（地形/地表/装饰同源）。
+        RtgTaigaDecos.addTaigaHills(this);
     }
 
     public boolean allowVanillaTrees() {return false;}

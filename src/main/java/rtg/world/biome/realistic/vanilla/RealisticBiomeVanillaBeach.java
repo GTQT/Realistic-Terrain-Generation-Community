@@ -2,16 +2,13 @@ package rtg.world.biome.realistic.vanilla;
 
 
 import net.minecraft.init.Biomes;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
-import rtg.api.world.deco.DecoTree;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGCocosNucifera;
+import rtg.api.world.biome.RealisticBiomeBase;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceCoastDunes;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.api.world.biome.RealisticBiomeBase;
+import rtg.world.biome.RtgCoastDecos;
 
 
 public class RealisticBiomeVanillaBeach extends RealisticBiomeBase {
@@ -46,24 +43,13 @@ public class RealisticBiomeVanillaBeach extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        // Scattered palm trees.
+        // RWG `coast/RealisticBiomeCoastDunes.rDecorate`：只有水草带（没有棕榈树）。
+        RtgCoastDecos.addCoastDunes(this);
+    }
 
-        TreeRTG nuciferaTree = new TreeRTGCocosNucifera();
-        nuciferaTree.setMinTrunkSize(7);
-        nuciferaTree.setMaxTrunkSize(9);
-        nuciferaTree.setMinCrownSize(6);
-        nuciferaTree.setMaxCrownSize(8);
-        nuciferaTree.getValidGroundBlocks().clear();
-        nuciferaTree.getValidGroundBlocks().add(Blocks.SAND.getDefaultState());
-        this.addTree(nuciferaTree);
-
-        DecoTree palmTrees = new DecoTree(nuciferaTree);
-        palmTrees.setTreeType(DecoTree.TreeType.RTG_TREE);
-        palmTrees.setTreeCondition(DecoTree.TreeCondition.NOISE_GREATER_AND_RANDOM_CHANCE);
-        palmTrees.setTreeConditionNoise(-0.2f);
-        palmTrees.setTreeConditionChance(12);
-        palmTrees.setMaxY(68);
-        this.addDeco(palmTrees, this.getConfig().ALLOW_PALM_TREES.get());
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     public static class TerrainVanillaBeach extends TerrainBase {

@@ -7,12 +7,10 @@ import net.minecraft.world.chunk.ChunkPrimer;
 import rtg.api.util.PlateauUtil;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionDesertRiver;
-import rtg.api.world.deco.collection.DecoCollectionMesa;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMesa;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgMesaDecos;
 
 
 public class RealisticBiomeVanillaMesaPlateau extends RealisticBiomeBase {
@@ -56,8 +54,14 @@ public class RealisticBiomeVanillaMesaPlateau extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
-        this.addDecoCollection(new DecoCollectionDesertRiver(this.getConfig()));
-        this.addDecoCollection(new DecoCollectionMesa(this.getConfig()));
+
+        // RWG `savanna/RealisticBiomeMesaPlains.rDecorate`（地形 TerrainMesa 同源）。
+        RtgMesaDecos.addMesaPlains(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

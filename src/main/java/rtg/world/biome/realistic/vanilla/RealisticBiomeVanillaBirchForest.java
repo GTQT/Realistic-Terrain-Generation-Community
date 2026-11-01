@@ -4,11 +4,10 @@ import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionBirchForest;
-import rtg.api.world.deco.collection.trees.DecoCollectionBirchForestTrees;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceMountainStone;
 import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgForestDecos;
 
 
 public class RealisticBiomeVanillaBirchForest extends RealisticBiomeBase {
@@ -44,8 +43,9 @@ public class RealisticBiomeVanillaBirchForest extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
-        this.addDecoCollection(new DecoCollectionBirchForest(this.getConfig()));
-        this.treeGenerator = new DecoCollectionBirchForestTrees(this.getConfig());
+
+        // RWG `forest/RealisticBiomeWoodHills.rDecorate`（地形/地表/装饰同源）。
+        RtgForestDecos.addWoodHills(this);
     }
 
 //    @Override

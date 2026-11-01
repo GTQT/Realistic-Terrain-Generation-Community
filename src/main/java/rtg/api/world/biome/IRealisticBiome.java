@@ -77,7 +77,7 @@ public interface IRealisticBiome {
      *   <li>{@code NoiseGenerator perlin + CellNoise cell} → 实现内用
      *       {@code rtgWorld.simplexInstance(0)}（同一算法的 P 与 C 实例，见
      *       {@code RealisticBiomeBOPTropicalIsland#rMapGen}）与自建的
-     *       {@code new RwgCellNoise(worldSeed, (short) 0)}。</li>
+     *       {@code new RtgCellNoise(worldSeed, (short) 0)}。</li>
      * </ul>
      *
      * @param worldSeed 世界种子（RWG 的 {@code Long seed} 形参 / {@code world.getSeed()}）

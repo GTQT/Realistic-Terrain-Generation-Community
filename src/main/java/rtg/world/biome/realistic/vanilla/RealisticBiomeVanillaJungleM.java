@@ -4,11 +4,10 @@ import net.minecraft.init.Biomes;
 import net.minecraft.world.biome.Biome;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.collection.DecoCollectionJungle;
 import rtg.api.world.surface.SurfaceBase;
-import rtg.api.world.terrain.TerrainBase;
-
 import rtg.api.world.surface.SurfaceMountainStone;
+import rtg.api.world.terrain.TerrainBase;
+import rtg.world.biome.RtgJungleDecos;
 
 
 public class RealisticBiomeVanillaJungleM extends RealisticBiomeBase {
@@ -44,7 +43,14 @@ public class RealisticBiomeVanillaJungleM extends RealisticBiomeBase {
 
     @Override
     public void initDecos() {
-        this.addDecoCollection(new DecoCollectionJungle(this.getConfig()));
+
+        // 推断：变体与基准 JungleHills 同源（RWG `land/RealisticBiomeJungleHills`）。
+        RtgJungleDecos.addJungleHills(this);
+    }
+
+    @Override
+    public boolean allowVanillaTrees() {
+        return false;
     }
 
     @Override

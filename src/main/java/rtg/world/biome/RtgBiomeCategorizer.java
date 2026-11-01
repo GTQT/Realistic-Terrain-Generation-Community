@@ -16,10 +16,10 @@ import java.util.Map;
 /**
  * 把 rtgc 的现实主义群系分类进 RWG 布局的「气候 × 位置」格子里。
  *
- * <h2>能抄的部分已经抄了：{@link #RWG_PLACEMENTS}</h2>
+ * <h2>能抄的部分已经抄了：{@link #RTG_PLACEMENTS}</h2>
  * RWG 的 {@code Support*.java} 对它的群系**逐个手写**了 {@code BiomeCategory} 与
  * {@code BiomePlacement}。凡 rtgc 里存在同名群系（BOP 与 MC 的那些），那份标注就是
- * **可抄的权威数据** —— 1.0.33 同版本追加起由 {@link #RWG_PLACEMENTS} 抄录并**优先于一切启发式**。
+ * **可抄的权威数据** —— 1.0.33 同版本追加起由 {@link #RTG_PLACEMENTS} 抄录并**优先于一切启发式**。
  * 剩下只有 rtgc 独有的群系（约 110 个）才走下面的规则。
  *
  * <h2>气候判定的依据</h2>
@@ -52,7 +52,7 @@ import java.util.Map;
  *             槽位**优先级最高**，在循环结束后覆盖（否则会被原版 {@code minecraft:ocean} 顶掉）；</li>
  *         <li>其余（原版/BOP 的海洋）→ 直接写入槽位，可能被上面第 2 类覆盖。</li>
  *       </ol></li>
- *   <li><b>RWG 显式标注</b>（{@link #RWG_PLACEMENTS}）→ 只进该 placement 池，
+ *   <li><b>RWG 显式标注</b>（{@link #RTG_PLACEMENTS}）→ 只进该 placement 池，
  *       **不进 core**（忠实于 {@code Support.addBiome} 在 {@code Support.java:218-221} 的 {@code return}）；
  *       其中就包含 RWG 的 {@code LITTORAL} 成员（沼泽/红树）与三个边界池的成员；</li>
  *   <li><b>河流</b>（RIVER 标签或名字含 {@code river}）→ **不进布局**：rtgc 的河流由
@@ -111,7 +111,7 @@ public final class RtgBiomeCategorizer {
         /** 归到上面两个钩子上的群系数（0 或 2）。 */
         public int oceanPatch;
         /** 按 RWG `Support*.java` 的**显式** placement 归位的群系数（不再进 core）。 */
-        public int rwgPlaced;
+        public int rtgPlaced;
         public int river;
         public int land;
         public int untyped;
@@ -197,7 +197,7 @@ public final class RtgBiomeCategorizer {
                 } else {
                     layout.setOceanBiome(climate, name.contains("deep"), realistic);
                 }
-            } else if (rwgPlacementFor(key) != null) {
+            } else if (rtgPlacementFor(key) != null) {
                 // ---- RWG 显式 placement（**照抄**，不是推断）----
                 //
                 // 顺序很关键：RWG 的归属来自 `Support*.java` 里的**显式调用**，是权威数据；
@@ -217,9 +217,9 @@ public final class RtgBiomeCategorizer {
                 //
                 // ⚠ 与 RWG 一致：`placement != CORE` 的群系**只进该池，不进 core**
                 //（`Support.addBiome` 在 `Support.java:218-221` 直接 `return`）。
-                final RwgPlace place = rwgPlacementFor(key);
+                final RtgPlace place = rtgPlacementFor(key);
                 layout.add(realistic, place.climate, place.placement);
-                report.rwgPlaced++;
+                report.rtgPlaced++;
                 report.landByClimate[place.climate.ordinal()]++;
                 MATCHED_PLACEMENTS.add(place.name);
             } else if (isRiver(name, base)) {
@@ -238,7 +238,7 @@ public final class RtgBiomeCategorizer {
             } else if (islandBiome(key)) {
                 // C3：RWG 的 `ISLAND` 池（`placement != CORE` ⇒ **不进 core**）。
                 // RWG 那边这个池实际是空的，岛屿靠 smallIsland/largeIsland 两级；
-                // rtgc 没有 RWG 的两级成员（见 RWG_PLACEMENTS 注释），所以把 rtgc **自带名字**
+                // rtgc 没有 RWG 的两级成员（见 RTG_PLACEMENTS 注释），所以把 rtgc **自带名字**
                 // 的岛屿群系放进这一级，再由 RtgBiomeLayout.selectIslandBiome 做核心池兜底。
                 layout.add(realistic, climate, Placement.ISLAND);
                 report.island++;
@@ -252,7 +252,7 @@ public final class RtgBiomeCategorizer {
                 // 它的海岸只有 `continent < 24` 处的 `coastIce` / `coastDunes` 两个专用群系
                 //（`ChunkManagerRealistic:590-593`，rtgc 已按 `COLD_BEACH` / `BEACH` 接好）。
                 // 而 RWG 的 LITTORAL 池里装的是**沼泽/红树**（bayou / deadSwamp / lushSwamp /
-                // mangrove / sludgepit / tropics，全部 WET），见上方 `RWG_PLACEMENTS`。
+                // mangrove / sludgepit / tropics，全部 WET），见上方 `RTG_PLACEMENTS`。
                 //
                 // 旧写法把"字典标了 BEACH 或名字含 beach/shore"的群系全塞进 LITTORAL，
                 // 于是**每个气候**的 LITTORAL 池都非空 ⇒ `getBiomeDataAt` 的滨海覆盖
@@ -386,7 +386,7 @@ public final class RtgBiomeCategorizer {
             }
             Logger.info("[RTG] 具名计数：深海槽位={}/4 浅海槽位={}/4 海洋patch={} RWG显式归位={} "
                     + "河流(未进布局)={} 岛屿={} 陆地={} 无法分类={}",
-                    report.oceanDeep, report.oceanShallow, report.oceanPatch, report.rwgPlaced, report.river,
+                    report.oceanDeep, report.oceanShallow, report.oceanPatch, report.rtgPlaced, report.river,
                     report.island, report.land, report.untyped);
 
             // ---- 边界/滨海池的成员：过渡带与海岸长什么样，全看这几行 ----
@@ -444,7 +444,7 @@ public final class RtgBiomeCategorizer {
     }
 
     /**
-     * 把 {@code RWG_PLACEMENTS} 的**覆盖率**打出来：RWG 标了、但 rtgc 里找不到对应群系的条目。
+     * 把 {@code RTG_PLACEMENTS} 的**覆盖率**打出来：RWG 标了、但 rtgc 里找不到对应群系的条目。
      *
      * <p>为什么必须看得见：这些条目**决定了池子有没有内容**。例如
      * {@code jadeCliffs → COLD / HOT_BORDER} 缺失，就意味着 `veryHotBorder[COLD]`
@@ -455,7 +455,7 @@ public final class RtgBiomeCategorizer {
     private static void logPlacementCoverage() {
         final StringBuilder missing = new StringBuilder();
         int hit = 0;
-        for (final RwgPlace p : RWG_PLACEMENTS) {
+        for (final RtgPlace p : RTG_PLACEMENTS) {
             if (MATCHED_PLACEMENTS.contains(p.name)) {
                 hit++;
             } else {
@@ -463,7 +463,7 @@ public final class RtgBiomeCategorizer {
                        .append(p.placement).append(") ");
             }
         }
-        Logger.info("[RTG] RWG placement 覆盖：{}/{} 条在 rtgc 找到对应群系。", hit, RWG_PLACEMENTS.length);
+        Logger.info("[RTG] RWG placement 覆盖：{}/{} 条在 rtgc 找到对应群系。", hit, RTG_PLACEMENTS.length);
         if (missing.length() > 0) {
             Logger.info("[RTG]   未匹配（rtgc 无此群系 ⇒ 该池为空，按 RWG 一样落到核心池）：{}", missing.toString());
         }
@@ -509,7 +509,7 @@ public final class RtgBiomeCategorizer {
     private static final double[] MEASURED_BAND_SHARE = { 0.1399, 0.2977, 0.2845, 0.2779 };
 
     /** RWG 自身的分布（去掉 3 条全局 SMALL 后的 94 条），用于并排显示"我们离 RWG 有多远"。 */
-    private static final double[] RWG_BIOME_SHARE = { 13d / 94d, 30d / 94d, 24d / 94d, 27d / 94d };
+    private static final double[] RTG_BIOME_SHARE = { 13d / 94d, 30d / 94d, 24d / 94d, 27d / 94d };
 
     /**
      * 把「陆地群系数」与「气候带面积占比」并排打印，直接暴露归类偏斜（D3）。
@@ -535,12 +535,12 @@ public final class RtgBiomeCategorizer {
             final double share = count / (double) land;
             final double expected = MEASURED_BAND_SHARE[i];
             final double ratio = expected <= 0d ? 0d : share / expected;
-            final double rwgRatio = RWG_BIOME_SHARE[i] <= 0d ? 0d : share / RWG_BIOME_SHARE[i];
+            final double rtgRatio = RTG_BIOME_SHARE[i] <= 0d ? 0d : share / RTG_BIOME_SHARE[i];
             sb.append(c).append('=').append(count)
               .append("(占比").append(String.format(java.util.Locale.ROOT, "%.1f%%", share * 100d))
               .append("/带面积").append(String.format(java.util.Locale.ROOT, "%.1f%%", expected * 100d))
               .append(",倍率").append(String.format(java.util.Locale.ROOT, "%.2f", ratio))
-              .append("/RWG").append(String.format(java.util.Locale.ROOT, "%.2f", rwgRatio))
+              .append("/RWG").append(String.format(java.util.Locale.ROOT, "%.2f", rtgRatio))
               .append(") ");
             if (ratio < 0.6d || ratio > 1.6d) {
                 skewed = true;
@@ -814,46 +814,66 @@ public final class RtgBiomeCategorizer {
      * {@code fungiForest} / {@code sludgepit} / {@code landOfLakesMarsh} / {@code baseRiver*}）**不写进来**，
      * 免得把不存在的东西"填"进池里；它们的缺口在启动日志里单独报告。
      */
-    private static final RwgPlace[] RWG_PLACEMENTS = {
+    private static final RtgPlace[] RTG_PLACEMENTS = {
             // ── SupportBOP.java（行号为 RWG 参考仓库中的行号）────────────────
-            new RwgPlace("bayou", Climate.WET, Placement.LITTORAL), // :93
-            new RwgPlace("borealforest", Climate.SNOW, Placement.HOT_BORDER), // :128
-            new RwgPlace("chaparral", Climate.HOT, Placement.COLD_BORDER), // :183
-            new RwgPlace("deadswamp", Climate.WET, Placement.LITTORAL), // :264
-            new RwgPlace("flowerfield", Climate.COLD, Placement.SMALL), // :318
-            new RwgPlace("garden", Climate.COLD, Placement.SMALL_ISLAND), // :376（BOP 1.12 无此群系）
-            new RwgPlace("jadecliffs", Climate.COLD, Placement.HOT_BORDER), // :444（BOP 1.12 无此群系）
-            new RwgPlace("landoflakesmarsh", Climate.HOT, Placement.HOT_BORDER), // :470（rtgc 只有 land_of_lakes）
-            new RwgPlace("lushswamp", Climate.WET, Placement.LITTORAL), // :510
-            new RwgPlace("mangrove", Climate.WET, Placement.LITTORAL), // :544
-            new RwgPlace("meadow", Climate.COLD, Placement.COLD_BORDER), // :559
-            new RwgPlace("ominouswoods", Climate.SNOW, Placement.SMALL_ISLAND), // :602
-            new RwgPlace("rainforest", Climate.WET, Placement.COLD_BORDER), // :649
-            new RwgPlace("quagmire", Climate.WET, Placement.SMALL), // :663
-            new RwgPlace("sludgepit", Climate.WET, Placement.LITTORAL), // :743（BOP 1.12 无此群系）
-            new RwgPlace("tropics", Climate.WET, Placement.LITTORAL), // :799（BOP 1.12 无此群系）
-            new RwgPlace("tropicalrainforest", Climate.WET, Placement.COLD_BORDER), // :785
-            new RwgPlace("oasis", Climate.HOT, Placement.SMALL), // :849
+            new RtgPlace("bayou", Climate.WET, Placement.LITTORAL), // :93
+            new RtgPlace("borealforest", Climate.SNOW, Placement.HOT_BORDER), // :128
+            new RtgPlace("chaparral", Climate.HOT, Placement.COLD_BORDER), // :183
+            new RtgPlace("deadswamp", Climate.WET, Placement.LITTORAL), // :264
+            new RtgPlace("flowerfield", Climate.COLD, Placement.SMALL), // :318
+            new RtgPlace("garden", Climate.COLD, Placement.SMALL_ISLAND), // :376（BOP 1.12 无此群系）
+            new RtgPlace("jadecliffs", Climate.COLD, Placement.HOT_BORDER), // :444（BOP 1.12 无此群系）
+            new RtgPlace("landoflakesmarsh", Climate.HOT, Placement.HOT_BORDER), // :470（rtgc 只有 land_of_lakes）
+            new RtgPlace("lushswamp", Climate.WET, Placement.LITTORAL), // :510
+            new RtgPlace("mangrove", Climate.WET, Placement.LITTORAL), // :544
+            new RtgPlace("meadow", Climate.COLD, Placement.COLD_BORDER), // :559
+            new RtgPlace("ominouswoods", Climate.SNOW, Placement.SMALL_ISLAND), // :602
+            new RtgPlace("rainforest", Climate.WET, Placement.COLD_BORDER), // :649
+            new RtgPlace("quagmire", Climate.WET, Placement.SMALL), // :663
+            new RtgPlace("sludgepit", Climate.WET, Placement.LITTORAL), // :743（BOP 1.12 无此群系）
+            new RtgPlace("tropics", Climate.WET, Placement.LITTORAL), // :799（BOP 1.12 无此群系）
+            new RtgPlace("tropicalrainforest", Climate.WET, Placement.COLD_BORDER), // :785
+            new RtgPlace("oasis", Climate.HOT, Placement.SMALL), // :849
             // ── Support.java ────────────────────────────────────────────────
-            new RwgPlace("mushroomisland", Climate.WET, Placement.SMALL_ISLAND), // :104-115
-            new RwgPlace("mutatediceflats", Climate.SNOW, Placement.SMALL), // :127-139（RWG 的 icePlainsSpikes）
-            new RwgPlace("mutatedplains", Climate.COLD, Placement.SMALL), // :140-152（RWG 的 sunflowerPlains）
+            new RtgPlace("mushroomisland", Climate.WET, Placement.SMALL_ISLAND), // :104-115
+            new RtgPlace("mutatediceflats", Climate.SNOW, Placement.SMALL), // :127-139（RWG 的 icePlainsSpikes）
+            new RtgPlace("mutatedplains", Climate.COLD, Placement.SMALL), // :140-152（RWG 的 sunflowerPlains）
             // ── SupportTC.java ──────────────────────────────────────────────
             // RWG 按**群系显示名**解析 Thaumcraft（`"Magical Forest"` / `"Tainted Land"`），
             // 且有两条 Magical Forest（SNOW 与 COLD，配方相同）。本表一名一行 ⇒ 取第一条。
             // `taintedland` 不写：rtgc 没有对应类（见 §0.5.1 的推断缺口）。
-            new RwgPlace("magicalforest", Climate.SNOW, Placement.SMALL_ISLAND), // :38-50
+            new RtgPlace("magicalforest", Climate.SNOW, Placement.SMALL_ISLAND), // :38-50
             // ── rtgc 特有的补充（RWG 无此条目，理由如下）────────────────────
             //
             // `mushroom_island_shore`：RWG 没有这个现实主义群系（它只包了 `mushroomIsland`）。
             // 但 rtgc 有，且它**必须**跟它的母群系同池 —— 否则会退回"名字含 shore ⇒ 海滩"，
             // 把每个暖海岸变成蘑菇岛海岸（这是用户实测报过的 bug，见本类 1.0.28 的记录）。
-            new RwgPlace("mushroomislandshore", Climate.WET, Placement.SMALL_ISLAND),
+            new RtgPlace("mushroomislandshore", Climate.WET, Placement.SMALL_ISLAND),
+
+            // ── RWG 自有群系（A 组，rtgc 自己注册的 rtgc:*）────────────────
+            // 依据：ChunkManagerRealistic:194-235 的核心池成员表。注册名去下划线后匹配。
+            // 统一 rtg_ 前缀，避免与 BOP 的 oasis/redwood_forest 等撞 key。
+            // 红木族不在此列：BOP 已有 redwood_forest / redwood_forest_edge（用户指示）。
+            new RtgPlace("rtgoasis", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgredoasis", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgdunevalley", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgsavannadunes", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgcanyon", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgcanyonforest", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgstonemountains", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgstonemountainscactus", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtghotforest", Climate.HOT, Placement.CORE), // biomes_hot
+            new RtgPlace("rtgpolar", Climate.SNOW, Placement.CORE), // biomes_snow
+            new RtgPlace("rtgsnowlakes", Climate.SNOW, Placement.CORE), // biomes_snow
+            new RtgPlace("rtgtundrahills", Climate.COLD, Placement.CORE), // biomes_cold
+            new RtgPlace("rtgtaigaplains", Climate.COLD, Placement.CORE), // biomes_cold
+            new RtgPlace("rtghighrainforest", Climate.WET, Placement.CORE), // biomes_wet
+            new RtgPlace("rtgjunglecanyon", Climate.WET, Placement.CORE), // biomes_wet
     };
 
     /** 精确匹配：注册名小写去下划线 → RWG 的 placement。 */
-    private static RwgPlace rwgPlacementFor(final String key) {
-        for (final RwgPlace p : RWG_PLACEMENTS) {
+    private static RtgPlace rtgPlacementFor(final String key) {
+        for (final RtgPlace p : RTG_PLACEMENTS) {
             if (key.equals(p.name)) {
                 return p;
             }
@@ -883,13 +903,13 @@ public final class RtgBiomeCategorizer {
         return name.contains("island") && !name.contains("mushroomisland");
     }
 
-    /** {@link #RWG_PLACEMENTS} 的一行：名字（注册名小写去下划线）→ RWG 给的气候与 placement。 */
-    private static final class RwgPlace {
+    /** {@link #RTG_PLACEMENTS} 的一行：名字（注册名小写去下划线）→ RWG 给的气候与 placement。 */
+    private static final class RtgPlace {
         final String name;
         final Climate climate;
         final Placement placement;
 
-        RwgPlace(final String name, final Climate climate, final Placement placement) {
+        RtgPlace(final String name, final Climate climate, final Placement placement) {
             this.name = name;
             this.climate = climate;
             this.placement = placement;

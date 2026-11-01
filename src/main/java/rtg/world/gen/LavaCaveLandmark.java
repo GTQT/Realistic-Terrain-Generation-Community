@@ -9,7 +9,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkPrimer;
 
 import rtg.api.util.noise.ContinentalNoise;
-import rtg.api.util.noise.RwgCellNoise;
+import rtg.api.util.noise.RtgCellNoise;
 import rtg.api.util.noise.SimplexNoise;
 import rtg.world.biome.RtgBiomeLayout;
 
@@ -33,7 +33,7 @@ import rtg.world.biome.RtgBiomeLayout;
  *       RWG 的 {@code perlin.noise2(a, b)} → {@code perlin.noise2f(a, b)}。
  *       RTGC 侧由调用方传 {@code rtgWorld.simplexInstance(0)}（与
  *       {@code ChunkGeneratorRTG} 里地形/装饰路径用的是同一个实例）。</li>
- *   <li>{@code CellNoise cell} → {@link RwgCellNoise}（逐行移植，{@code sampleTwo2D} 同源）。</li>
+ *   <li>{@code CellNoise cell} → {@link RtgCellNoise}（逐行移植，{@code sampleTwo2D} 同源）。</li>
  *   <li>{@code Blocks.air / lava / obsidian / stone / glowstone} → 对应的
  *       {@code IBlockState}。RWG 比的是 {@code Block} 身份（不看 metadata），
  *       故判断统一比 {@code state.getBlock()}。</li>
@@ -64,7 +64,7 @@ import rtg.world.biome.RtgBiomeLayout;
  *       <b>没有公开取值器</b>（与 {@code perlin} 同类）。RWG 是在
  *       {@code ChunkGeneratorRealistic} 里自己 {@code new CellNoise(l, (short) 0)}，
  *       并存成一个字段（RWG:149）—— RTGC 若要照抄同一写法，就是在生成器构造时
- *       建一个 {@code new RwgCellNoise(rtgWorld.seed(), (short) 0)} 长期持有；
+ *       建一个 {@code new RtgCellNoise(rtgWorld.seed(), (short) 0)} 长期持有；
  *       因为 {@code sampleTwo2D} 不读 {@code useDistance}，它与布局内部那个
  *       （{@code setUseDistance(true)}）**输出逐位相同**，所以两种取法等价。</li>
  *   <li>{@code smolderingGrass}：见 {@link #decorateSurface} 的说明。</li>
@@ -173,7 +173,7 @@ public final class LavaCaveLandmark {
      * <p>{@code metadata} 形参按 1.12.2 的 API 约定删除（见类注释）。
      */
     public static void generate(ChunkPrimer primer, int chunkX, int chunkZ, RtgBiomeLayout manager,
-            SimplexNoise perlin, RwgCellNoise cell) {
+            SimplexNoise perlin, RtgCellNoise cell) {
         double[] cellSamples = new double[4];
         for (int localX = 0; localX < 16; localX++) {
             int worldX = chunkX * 16 + localX;
@@ -200,7 +200,7 @@ public final class LavaCaveLandmark {
     }
 
     private static void carveColumn(ChunkPrimer primer, int localX, int localZ, int worldX, int worldZ,
-            float landmarkX, float landmarkZ, SimplexNoise perlin, RwgCellNoise cell, double[] cellSamples) {
+            float landmarkX, float landmarkZ, SimplexNoise perlin, RtgCellNoise cell, double[] cellSamples) {
         float x = warpedX(perlin, landmarkX, landmarkZ);
         float z = warpedZ(perlin, landmarkX, landmarkZ);
         float distance = (float) Math.sqrt(x * x + z * z);

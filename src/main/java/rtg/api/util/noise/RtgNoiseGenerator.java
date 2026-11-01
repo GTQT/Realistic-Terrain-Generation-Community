@@ -1,6 +1,6 @@
 package rtg.api.util.noise;
 
-public interface RwgNoiseGenerator {
+public interface RtgNoiseGenerator {
 
     /**
      * Computes noise function for three dimensions at the point (x,y,z).

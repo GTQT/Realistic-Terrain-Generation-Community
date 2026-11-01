@@ -1,28 +1,30 @@
 package rtg.world.biome.realistic.biomesoplenty;
 
 
-import biomesoplenty.api.block.BOPBlocks;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
-import rtg.api.util.Distribution;
+
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.RealisticBiomeBase;
-import rtg.api.world.deco.DecoTree;
-import rtg.api.world.deco.DecoTreeSet;
-import rtg.api.world.gen.feature.tree.bop.BOPTreeMaterials;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTG;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGCeibaPentandra;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGCeibaRosea;
-import rtg.api.world.gen.feature.tree.rtg.TreeRTGResizable;
 import rtg.api.world.surface.SurfaceBase;
 import rtg.api.world.surface.SurfaceGrassland;
 import rtg.api.world.terrain.TerrainBase;
-import rtg.event.EventHandlerCommon;
-
-import java.util.ArrayList;
 
 
+/**
+ * BOP 红树林。
+ *
+ * <p><b>装饰保持 BOP 自己的</b>：RWG 的 `SupportBOP.java` 给 BOP mangrove 用的是
+ * `RealisticBiomeSupport(BOPCBiomes.mangrove, …, TerrainSwampRiver, …)`，而
+ * `RealisticBiomeSupport.rDecorate` 在 {@code strength > 0.3} 时调用的正是
+ * `customBiome.decorate(...)` —— 也就是 **BOP 自己的装饰器**。因此这里不覆盖装饰，
+ * 也不抑制 BOP 的树生成。
+ *
+ * <p>RWG 自己的 {@code RealisticBiomeCoastMangrove}（2×圆石 + 5×红树 + 9×水草带）
+ * 在 RWG 里没有对应的 BOP/原版外壳被使用；它的逐行移植
+ * （{@code rtg.api.world.gen.feature.WorldGenMangrove}）已保留，待将来有
+ * 对应群系外壳时再接。
+ */
 public class RealisticBiomeBOPMangrove extends RealisticBiomeBase {
 
     public RealisticBiomeBOPMangrove(final Biome biome) { super(biome); }
@@ -30,31 +32,7 @@ public class RealisticBiomeBOPMangrove extends RealisticBiomeBase {
     @Override
     public void initDecos() {
 
-        EventHandlerCommon.treeGenerationManager.suppressBOPBiome(this.baseBiome());
-        TreeRTG petandraTree = new TreeRTGCeibaPentandra();
-        petandraTree.setMaterials(BOPTreeMaterials.mangrove);
-        ArrayList<IBlockState> ground = petandraTree.getValidGroundBlocks();
-        ground.add(BOPBlocks.mud.getDefaultState());
-        petandraTree.setValidGroundBlocks(ground);
-        TreeRTGResizable variablePetandra = new TreeRTGResizable(petandraTree);
-        variablePetandra.changeAverageHeightSqrt(-1f);
-        variablePetandra.changeHeightNoiseVariability(-1);
-        DecoTree petandraDeco = new DecoTree(variablePetandra);
-
-        TreeRTG roseaTree = new TreeRTGCeibaRosea();
-        roseaTree.setMaterials(BOPTreeMaterials.mangrove);
-        roseaTree.setValidGroundBlocks(ground);
-        TreeRTGResizable variableRosea = new TreeRTGResizable(roseaTree);
-        variableRosea.changeAverageHeightSqrt(-1f);
-        variableRosea.changeHeightNoiseVariability(-1);
-        DecoTree roseaDeco = new DecoTree(variableRosea);
-
-        DecoTreeSet treeCombination = new DecoTreeSet();
-        treeCombination.add(petandraDeco, 10);
-        treeCombination.add(roseaDeco, 5);
-        treeCombination.setDistribution(new Distribution(RTGWorld.getTreeFrequencyNoiseDivisor(), 3f, 6.0f));
-
-        this.treeGenerator = treeCombination;
+        // 有意留空：BOP 自己的 decorate 就是 RWG 的 Support 语义（见类注释）。
     }
 
     @Override
@@ -74,7 +52,8 @@ public class RealisticBiomeBOPMangrove extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock, Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
+        return new SurfaceGrassland(getConfig(), baseBiome().topBlock, baseBiome().fillerBlock,
+                Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState());
     }
 
     public static class TerrainBOPMangrove extends TerrainBase {
@@ -88,5 +67,4 @@ public class RealisticBiomeBOPMangrove extends RealisticBiomeBase {
             return terrainSwampRiver(x, y, rtgWorld, river);
         }
     }
-
 }

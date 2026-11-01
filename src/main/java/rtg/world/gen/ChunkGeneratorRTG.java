@@ -80,7 +80,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private static final long DECO_REPORT_THRESHOLD_NS = 200_000_000L;
 
     /** 9×9 区块邻域中每个命中群系的装饰权重（{@code 1f / 81f}）。 */
-    private static final float RWG_DECO_NEIGHBOUR_WEIGHT = 0.01234569f;
+    private static final float RTG_DECO_NEIGHBOUR_WEIGHT = 0.01234569f;
 
     private static final IBlockState ICE = Blocks.ICE.getDefaultState();
     private static final IBlockState SNOW_LAYER = Blocks.SNOW_LAYER.getDefaultState();
@@ -137,7 +137,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      * 熔岩洞地标用的 cell 噪声。只用 {@code sampleTwo2D}，不读 {@code distanceMethod}，
      * 故这里自建一个与布局内部那个逐位相同的实例。
      */
-    private final RwgCellNoise landmarkCell;
+    private final RtgCellNoise landmarkCell;
     /**
      * 熔岩洞岸边那种"冒烟的草"。装了 BOP 时取 {@code biomesoplenty:grass}，否则为 null。
      */
@@ -178,7 +178,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         this.rand = new Random(rtgWorld.seed());
         this.rtgWorld.setRandom(this.rand);
         this.mapFeaturesEnabled = world.getWorldInfo().isMapFeaturesEnabled();
-        this.landmarkCell = new RwgCellNoise(rtgWorld.seed(), (short) 0);
+        this.landmarkCell = new RtgCellNoise(rtgWorld.seed(), (short) 0);
         this.smolderingGrass = BlockUtil.getBlock("biomesoplenty:grass", null);
         this.mapRand = new Random(rtgWorld.seed());
         this.useIntBiomeArray = Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid");
@@ -344,14 +344,14 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // 门控：布局恒为大陆模式，所以这里用地标子系统的唯一开关代替；
         // 该判据 + 生成器内部的逐列坐标判定 ⇒ 配置为 0 时本块零副作用。
         final RtgBiomeLayout layout = RtgLayoutAccess.current();
-        if (layout != null && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+        if (layout != null && RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
                 && RealisticBiomeIslandVolcano.volcanoIsland instanceof RealisticBiomeIslandVolcano) {
             RealisticBiomeIslandVolcano.volcanoIsland.generateMagmaChamber(primer, cx, cz, layout);
         }
 
         // ---- 熔岩洞地标本体 ----
         // 紧随岩浆房之后（它也要在洞穴/结构之后，因为用黑曜石/岩浆把洞穴壁改造成地标）。
-        if (layout != null && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+        if (layout != null && RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
             LavaCaveLandmark.generate(primer, cx, cz, layout, this.rtgWorld.simplexInstance(0), this.landmarkCell);
         }
 
@@ -423,7 +423,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
                 // ---- 火山地表 ----
                 if (columnBiome instanceof RealisticBiomeIslandVolcano && layout != null
-                        && RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+                        && RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
                     final int blockX = worldX + x;
                     final int blockZ = worldZ + z;
                     final long coordinates = layout.getVolcanoCoordinates(blockX, blockZ);
@@ -614,7 +614,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
                 final int id = RtgRealisticIndex.idFor(neighbour);
                 if (id >= 0 && id < decoBound) {
-                    this.decoWeights[id] += RWG_DECO_NEIGHBOUR_WEIGHT;
+                    this.decoWeights[id] += RTG_DECO_NEIGHBOUR_WEIGHT;
                 }
             }
         }
@@ -702,7 +702,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         // ---- 熔岩洞地标的装饰 ----
-        if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
+        if (RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
             final RtgBiomeLayout landmarkLayout = RtgLayoutAccess.current();
             if (landmarkLayout != null) {
                 LavaCaveLandmark.decorateSurface(this.world, landmarkLayout,
@@ -880,7 +880,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      * landscapeCache（否则一条诊断命令会顶掉别的区块的缓存项）。
      *
      * @return {@code [0]=山地链权重 [1]=山地链宿主 [2]=洞顶 y（0 = 该列没被开凿）
-     *         [3]=1 表示布局来自缓存（此时 [2] 可信） [4]=干高度 [5]=山体门控权重（链与海拔取大）}
+     *         [3]=1 表示布局来自缓存（此时 [2] 可信） [4]=干高度 [5]=门控权重
+     *         （RWG 的 {@code smoothstep((host - 0.10) / 0.40)}；0 表示连山地链都不过）}
      */
     public float[] probeTunnelColumn(final BiomeProvider biomeProvider, final int x, final int z) {
 
@@ -966,6 +967,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 landscape.noise[k] = layout.calculateRiver(
                         worldX + i, worldZ + j,
                         riverValues[k], landscape.noise[k]);
+                landscape.riverBedHeight[k] = landscape.noise[k];   // 单群系无 fade：雕刻后即河床
             }
         }
     }
@@ -1209,7 +1211,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 chainHost[k] = Math.max(chain, nearbyMountainChainInfluence(i, j));
 
                 // ---- 火山锥的高度叠加 ----
-                if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+                if (RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
                         && RealisticBiomeIslandVolcano.volcanoIsland instanceof RealisticBiomeIslandVolcano) {
                     final long coordinates = layout.getVolcanoVicinityCoordinates(worldX, worldZ);
                     if (coordinates != Long.MIN_VALUE) {
@@ -1235,7 +1237,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
 
                 // ---- 熔岩洞地标的通风口锥体 ----
-                if (RwgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
+                if (RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f
                         && layout.getVolcanoVicinityCoordinates(worldX, worldZ) == Long.MIN_VALUE) {
                     final long caveCoordinates = layout.getLavaCaveCoordinates(worldX, worldZ);
                     if (caveCoordinates != Long.MIN_VALUE) {
@@ -1262,6 +1264,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 final float carved = layout.calculateRiver(
                         chunkWorldX + i, chunkWorldZ + j,
                         riverValues[k], uncarved);
+                // RWG 的 riverBedHeight = 河道雕刻后、fade 前的高度（地下河洞底取它）。
+                landscape.riverBedHeight[k] = carved;
 
                 float fade = (chainWeight[k] - MOUNTAIN_CHAIN_FADE_START) / MOUNTAIN_CHAIN_FADE_WIDTH;
                 if (fade <= 0f) {

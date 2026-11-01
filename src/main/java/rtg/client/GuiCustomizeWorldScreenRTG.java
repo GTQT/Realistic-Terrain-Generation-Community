@@ -1,26 +1,10 @@
 package rtg.client;
 
-import javax.annotation.Nullable;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiCreateWorld;
-import net.minecraft.client.gui.GuiListButton;
-import net.minecraft.client.gui.GuiPageButtonList;
-import net.minecraft.client.gui.GuiPageButtonList.GuiButtonEntry;
-import net.minecraft.client.gui.GuiPageButtonList.GuiLabelEntry;
-import net.minecraft.client.gui.GuiPageButtonList.GuiListEntry;
-import net.minecraft.client.gui.GuiPageButtonList.GuiResponder;
-import net.minecraft.client.gui.GuiPageButtonList.GuiSlideEntry;
-import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.*;
+import net.minecraft.client.gui.GuiPageButtonList.*;
 import net.minecraft.client.gui.GuiSlider.FormatHelper;
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.GlStateManager;
@@ -29,6 +13,14 @@ import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.resources.I18n;
 import rtg.api.util.Logger;
 import rtg.api.world.gen.RTGChunkGenSettings;
+
+import javax.annotation.Nullable;
+import java.awt.*;
+import java.awt.datatransfer.StringSelection;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 
 @SuppressWarnings("unused")
@@ -547,6 +539,15 @@ public class GuiCustomizeWorldScreenRTG extends GuiScreen implements FormatHelpe
         caveDensity(SettingType.INTEGER, defaults.caveDensity, 1, 20, Category.UNDERGROUND),
         useRavines(SettingType.BOOLEAN, defaults.useRavines, null, null, Category.UNDERGROUND),
         ravineChance(SettingType.INTEGER, defaults.ravineChance, 4, 200, Category.UNDERGROUND),
+
+        // WorleyCaves（docs/worley-caves-merge-feasibility.md）。开启后 caveChance/caveDensity 不再生效，
+        // 由这几个参数接管；枚举名必须与 RTGChunkGenSettings.Factory 的字段名一致（GUI 按名字读写 JSON）。
+        useWorleyCaves(SettingType.BOOLEAN, defaults.useWorleyCaves, null, null, Category.UNDERGROUND),
+        worleyCaveSize(SettingType.FLOAT, defaults.worleyCaveSize, -0.6f, 0.2f, Category.UNDERGROUND),
+        worleySurfaceCutoff(SettingType.FLOAT, defaults.worleySurfaceCutoff, -0.6f, 0.2f, Category.UNDERGROUND),
+        worleyMaxHeight(SettingType.INTEGER, defaults.worleyMaxHeight, 64, 240, Category.UNDERGROUND),
+        worleyWarpAmplifier(SettingType.FLOAT, defaults.worleyWarpAmplifier, 0.0f, 16.0f, Category.UNDERGROUND),
+        worleyEaseInDepth(SettingType.INTEGER, defaults.worleyEaseInDepth, 1, 40, Category.UNDERGROUND),
 
         riverSizeMult(SettingType.FLOAT, defaults.riverSizeMult, 0.5f, 2.0f, Category.RIVERS),
         riverFrequency(SettingType.FLOAT, defaults.riverFrequency, 0.0f, 8.0f, Category.RIVERS),

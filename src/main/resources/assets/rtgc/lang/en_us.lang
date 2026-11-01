@@ -60,6 +60,18 @@ gui.createWorld.customize.setting.useRavines=Ravines
 gui.createWorld.customize.setting.useRavines.tooltip=Enable ravine generation
 gui.createWorld.customize.setting.ravineChance=Ravine Chance
 gui.createWorld.customize.setting.ravineChance.tooltip=HIGHER values = FEWER ravines
+gui.createWorld.customize.setting.useWorleyCaves=Worley Caves
+gui.createWorld.customize.setting.useWorleyCaves.tooltip=Large connected cave systems built from Worley noise. Disables Cave Chance / Cave Density.
+gui.createWorld.customize.setting.worleyCaveSize=Cave Size
+gui.createWorld.customize.setting.worleyCaveSize.tooltip=LOWER values = BIGGER caves
+gui.createWorld.customize.setting.worleySurfaceCutoff=Surface Openings
+gui.createWorld.customize.setting.worleySurfaceCutoff.tooltip=HIGHER values = FEWER cave openings at the surface
+gui.createWorld.customize.setting.worleyMaxHeight=Cave Max Height
+gui.createWorld.customize.setting.worleyMaxHeight.tooltip=Caves never generate above this Y. RTG mountains need about 200
+gui.createWorld.customize.setting.worleyWarpAmplifier=Cave Warp
+gui.createWorld.customize.setting.worleyWarpAmplifier.tooltip=HIGHER values = more twisted cave tunnels
+gui.createWorld.customize.setting.worleyEaseInDepth=Surface Suppression
+gui.createWorld.customize.setting.worleyEaseInDepth.tooltip=Depth (x2 blocks) below the surface where cave openings are suppressed
 
 gui.createWorld.customize.title.PAGE2=Water Feature Settings
 

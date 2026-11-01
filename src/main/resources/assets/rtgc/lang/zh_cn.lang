@@ -59,7 +59,19 @@ gui.createWorld.customize.setting.caveDensity.tooltip=HIGHER values = BIGGER cav
 gui.createWorld.customize.setting.useRavines=山谷生成
 gui.createWorld.customize.setting.useRavines.tooltip=Enable ravine generation
 gui.createWorld.customize.setting.ravineChance=山谷生成几率
-gui.createWorld.customize.setting.ravineChance.tooltip=HIGHER values = FEWER ravines
+gui.createWorld.customize.setting.ravineChance.tooltip=数值越大，峡谷越少
+gui.createWorld.customize.setting.useWorleyCaves=Worley 洞穴
+gui.createWorld.customize.setting.useWorleyCaves.tooltip=使用 Worley 噪声的大型连通洞穴系统。开启后「洞穴生成几率/密度」不再生效
+gui.createWorld.customize.setting.worleyCaveSize=洞穴规模
+gui.createWorld.customize.setting.worleyCaveSize.tooltip=数值越小，洞穴越大
+gui.createWorld.customize.setting.worleySurfaceCutoff=地表开口
+gui.createWorld.customize.setting.worleySurfaceCutoff.tooltip=数值越大，地表越不容易被洞穴开穿
+gui.createWorld.customize.setting.worleyMaxHeight=洞穴高度上限
+gui.createWorld.customize.setting.worleyMaxHeight.tooltip=高于此高度的区域不生成洞穴。RTG 山地建议 200
+gui.createWorld.customize.setting.worleyWarpAmplifier=洞穴扭曲
+gui.createWorld.customize.setting.worleyWarpAmplifier.tooltip=数值越大，隧道越弯曲
+gui.createWorld.customize.setting.worleyEaseInDepth=地表抑制深度
+gui.createWorld.customize.setting.worleyEaseInDepth.tooltip=距地表（×2 格）之内抑制洞穴开口
 
 gui.createWorld.customize.title.PAGE2=含水景观设置
 

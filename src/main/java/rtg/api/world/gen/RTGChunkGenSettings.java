@@ -32,6 +32,16 @@ public final class RTGChunkGenSettings {
     // TODO: [Generator settings] Possibly use a float value as a multiplier
     public final int caveChance;            // RTG
     public final int caveDensity;           // RTG
+
+    // ---- WorleyCaves（移植自 WorleyCaves 1.5.2，MIT；见 docs/worley-caves-merge-feasibility.md）----
+    // 洞穴形状会改变新生成的地形，所以这些参数必须随存档走（而不是放全局 config），
+    // 与 caveChance/caveDensity 同级。
+    public final boolean useWorleyCaves;        // RTG - 洞穴生成器选 Worley（关 = 原版 MapGenCaves 变体）
+    public final float worleyCaveSize;          // RTG - 规模阈值：越小洞越大
+    public final float worleySurfaceCutoff;     // RTG - 破土阈值：越大越不容易破土
+    public final float worleyWarpAmplifier;     // RTG - 位移强度
+    public final int worleyMaxHeight;           // RTG - 洞穴高度上限（RTG 山地需要 >128）
+    public final int worleyEaseInDepth;         // RTG - 破土抑制深度
     public final boolean useRavines;            // Vanilla
     public final int ravineChance;          // RTG
 
@@ -163,6 +173,13 @@ public final class RTGChunkGenSettings {
         this.useCaves = settingsFactory.useCaves;
         this.caveChance = settingsFactory.caveChance;
         this.caveDensity = settingsFactory.caveDensity;
+
+        this.useWorleyCaves = settingsFactory.useWorleyCaves;
+        this.worleyCaveSize = settingsFactory.worleyCaveSize;
+        this.worleySurfaceCutoff = settingsFactory.worleySurfaceCutoff;
+        this.worleyWarpAmplifier = settingsFactory.worleyWarpAmplifier;
+        this.worleyMaxHeight = settingsFactory.worleyMaxHeight;
+        this.worleyEaseInDepth = settingsFactory.worleyEaseInDepth;
         this.useRavines = settingsFactory.useRavines;
         this.ravineChance = settingsFactory.ravineChance;
 
@@ -296,6 +313,13 @@ public final class RTGChunkGenSettings {
         public boolean useCaves = true;
         public int caveChance = 8;
         public int caveDensity = 7;
+
+        public boolean useWorleyCaves = true;
+        public float worleyCaveSize = -0.28f;
+        public float worleySurfaceCutoff = -0.08f;
+        public float worleyWarpAmplifier = 8.0f;
+        public int worleyMaxHeight = 200;
+        public int worleyEaseInDepth = 20;
         public boolean useRavines = true;
         public int ravineChance = 100;
 
@@ -457,6 +481,14 @@ public final class RTGChunkGenSettings {
             this.useCaves = true;
             this.caveChance = 10; // Vanilla chance = 7. HIGHER values = FEWER caves.
             this.caveDensity = 7; // Vanilla density = 15. HIGHER values = BIGGER caves.
+
+            // Worley 洞穴：默认开（本仓库的推荐档，见 docs/worley-caves-merge-feasibility.md）。
+            this.useWorleyCaves = true;
+            this.worleyCaveSize = -0.28f;
+            this.worleySurfaceCutoff = -0.08f;
+            this.worleyWarpAmplifier = 8.0f;
+            this.worleyMaxHeight = 200;
+            this.worleyEaseInDepth = 20;
             this.useRavines = true;
             this.ravineChance = 120; // HIGHER values = FEWER ravines
 
@@ -628,6 +660,18 @@ public final class RTGChunkGenSettings {
                 settings.useCaves = JsonUtils.getBoolean(json, "useCaves", settings.useCaves);
                 settings.caveChance = JsonUtils.getInt(json, "caveChance", settings.caveChance);
                 settings.caveDensity = JsonUtils.getInt(json, "caveDensity", settings.caveDensity);
+
+                // ⚠ 这里刻意写死回落值 false（而不是沿用 Factory 的默认 true）：
+                //   · 新世界（generatorOptions 为空）走 jsonToFactory 的空串分支 → new Factory() → true；
+                //   · 旧世界里**已经自定义过**的设置是一段不含这个键的 JSON → 回落到 false，
+                //     于是"升级模组"不会把老存档的地底突然换掉（洞穴形状只在新区块生效，接缝会很明显）；
+                //   · 创造界面写出的 JSON 是全字段序列化，一定带这个键，不受影响。
+                settings.useWorleyCaves = JsonUtils.getBoolean(json, "useWorleyCaves", false);
+                settings.worleyCaveSize = JsonUtils.getFloat(json, "worleyCaveSize", settings.worleyCaveSize);
+                settings.worleySurfaceCutoff = JsonUtils.getFloat(json, "worleySurfaceCutoff", settings.worleySurfaceCutoff);
+                settings.worleyWarpAmplifier = JsonUtils.getFloat(json, "worleyWarpAmplifier", settings.worleyWarpAmplifier);
+                settings.worleyMaxHeight = JsonUtils.getInt(json, "worleyMaxHeight", settings.worleyMaxHeight);
+                settings.worleyEaseInDepth = JsonUtils.getInt(json, "worleyEaseInDepth", settings.worleyEaseInDepth);
                 settings.useRavines = JsonUtils.getBoolean(json, "useRavines", settings.useRavines);
                 settings.ravineChance = JsonUtils.getInt(json, "ravineChance", settings.ravineChance);
 
@@ -803,6 +847,13 @@ public final class RTGChunkGenSettings {
             json.addProperty("useCaves", factory.useCaves);
             json.addProperty("caveChance", factory.caveChance);
             json.addProperty("caveDensity", factory.caveDensity);
+
+            json.addProperty("useWorleyCaves", factory.useWorleyCaves);
+            json.addProperty("worleyCaveSize", factory.worleyCaveSize);
+            json.addProperty("worleySurfaceCutoff", factory.worleySurfaceCutoff);
+            json.addProperty("worleyWarpAmplifier", factory.worleyWarpAmplifier);
+            json.addProperty("worleyMaxHeight", factory.worleyMaxHeight);
+            json.addProperty("worleyEaseInDepth", factory.worleyEaseInDepth);
             json.addProperty("useRavines", factory.useRavines);
             json.addProperty("ravineChance", factory.ravineChance);
 

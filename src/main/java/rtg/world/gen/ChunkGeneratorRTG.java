@@ -50,6 +50,8 @@ import rtg.world.biome.RtgRealisticIndex;
 import rtg.world.biome.realistic.land.RealisticBiomeIslandVolcano;
 import rtg.world.biome.realistic.land.RealisticBiomeMountainChain;
 import rtg.world.gen.structure.WoodlandMansionRTG;
+import rtg.world.gen.worley.WorleyCaveParams;
+import rtg.world.gen.worley.WorleyCavesGenerator;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -184,8 +186,21 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         this.useIntBiomeArray = Loader.isModLoaded("jeid") || Loader.isModLoaded("neid") || Loader.isModLoaded("reid");
 
         // 初始化结构生成器
+        //
+        // 洞穴生成器仍然走 TerrainGen.getModdedMapGen：装第三方洞穴模组（含独立的 worleycaves）时
+        // 它会在 LOWEST 优先级把这里的实例替换掉，保持"外置优先"。我们只是多了一个**内置**选项。
         this.caveGenerator = TerrainGen.getModdedMapGen(
-                new MapGenCavesRTG(this.settings.caveChance, this.settings.caveDensity), EventType.CAVE);
+                this.settings.useWorleyCaves
+                        ? new WorleyCavesGenerator(rtgWorld.seed(), WorleyCaveParams.from(this.settings))
+                        : new MapGenCavesRTG(this.settings.caveChance, this.settings.caveDensity),
+                EventType.CAVE);
+        if (this.caveGenerator instanceof WorleyCavesGenerator) {
+            Logger.debug("[RTG] 洞穴生成器：内置 WorleyCaves {}", ((WorleyCavesGenerator) this.caveGenerator).params());
+        } else if (this.caveGenerator.getClass() != MapGenCavesRTG.class) {
+            // 装了独立 worleycaves / Quark 大洞之类：它们会在 LOWEST 优先级替换掉我们，保持"外置优先"。
+            Logger.info("[RTG] 洞穴生成器已被外部模组接管：{}（本模组的洞穴参数对它无效）",
+                    this.caveGenerator.getClass().getName());
+        }
         this.ravineGenerator = TerrainGen.getModdedMapGen(
                 new MapGenRavineRTG(this.settings.ravineChance), EventType.RAVINE);
         this.villageGenerator = (MapGenVillage) TerrainGen.getModdedMapGen(
@@ -317,7 +332,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // ---- Caves ----
         if (this.settings.useCaves) {
             long tCaves = ChunkGenerationProfiler.start(Category.CAVES);
-            this.caveGenerator.generate(this.world, cx, cz, primer);
+            if (this.caveGenerator instanceof WorleyCavesGenerator) {
+                // 把本区块逐列的地表群系一起传进去：Worley 的破土补顶要按 RTG 的地表材质补，
+                // 而不是按 MC 群系的 topBlock 补（两者在石山/台地这类群系上并不一致）。
+                ((WorleyCavesGenerator) this.caveGenerator)
+                        .generate(this.world, cx, cz, primer, this.jitteredBiomes);
+            } else {
+                // 被第三方洞穴模组接管（或未启用 Worley）：走通用入口
+                this.caveGenerator.generate(this.world, cx, cz, primer);
+            }
             ChunkGenerationProfiler.end(Category.CAVES, tCaves);
         }
         // ---- Ravines ----

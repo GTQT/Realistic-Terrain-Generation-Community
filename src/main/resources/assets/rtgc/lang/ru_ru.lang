@@ -59,6 +59,18 @@ gui.createWorld.customize.setting.useRavines=Ущелья
 gui.createWorld.customize.setting.useRavines.tooltip=Включить генерацию ущелий
 gui.createWorld.customize.setting.ravineChance=Шанс ущелий
 gui.createWorld.customize.setting.ravineChance.tooltip=БОЛЬШИЕ значения = МЕНЬШЕ ущелий
+gui.createWorld.customize.setting.useWorleyCaves=Пещеры Worley
+gui.createWorld.customize.setting.useWorleyCaves.tooltip=Крупные связные системы пещер на шуме Уорли. Отключает «Шанс пещер» и «Плотность пещер»
+gui.createWorld.customize.setting.worleyCaveSize=Размер пещер
+gui.createWorld.customize.setting.worleyCaveSize.tooltip=МЕНЬШИЕ значения = КРУПНЕЕ пещеры
+gui.createWorld.customize.setting.worleySurfaceCutoff=Выходы на поверхность
+gui.createWorld.customize.setting.worleySurfaceCutoff.tooltip=БОЛЬШИЕ значения = МЕНЬШЕ выходов на поверхность
+gui.createWorld.customize.setting.worleyMaxHeight=Макс. высота пещер
+gui.createWorld.customize.setting.worleyMaxHeight.tooltip=Выше этой высоты пещеры не генерируются. Для гор RTG нужно около 200
+gui.createWorld.customize.setting.worleyWarpAmplifier=Искажение пещер
+gui.createWorld.customize.setting.worleyWarpAmplifier.tooltip=БОЛЬШИЕ значения = более извилистые туннели
+gui.createWorld.customize.setting.worleyEaseInDepth=Подавление у поверхности
+gui.createWorld.customize.setting.worleyEaseInDepth.tooltip=Глубина (×2 блока) под поверхностью, где выходы пещер подавляются
 
 gui.createWorld.customize.title.PAGE2=Настройки водоёмов
 

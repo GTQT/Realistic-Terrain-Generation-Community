@@ -90,8 +90,9 @@ public class WorleyCavesGenerator extends MapGenBase {
     }
 
     /**
-     * RTG 专用入口：带上本区块**逐列**的地表群系（`ChunkGeneratorRTG#jitteredBiomes`，
-     * 下标 x*16+z）。有了它，破土补顶才能用 RTG 自己的地表材质，而不是 MC 群系的 `topBlock`。
+     * RTG 专用入口：带上本区块**逐列**的群系（`ChunkLandscape#biome`，即 RWG 的
+     * {@code biomes[]}，下标 x*16+z）。有了它，破土补顶才能用 RTG 自己的地表材质，
+     * 而不是 MC 群系的 `topBlock`。
      */
     public void generate(World worldIn, int x, int z, ChunkPrimer primer, IRealisticBiome[] columnBiomes) {
         this.world = worldIn;

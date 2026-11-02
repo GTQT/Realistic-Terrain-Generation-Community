@@ -65,7 +65,7 @@ public final class RTGConfig {
         //
         // 原实现是一个只列出少数枚举常量的 switch，且没有 default 分支，于是：
         //   · 所有 INTEGER 设置（islandScheme / tempScheme / rainScheme /
-        //     riverSize / biomeSize / surfaceBlendRadius）**永远**停留在硬编码默认值；
+        //     riverSize / biomeSize）**永远**停留在硬编码默认值；
         //   · 未列出的 DOUBLE 同样永不生效；
         //   · 未列出的 BOOLEAN 同样永不生效；
         //   · STRING 数组（blacklistMods）从未被读取。
@@ -218,10 +218,6 @@ public final class RTGConfig {
 
     public static boolean lushRiverbanksInDesert() {
         return (Boolean) Setting.lushRiverbanksInDesert.getCurVal();
-    }
-
-    public static int surfaceBlendRadius() {
-        return (Integer) Setting.surfaceBlendRadius.getCurVal();
     }
 
     @Nullable
@@ -386,11 +382,6 @@ public final class RTGConfig {
                 "Set this to FALSE to prevent RTG from generating lush river bank decorations in hot biomes,\n" +
                         "like Desert and Mesa. Lush decorations consist of tallgrass, trees, shrubs, and other flora.",
                 true, true),
-
-        surfaceBlendRadius(Type.INTEGER, Category.surface,
-                "The maximum distance surfaces will blend into each other if enabled for two adjacent biomes.\n" +
-                        "By default, surface blending is only enabled for beaches. You can control that in biome settings",
-                32, 8, 32),
 
         shadowStoneBlock(Type.STRING, Category.surface,
                 "The block to use for stone terrain shadowing, typically seen on the cliffs of stone mountains.\n" +

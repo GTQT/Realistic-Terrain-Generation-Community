@@ -75,13 +75,19 @@ public class SurfaceCanyon extends SurfaceBase {
 
         final Random rand = rtgWorld.rand();
         /*
-         * rtgc 有意偏离 RWG（用户要求：带沙的群系不许出现泥土）。
-         * RWG 原文在下面几处放 {@code Blocks.dirt} / {@code Blocks.grass}
-         * （那是给"草+土"峡谷群系用的）；本仓库目前唯一的使用者是 BOP 的 crag，
-         * 它把 top/filler 都传成 {@code Blocks.SAND}，故统一改成沙，
-         * 保留按高度取色的陶瓦（clayColorForHeight）层次。
+         * 照抄 RWG：草/土 是这套地表的**高度分层**，不是"脏"。
+         *
+         * 峡谷群系（canyon / canyon_forest / BOP crag）传进来的 top/filler 都是沙，
+         * 但 RWG 在这几处写死 grass/dirt：
+         *   k > 74+grassRaise        → 沙（高处的沙顶）
+         *   k < 62                   → 土
+         *   62 ≤ k < 62+grassRaise   → 顶草、下土   ← 谷底那条草带
+         *   62+grassRaise ≤ k < 75+grassRaise → 草/土/沙 随机过渡
+         * 把这条草带改成沙，等于把整个峡谷从 62 到 121 全变成沙，
+         *  CanyonForest 与草地群系的过渡带就会在 70–110 高度出现大片"沙蛇"。
          */
-        final IBlockState sand = Blocks.SAND.getDefaultState();
+        final IBlockState dirt = Blocks.DIRT.getDefaultState();
+        final IBlockState grass = Blocks.GRASS.getDefaultState();
 
         final float c = TerrainBase.calcCliff(x, z, noise, river);
         final boolean cliff = c > 1.3f;
@@ -102,21 +108,21 @@ public class SurfaceCanyon extends SurfaceBase {
                             primer.setBlockState(x, k, z, clayColorForHeight(k));
                         } else if (k > 74 + grassRaise) {
                             if (rand.nextInt(5) == 0) {
-                                primer.setBlockState(x, k, z, sand);
+                                primer.setBlockState(x, k, z, dirt);
                             } else {
                                 primer.setBlockState(x, k, z, depth == 0 ? topBlock : fillerBlock);
                             }
                         } else if (k < 62) {
-                            primer.setBlockState(x, k, z, sand);
+                            primer.setBlockState(x, k, z, dirt);
                         } else if (k < 62 + grassRaise) {
-                            primer.setBlockState(x, k, z, sand);
+                            primer.setBlockState(x, k, z, depth == 0 ? grass : dirt);
                         } else if (k < 75 + grassRaise) {
                             if (depth == 0) {
                                 final int r = (int) ((k - (62 + grassRaise)) / 2f);
                                 if (rand.nextInt(r + 1) == 0) {
-                                    primer.setBlockState(x, k, z, sand);
+                                    primer.setBlockState(x, k, z, grass);
                                 } else if (rand.nextInt((int) (r / 2f) + 1) == 0) {
-                                    primer.setBlockState(x, k, z, sand);
+                                    primer.setBlockState(x, k, z, dirt);
                                 } else {
                                     primer.setBlockState(x, k, z, topBlock);
                                 }

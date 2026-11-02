@@ -26,8 +26,6 @@ public class BiomeConfig extends Config {
     public final ConfigPropertyString SURFACE_CLIFF_COBBLE_BLOCK;
     public final ConfigPropertyInteger BEACH_BIOME;
     public final ConfigPropertyFloat TREE_DENSITY_MULTIPLIER;
-    public final ConfigPropertyBoolean SURFACE_BLEED_IN;
-    public final ConfigPropertyBoolean SURFACE_BLEED_OUT;
     public final ConfigPropertyFloat SURFACE_WATER_LAKE_MULT;
     public final ConfigPropertyFloat SURFACE_LAVA_LAKE_MULT;
 
@@ -165,22 +163,6 @@ public class BiomeConfig extends Config {
             1.0f, 0.0f, (float)DecoTree.MAX_TREE_DENSITY
         );
         this.addProperty(TREE_DENSITY_MULTIPLIER);
-
-        SURFACE_BLEED_IN = new ConfigPropertyBoolean(
-            "Surface Bleed In",
-            "Surfaces.Surface Bleed",
-            "Set to false if other biomes shouldn't bleed into this one",
-            false
-        );
-        this.addProperty(SURFACE_BLEED_IN);
-
-        SURFACE_BLEED_OUT = new ConfigPropertyBoolean(
-            "Surface Bleed Out",
-            "Surfaces.Surface Bleed",
-            "Set to false if this biome shouldn't bleed into other biomes",
-            false
-        );
-        this.addProperty(SURFACE_BLEED_OUT);
 
         SURFACE_WATER_LAKE_MULT = new ConfigPropertyFloat(
                 "Surface Water Lake Multiplier",

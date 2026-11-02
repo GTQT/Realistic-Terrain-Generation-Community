@@ -36,7 +36,10 @@ import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.ChunkGenerationProfiler.Category;
 import rtg.api.util.ChunkInfo;
 import rtg.api.util.Logger;
-import rtg.api.util.noise.*;
+import rtg.api.util.noise.ContinentalNoise;
+import rtg.api.util.noise.RtgCellNoise;
+import rtg.api.util.noise.RtgLayoutConfig;
+import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.WaterLevel;
 import rtg.api.world.biome.IRealisticBiome;
@@ -121,10 +124,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
     private final WorldGenLakes lavaLakeGenerator = new WorldGenLakes(Blocks.LAVA);
     private final WorldGenDungeons dungeonGenerator = new WorldGenDungeons();
     private final Biome[] baseBiomesList;
-    private final Biome[] rawBiomes = new Biome[256];
-    private final IRealisticBiome[] jitteredBiomes = new IRealisticBiome[256];
-    private final ISimplexData2D surfaceJitterData = SimplexData2D.newDisk();
-    private final ISimplexData2D riverJitterData = SimplexData2D.newDisk();
     private final float[] riverValues = new float[256];
     /** WP-5：与 {@link #riverValues} 同一次 Voronoi 求值带出的 {@code borderDistance()}。 */
     private final float[] riverBorders = new float[256];
@@ -292,36 +291,11 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             }
         }
 
-        // ---- Surface jitter ----
-        long tJitter = ChunkGenerationProfiler.start(Category.SURFACE_JITTER);
-        for (int i = 0; i < 16; i++) {
-            for (int j = 0; j < 16; j++) {
-                int x = blockPos.getX() + i;
-                int z = blockPos.getZ() + j;
-                final int k = (x & 15) * 16 + (z & 15);
-                IRealisticBiome actualbiome = landscape.surfaceBiome[k] != null
-                        ? landscape.surfaceBiome[k]
-                        : landscape.biome[k];                    // fail-soft：抖动未算到时回落到主群系
-                IRealisticBiome chosen = actualbiome;
-
-                // ---- 「地表渗透」----
-                if (actualbiome.getConfig().SURFACE_BLEED_IN.get()) {
-                    this.rtgWorld.simplexInstance(0).multiEval2D(x, z, surfaceJitterData);
-                    final int pX = (int) Math.round(x + surfaceJitterData.getDeltaX() * RTGConfig.surfaceBlendRadius());
-                    final int pZ = (int) Math.round(z + surfaceJitterData.getDeltaY() * RTGConfig.surfaceBlendRadius());
-                    final IRealisticBiome far = RtgLayoutAccess.biomeAt(pX, pZ);
-                    if (far != null && far.getConfig().SURFACE_BLEED_OUT.get()) {
-                        chosen = far;
-                    }
-                }
-                jitteredBiomes[i * 16 + j] = chosen;
-            }
-        }
-        ChunkGenerationProfiler.end(Category.SURFACE_JITTER, tJitter);
-
         // ---- Surface replace ----
+        // RWG 没有「地表渗透 / Surface Bleed」：地表群系就是 landscape.biome[]（randBiome 的产物），
+        // 与区块群系数组同源，不再按邻域采样改写。
         long tReplace = ChunkGenerationProfiler.start(Category.SURFACE_REPLACE);
-        replaceBiomeBlocks(cx, cz, primer, jitteredBiomes, this.baseBiomesList, landscape.noise, landscape.river);
+        replaceBiomeBlocks(cx, cz, primer, landscape.biome, this.baseBiomesList, landscape.noise, landscape.river);
         ChunkGenerationProfiler.end(Category.SURFACE_REPLACE, tReplace);
 
         // ---- Underground river tunnels & junction chambers (WP-3) ----
@@ -336,7 +310,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 // 把本区块逐列的地表群系一起传进去：Worley 的破土补顶要按 RTG 的地表材质补，
                 // 而不是按 MC 群系的 topBlock 补（两者在石山/台地这类群系上并不一致）。
                 ((WorleyCavesGenerator) this.caveGenerator)
-                        .generate(this.world, cx, cz, primer, this.jitteredBiomes);
+                        .generate(this.world, cx, cz, primer, landscape.biome);
             } else {
                 // 被第三方洞穴模组接管（或未启用 Worley）：走通用入口
                 this.caveGenerator.generate(this.world, cx, cz, primer);
@@ -443,6 +417,20 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 mpos.setPos(worldX + x, 0, worldZ + z);
                 float river = rivers[x * 16 + z];
                 final IRealisticBiome columnBiome = biomes[x * 16 + z];
+
+                // ---- 河流群系替换（RWG replaceBlocksForBiome）----
+                //
+                // RWG 只改**原版群系数组** base[]：地形、地表、biomes[] 都还是陆地群系，
+                // 变的是这一列写进区块的 vanilla biome（以及 F3 显示）。
+                // 条件逐项照抄：内陆（continent ≥ 24）、河强 > 0.05、加一点 10 格噪声后 > 0.8。
+                if (layout != null && river > 0.05f) {
+                    final int blockX = worldX + x;
+                    final int blockZ = worldZ + z;
+                    if (layout.getContinentValue(blockX, blockZ) >= 24f
+                            && river + rtgWorld.simplexInstance(0).noise2f(blockX / 10f, blockZ / 10f) * 0.15f > 0.8f) {
+                        base[x * 16 + z] = columnBiome.getRiverBiome().baseBiome();
+                    }
+                }
 
                 // ---- 火山地表 ----
                 if (columnBiome instanceof RealisticBiomeIslandVolcano && layout != null
@@ -935,20 +923,21 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             Arrays.fill(this.biomeData, biomeId);
             getNewerNoiseSingleBiome(blockPos.getX(), blockPos.getZ(), landscape, singleBiome);
             Arrays.fill(landscape.biome, singleBiome);
-            Arrays.fill(landscape.surfaceBiome, singleBiome);
             return landscape;
         }
 
         getNewerNoise(biomeProvider, blockPos.getX(), blockPos.getZ(), landscape);
-        Biome[] biomes = this.rawBiomes;
-        MutableBlockPos biomePos = new MutableBlockPos();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                biomePos.setPos(blockPos.getX() + x, 0, blockPos.getZ() + z);
-                biomes[x * 16 + z] = biomeProvider.getBiome(biomePos);
+
+        // RWG 没有「群系修复」这一步：{@code biomes[]} 就是 randBiome 的结果，
+        // F3、区块群系数组、地表方块全部用它（见 ChunkLandscape#biome）。
+        // 这里只在布局未就绪、getNewerNoise 提前返回时按 provider 兜底，避免空指针。
+        final MutableBlockPos fallbackPos = new MutableBlockPos();
+        for (int k = 0; k < 256; k++) {
+            if (landscape.biome[k] == null) {
+                fallbackPos.setPos(blockPos.getX() + (k >> 4), 0, blockPos.getZ() + (k & 15));
+                landscape.biome[k] = RTGAPI.getRTGBiome(biomeProvider.getBiome(fallbackPos));
             }
         }
-        analyzer.newRepair(biomes, this.biomeData, landscape);
         return landscape;
     }
 
@@ -1166,9 +1155,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // 链权重/宿主强度随区块保存（landscape 可能来自缓存），不能放生成器字段
         final float[] chainWeight = landscape.mountainChainWeight;
         final float[] chainHost = landscape.mountainChainRiverHost;
-        // 地表侧的群系边界抖动产物，同样随区块保存
-        final IRealisticBiome[] surfaceBiome = landscape.surfaceBiome;
         final SimplexNoise bRandNoise = rtgWorld.simplexInstance(0);
+        // RWG MAIN BIOME CHECK：区块中心格（hugeRender 4×9+4）权重 > 0.95 时整块用它。
+        IRealisticBiome mainBiome = null;
+        for (int ai = 0; ai < this.activeBiomeCount; ai++) {
+            final int bid = this.activeBiomeIds[ai];
+            if (hugeRender[4 * hugeWidth + 4][bid] > 0.95f) {
+                mainBiome = RtgRealisticIndex.biomeOf(bid);
+            }
+        }
 
         for (int i = 0; i < 16; i++) {
             for (int j = 0; j < 16; j++) {
@@ -1179,11 +1174,11 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 // 火山灰厚度逐列清零（复用字段，不清会把上一个区块的厚度漏进本区块的地表）。
                 this.volcanoSurfaceDepth[k] = 0;
 
-                // ---- 地表群系的噪声抖动 ----
+                // ---- 群系的噪声抖动（RWG randBiome）----
                 //
-                // 用一张 15 格尺度的噪声去扫累积权重区间：先越过噪声的那个群系赢得这一列的地表。
+                // 用一张 15 格尺度的噪声去扫累积权重区间：先越过噪声的那个群系赢得这一列。
                 // 这是"群系边界呈噪声状而不是直线"的另一半（第一半是四层 HUGE→SMALL 混合）。
-                // 单群系列（权重 1.0）必然被自己跨过，不可能改选别人 —— 抖动只作用在权重混合的过渡带。
+                // RWG 里这个结果直接写进唯一的 biomes[]：F3、区块群系数组、地表全用它。
                 final float bRand = Math.max(0f, Math.min(0.99999f,
                         0.5f + bRandNoise.noise2f(worldX / 15f, worldZ / 15f)));
                 float bCount = 0f;
@@ -1224,10 +1219,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
                 baseHeights[k] = totalHeight;
 
+                // RWG 的 MAIN BIOME CHECK：区块中心权重 > 0.95 时整块用那个群系，不做抖动。
                 // 扫不过去时明确回落到「第一个非零权重的群系」，结果确定、不依赖调用顺序。
-                surfaceBiome[k] = surfacePick != null
-                        ? surfacePick
-                        : RtgRealisticIndex.biomeOf(firstNonZero);
+                landscape.biome[k] = mainBiome != null
+                        ? mainBiome
+                        : surfacePick != null
+                                ? surfacePick
+                                : RtgRealisticIndex.biomeOf(firstNonZero);
 
                 chainWeight[k] = chain;
                 // 宿主强度还要算上"附近有链"的影响，否则链边缘的隧道会断掉。
@@ -1253,7 +1251,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         final boolean volcanicSurface = addedBlocks >= 5 || addedBlocks > 0 && ashBlend > ashNoise;
                         if ((volcanicSurface || lavaBasin)
                                 && layout.getVolcanoCoordinates(worldX, worldZ) != Long.MIN_VALUE) {
-                            surfaceBiome[k] = volcano;
+                            landscape.biome[k] = volcano;
                             this.volcanoSurfaceDepth[k] = (byte) (lavaBasin ? 6 : Math.min(127, addedBlocks));
                         }
                     }

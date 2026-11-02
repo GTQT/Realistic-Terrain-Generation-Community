@@ -10,27 +10,30 @@ import rtg.api.world.biome.IRealisticBiome;
 public class ChunkLandscape {
 
     public float[] noise = new float[256];
-    public IRealisticBiome [] biome = new IRealisticBiome [256];
-    public float[] river = new float[256];
 
     /**
-     * **地表**该列用哪个群系（RWG {@code randBiome} 的产物），与 {@link #biome} 分开。
+     * 该列用哪个群系 —— **RWG 的 {@code biomes[]}，全流程唯一的一份**。
      *
-     * <p>RWG {@code ChunkGeneratorRealistic:443-499} 用一张 15 格尺度的噪声
-     * （{@code bRand = 0.5f + perlin.noise2(x/15f, y/15f)}）去扫各群系的**累积权重区间**，
-     * 谁先越过 {@code bRand} 就把 {@code biomes[]} 改成谁 —— 于是过渡带的**地表**呈噪声状，
-     * 而不是沿着混合权重的等值线走成直线。
+     * <p>由 {@code ChunkGeneratorRTG#getNewerNoise} 按混合权重 + 15 格噪声
+     * （{@code bRand = 0.5f + perlin.noise2(x/15f, y/15f)}，扫累积权重区间）填出，
+     * 与 RWG {@code ChunkGeneratorRealistic:443-499} 逐行对应。
      *
-     * <p><b>为什么必须与 {@link #biome} 分开</b>：{@code biome[]} 同时供
-     * ①F3／区块群系数组（{@code ChunkGeneratorRTG.baseBiomesList}）与
-     * ②地表方块使用。开抖动之后这两者必然在**过渡带内**不一致 ——
-     * 用户已明确同意（「本来就是交界处，无可厚非」），但需要一个独立数组才能做到：
-     * F3 继续用 {@link #biome}（= 权重最大的那个），地表用本数组。
+     * <p>它同时喂三处，和 RWG 完全一致：
+     * <ul>
+     *   <li>区块群系数组 / F3（{@code baseBiomesList}）；</li>
+     *   <li>地表方块（{@code replaceBiomeBlocks}）；</li>
+     *   <li>地下河破土补顶等按列取群系的地方。</li>
+     * </ul>
+     * 曾拆出过一份独立的 {@code surfaceBiome}（F3 用布局群系、地表用抖动结果），
+     * 那是 rtgc 的偏离：过渡带会出现「F3 是草地、脚下是沙」的沙蛇。
+     * RWG 没有这种分裂。
      *
      * <p>与 {@link #mountainChainWeight} 同理，**必须随区块保存**：
      * {@code landscape} 可能来自 {@code landscapeCache}，而地表替换发生在之后。
      */
-    public IRealisticBiome[] surfaceBiome = new IRealisticBiome[256];
+    public IRealisticBiome[] biome = new IRealisticBiome[256];
+
+    public float[] river = new float[256];
 
     /**
      * 该列是否被开凿了山间河洞，以及洞顶高度。

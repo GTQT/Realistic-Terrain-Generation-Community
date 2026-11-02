@@ -1,6 +1,9 @@
 package rtg.api.util;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,8 +46,6 @@ public final class ChunkGenerationProfiler {
         LANDSCAPE("Landscape get/gen", false),
         /** 地形填充（石头/水的 ChunkPrimer 填充） */
         TERRAIN_FILL("Terrain fill", false),
-        /** 地表抖动计算 */
-        SURFACE_JITTER("Surface jitter calc", false),
         /** 生物群系地表方块替换 */
         SURFACE_REPLACE("Biome surface replace", false),
         /** 地下河隧道与交汇洞厅（WP-3） */

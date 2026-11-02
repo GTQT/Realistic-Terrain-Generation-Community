@@ -54,16 +54,13 @@ public class SurfaceDuneValley extends SurfaceBase {
         final IBlockState sand = Blocks.SAND.getDefaultState();
         final IBlockState sandstone = Blocks.SANDSTONE.getDefaultState();
         /*
-         * rtgc 有意偏离 RWG（用户要求）：这一支原本放的是泥土（RWG 原文
-         * `blocks[(y * 16 + x) * 256 + k] = Blocks.dirt`），改为砂岩。
+         * 照抄 RWG：低处（`dirt && m < 0.22f` 或 `k < 62`）铺的是 **dirt**。
          *
-         * 原因：RWG 把这个地表用在 top/filler 为 **grass + dirt** 的群系上
-         * （RealisticBiomeSavannaDunes / DuneValleyForest），低处垫泥土是合理的；
-         * 但 BOP 的 outback 在 1.12.2 里 top/filler 是**红沙**，而下面那个
-         * `|| k < 62`（因运算符优先级不受 `dirt` 参数约束）会把泥土铺进沙丘，
-         * 形成"沙里掺土"。换成砂岩后沙丘是连续的沙→砂岩剖面。
+         * 曾按"沙质群系不许出现泥土"改成砂岩，但 RWG 的沙丘剖面本来就是
+         * 沙顶 → 沙 3 格 → 砂岩，只有低洼/水线附近垫土。这里恢复原文。
+         * （1.7.10 给 dirt 写的 metadata=1 在 1.12.2 无效果，仍照旧省略。）
          */
-        final IBlockState lowBlock = sandstone;
+        final IBlockState lowBlock = Blocks.DIRT.getDefaultState();
 
         // RWG: h = (perlin.noise2(i / valley, j / valley) + 0.25f) * 65f; h = h < 1f ? 1f : h;
         float h = (simplex.noise2f(i / valley, j / valley) + 0.25f) * 65f;

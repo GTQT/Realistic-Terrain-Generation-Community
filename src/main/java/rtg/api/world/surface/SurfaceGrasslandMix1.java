@@ -1,17 +1,16 @@
 package rtg.api.world.surface;
 
-import java.util.Random;
-
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
-
 import rtg.api.config.BiomeConfig;
 import rtg.api.util.noise.SimplexNoise;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.terrain.TerrainBase;
+
+import java.util.Random;
 
 
 /**
@@ -39,7 +38,9 @@ public class SurfaceGrasslandMix1 extends SurfaceBase {
 
         super(config, top, filler);
 
-        this.mixBlock = mix;
+        // RTG+ `SurfaceVanillaSavanna` / `SurfaceBOPBrushland` 的写法：mix 块可被群系配置覆盖，
+        // 配置为空时回落到构造参数。此前这份配置声明了却没人读（死配置）。
+        this.mixBlock = getConfigBlock(config.SURFACE_MIX_BLOCK.get(), mix);
         this.cliffBlock1 = cliff1;
         this.cliffBlock2 = cliff2;
 

@@ -50,11 +50,13 @@ public class SurfaceCoastDunes extends SurfaceBase {
     /** RWG 的崖壁阈值：{@code cliff > 1.3f}（沙漠是 2.8f，沿海沙丘更低）。 */
     private static final float CLIFF_THRESHOLD = 1.3f;
 
-    // SAND_TOP_Y / GRASS / DIRT 原本用于 RWG 的"沙线以上长草、草下垫土"。
-    // 按用户要求（带沙群系不出现泥土）已统一成沙丘剖面，这三个成员随之不再需要。
+    /** RWG 的字面量：该高度以上给草，以下给沙。 */
+    private static final int SAND_TOP_Y = 68;
 
+    private static final IBlockState GRASS = Blocks.GRASS.getDefaultState();
     private static final IBlockState SAND = Blocks.SAND.getDefaultState();
     private static final IBlockState SANDSTONE = Blocks.SANDSTONE.getDefaultState();
+    private static final IBlockState DIRT = Blocks.DIRT.getDefaultState();
     private static final IBlockState STONE = Blocks.STONE.getDefaultState();
     private static final IBlockState COBBLESTONE = Blocks.COBBLESTONE.getDefaultState();
 
@@ -64,7 +66,7 @@ public class SurfaceCoastDunes extends SurfaceBase {
      */
     public SurfaceCoastDunes(final BiomeConfig config) {
 
-        super(config, SAND, SANDSTONE);
+        super(config, GRASS, DIRT);
     }
 
     @Override
@@ -94,20 +96,21 @@ public class SurfaceCoastDunes extends SurfaceBase {
                     }
                 } else {
                     if (depth == 0) {
-                        /*
-                         * rtgc 有意偏离 RWG（用户要求：带沙的群系不许出现泥土）。
-                         * RWG 原文是 `k > 68 ? grass : sand`（沙线以上长草），配套下面是泥土。
-                         * 这里统一成**沙丘剖面**：沙线以上也是沙，下面沙→砂岩，
-                         * 于是这些海滩（vanilla beach/stone_beach、BOP gravel/white/origin beach）
-                         * 不再出现草与泥土。
-                         */
-                        primer.setBlockState(x, k, z, SAND);
-                        sand = true;
-                    } else if (depth < 5) {
-                        if (depth < 4) {
-                            primer.setBlockState(x, k, z, SAND);
+                        if (k > SAND_TOP_Y) {
+                            primer.setBlockState(x, k, z, GRASS);
                         } else {
-                            primer.setBlockState(x, k, z, SANDSTONE);
+                            primer.setBlockState(x, k, z, SAND);
+                            sand = true;
+                        }
+                    } else if (depth < 5) {
+                        if (sand) {
+                            if (depth < 4) {
+                                primer.setBlockState(x, k, z, SAND);
+                            } else {
+                                primer.setBlockState(x, k, z, SANDSTONE);
+                            }
+                        } else {
+                            primer.setBlockState(x, k, z, DIRT);
                         }
                     }
                 }

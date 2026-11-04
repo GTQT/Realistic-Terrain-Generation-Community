@@ -21,8 +21,14 @@ import java.util.Collections;
 
 
 /**
- * 原版稀树草原的 RWG 外壳。地形/地表照抄 RWG {@code savanna/RealisticBiomeSavanna}：
- * {@code TerrainGrasslandFlats} + {@code SurfaceGrasslandMix1(grass, dirt, sand, stone, cobble, 13f, .27f)}。
+ * 原版稀树草原的 RWG 外壳。地形照抄 RWG {@code savanna/RealisticBiomeSavanna}：
+ * {@code TerrainGrasslandFlats}。
+ *
+ * <p>地表按 **RTG+ {@code RealisticBiomeVanillaSavanna}** 的写法：
+ * {@code SurfaceGrasslandMix1(grass, dirt, grass, stone, cobble, 13f, .27f)}
+ * —— mix 块是**草**（可由 {@code SURFACE_MIX_BLOCK} 覆盖），不是 rwg2 的沙。
+ * rwg2 传 {@code Blocks.sand}，会在草原上撒出一片片散点沙斑；RTG+ 用草，视觉上就是纯草。
+ * 两份上游此处不一致，本项目按用户决定采用 RTG+。
  *
  * <p>装饰本轮改为 RWG {@code RealisticBiomeSavanna.rDecorate} 的**逐行移植**
  * （{@link DecoRtgDecorator} 里就是原方法体，{@code strength = 1f}）。原来的
@@ -60,12 +66,12 @@ public class RealisticBiomeVanillaSavanna extends RealisticBiomeBase {
 
     @Override
     public SurfaceBase initSurface() {
-        // 照抄 RWG `savanna/RealisticBiomeSavanna.java:35-42` 的**同一份配对**：
-        //     terrain = new TerrainGrasslandFlats();
-        //     surface = new SurfaceGrasslandMix1(Blocks.grass, Blocks.dirt, Blocks.sand,
-        //                                        Blocks.stone, Blocks.cobblestone, 13f, 0.27f);
+        // 地表按 RTG+ `RealisticBiomeVanillaSavanna` 的配对：
+        //     surface = new SurfaceVanillaSavanna(getConfig(), grass, dirt, grass, 13f, 0.27f);
+        // mix 块是**草** —— rwg2 写的是 Blocks.sand，会在草原上留下散点沙斑。
+        // SurfaceGrasslandMix1 仍会读 SURFACE_MIX_BLOCK（默认空 = 用这里传的草）。
         return new SurfaceGrasslandMix1(getConfig(), Blocks.GRASS.getDefaultState(), Blocks.DIRT.getDefaultState(),
-                Blocks.SAND.getDefaultState(), Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState(),
+                Blocks.GRASS.getDefaultState(), Blocks.STONE.getDefaultState(), Blocks.COBBLESTONE.getDefaultState(),
                 13f, 0.27f);
     }
 

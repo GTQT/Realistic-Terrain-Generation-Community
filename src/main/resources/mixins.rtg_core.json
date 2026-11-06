@@ -6,7 +6,9 @@
   "minVersion": "0.8.3",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
-    "core.ChunkGetBiomeMixin"
+    "core.ChunkGetBiomeMixin",
+    "core.ChunkProfilerMixin",
+    "core.WorldProfilerMixin"
   ],
   "server": [],
   "client": []

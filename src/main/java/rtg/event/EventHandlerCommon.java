@@ -20,6 +20,9 @@ import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
+import rtg.api.util.ChunkGenerationProfiler;
+import rtg.api.util.ChunkGenerationProfiler.Category;
+import rtg.api.util.ChunkGenerationProfiler.Counter;
 import rtg.api.util.ChunkInfo;
 import rtg.api.util.Logger;
 import rtg.api.util.UtilityClass;
@@ -175,12 +178,18 @@ public final class EventHandlerCommon
         if (!isRTGWorld(loadEvent.getWorld())) return;
         if (alreadyFixing) return;
         alreadyFixing = true;
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                fixLighting(loadEvent.getChunk(), x, z);
+        long fixStart = ChunkGenerationProfiler.start(Category.FIX_LIGHTING_ON_LOAD);
+        try {
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    fixLighting(loadEvent.getChunk(), x, z);
+                }
             }
+        } finally {
+            // onLoad 不在当前区块的计时 map 内，只进 Category 聚合，避免污染正在生成的区块。
+            ChunkGenerationProfiler.endExternal(Category.FIX_LIGHTING_ON_LOAD, fixStart);
+            alreadyFixing = false;
         }
-        alreadyFixing = false;
     }
 
     // 上游把这个类的唯一调用点注释掉了，此处保持同样的注释状态（备而不用）。
@@ -200,6 +209,7 @@ public final class EventHandlerCommon
 
     private static void fixLighting(Chunk chunk, int x, int z) {
 
+        ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_COLUMNS);
         if (chunk.getBlockState(x, 255, z).getBlock() != Blocks.AIR) return;
         int lastAir = 255;
         for (int y = 255; y > 48; y--) {
@@ -213,6 +223,7 @@ public final class EventHandlerCommon
                 BlockPos lastAirLocation = new BlockPos(x, lastAir, z);
                 int lighting = chunk.getLightFor(EnumSkyBlock.SKY, lastAirLocation);
                 if (lighting < getAdjacentBlockLight(chunk, x, lastAir, z) - 1) {
+                    ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_WOOL);
                     chunk.getWorld().setBlockState(chunk.getPos().getBlock(x, lastAir, z), Blocks.WOOL.getDefaultState(), 3);
                     chunk.getWorld().setBlockToAir(chunk.getPos().getBlock(x, lastAir, z));
                 }

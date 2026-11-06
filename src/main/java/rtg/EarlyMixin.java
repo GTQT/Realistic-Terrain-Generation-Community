@@ -14,21 +14,20 @@ import java.util.Map;
 public class EarlyMixin implements IEarlyMixinLoader, IFMLLoadingPlugin {
 
     /**
-     * 主 mixin 配置。
+     * 早期 mixin 配置。
      *
-     * <p><b>⚠ 必须在这里登记</b>：jar 的 MANIFEST 里**没有** {@code MixinConfigs} 属性
-     * （RFG 的 {@code mixin_configs} 只生成 json 文件，不写 MANIFEST），所以
-     * {@code mixins.rtgc.json} 不会自动加载。此前本方法返回 {@code null}，
-     * 于是 {@code rtg.mixins.core.ChunkGetBiomeMixin} **从未生效** ——
-     * 表现为 F3 在被回填后的那一瞬是对的、其余时间又变回 REID 的占位值。
+     * <p><b>为什么必须是 early loader</b>：{@code World} 在 FML 构造 mod 之前就被
+     * 加载了；把 {@code WorldProfilerMixin}/{@code ChunkProfilerMixin} 放进 late
+     * 配置会直接触发 {@code MixinTargetAlreadyLoadedException}。因此本类必须由
+     * {@code FMLCorePlugin} 注册为 coremod，并在 early 阶段登记
+     * {@code mixins.rtg_core.json}。
      *
-     * <p>走 MixinBooter 的 early loader 是可靠路径（日志里 {@code mixins.rtg_late.json}
-     * 就是这样被 {@code Adding […] mixin configuration} 加载的），early 阶段早于原版类被使用，
-     * 且 refmap（{@code mixins.rtgc.refmap.json}）已随 jar 打包。
+     * <p>{@code mixins.rtgc.json} 只是 RFG 按 {@code mixin_configs} 生成的占位文件，
+     * 不会被 MANIFEST 自动加载；真正生效的是这里返回的配置。
      */
     @Override
     public List<String> getMixinConfigs() {
-        return Collections.singletonList("mixins.rtgc.json");
+        return Collections.singletonList("mixins.rtg_core.json");
     }
 
     @Override

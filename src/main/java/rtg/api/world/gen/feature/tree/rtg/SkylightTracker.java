@@ -4,6 +4,11 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldType;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
+import rtg.api.util.ChunkGenerationProfiler;
+import rtg.api.util.ChunkGenerationProfiler.Counter;
 
 public class SkylightTracker {
 	
@@ -48,6 +53,7 @@ public class SkylightTracker {
 				lowest [x][z] = 255;
 			}
 		}
+		ChunkGenerationProfiler.count(Counter.SKYLIGHT_TRACKERS);
 		setLighting(world);
 		initialSpread();
 	}
@@ -57,9 +63,6 @@ public class SkylightTracker {
 		this.tolerableObstruction = tolerableObstruction;
 	}
 	
-	private final BlockPos baseAt(int x, int z) {
-		return new BlockPos(base.getX()-distance + x, base.getY(),base.getZ()-distance + z);
-	}
 	private final class Spotlight {
 		
 		int x;
@@ -328,59 +331,259 @@ public class SkylightTracker {
 		}
 	}
 	
-	public boolean isLog(IBlockState blockState) {
+	public static boolean isLog(IBlockState blockState) {
 		if (blockState.getBlock() == Blocks.LOG) return true;
 		if (blockState.getBlock() == Blocks.LOG2) return true;
 		return false;
 	}
 	
-	private void setLighting(World world) {
-		for (int x = 0; x < width; x ++) {
-			for (int z = 0; z < width; z ++) {
-				BlockPos columnBase = this.baseAt(x, z);
-				int obstruction = 0;
-				if (world.isBlockLoaded(columnBase)) {
-					// otherwise we will assume no obstructions 
-					int up = 0;
-					// skip up through opaque blocks at bottom
-					while (up < this.lightingHeight) {
-						IBlockState examined = world.getBlockState(columnBase.up(up));
-						if (!examined.isOpaqueCube()) break;
-						if (isLog(examined)&& up>5) {
-							obstruction = 255;
-							this.trunk[x][z] = true;
-							break;
-						}
-						up ++;
-					}
-					while (up < this.lightingHeight) {
-						IBlockState examined = world.getBlockState(columnBase.up(up));
-						if (examined.isOpaqueCube()) {
-							obstruction = 255;
-							break;// we're done, it's dark
-						}
-						//ignore water
-						if (examined.getBlock().equals(Blocks.WATER)) examined = Blocks.AIR.getDefaultState();
-						obstruction += examined.getLightOpacity();
-						if (obstruction > 1) {
-							obstruction = 255;
-							break;// we're done, it's dark
-						}
-						up ++;
-					}
+	// ==================================================================
+	// A5': direct chunk-storage column scan
+	// ==================================================================
+
+	interface ColumnAccess {
+		IBlockState get(int y);
+
+		boolean isEmptySection(int y);
+
+		int sectionTop(int y);
+	}
+
+	static final class ColumnScan {
+		int obstruction;
+		boolean trunk;
+		int reads;
+		int emptySections;
+
+		void reset() {
+			obstruction = 0;
+			trunk = false;
+			reads = 0;
+			emptySections = 0;
+		}
+	}
+
+	private static final class ChunkColumnAccess implements ColumnAccess {
+		private Chunk chunk;
+		private ExtendedBlockStorage[] sections;
+		private boolean debug;
+		private int localX;
+		private int localZ;
+
+		void set(Chunk chunk, boolean debug, int localX, int localZ) {
+			this.chunk = chunk;
+			this.debug = debug;
+			this.localX = localX;
+			this.localZ = localZ;
+			this.sections = debug ? null : chunk.getBlockStorageArray();
+		}
+
+		@Override
+		public IBlockState get(int y) {
+			if (debug) {
+				return chunk.getBlockState(localX, y, localZ);
+			}
+			ExtendedBlockStorage section = sections[y >> 4];
+			if (section == null || section.isEmpty()) {
+				return Blocks.AIR.getDefaultState();
+			}
+			IBlockState state = section.get(localX, y & 15, localZ);
+			return state == null ? Blocks.AIR.getDefaultState() : state;
+		}
+
+		@Override
+		public boolean isEmptySection(int y) {
+			if (debug) return false;
+			ExtendedBlockStorage section = sections[y >> 4];
+			return section == null || section.isEmpty();
+		}
+
+		@Override
+		public int sectionTop(int y) {
+			return ((y >> 4) + 1) << 4;
+		}
+	}
+
+	/**
+	 * 未加载区块的兜底列访问：保持 {@code World#getBlockState} 的加载/越界语义。
+	 * <p>正常树生成不应走到这里；它是“邻区块恰好未加载”时的安全路径，不参与快路径。
+	 */
+	private static final class WorldColumnAccess implements ColumnAccess {
+		private World world;
+		private int x;
+		private int z;
+
+		void set(World world, int x, int z) {
+			this.world = world;
+			this.x = x;
+			this.z = z;
+		}
+
+		@Override
+		public IBlockState get(int y) {
+			return world.getBlockState(new BlockPos(x, y, z));
+		}
+
+		@Override
+		public boolean isEmptySection(int y) {
+			return false;
+		}
+
+		@Override
+		public int sectionTop(int y) {
+			return y + 1;
+		}
+	}
+
+	/** checkLighting 只需要知道“该在哪个坐标调用 checkLight”，便于合成测试。 */
+	interface LightCheckSink {
+		void check(int x, int y, int z);
+	}
+
+	/**
+	 * 扫描一列 baseY..baseY+lightingHeight-1。语义与旧的逐格 world.getBlockState 完全一致，
+	 * 唯一差别是第二段可以用 {@link ExtendedBlockStorage#isEmpty()} 整段跳过。
+	 *
+	 * <p><b>第一段不能在空段处跳过</b>：它只处理底部的连续不透明块，遇到第一个非不透明块就结束。
+	 * 如果跳段，会把空段上方的原木/实心块也算进来，改变 trunk 与 obstruction。
+	 *
+	 * <p>注意 {@code baseY} 是树基位置，旧实现从 {@code base.up(up)} 开始扫描；
+	 * 这里必须保持绝对 Y，否则会把扫描范围错移到世界底部。
+	 */
+	static void scanColumn(ColumnAccess access, int baseY, int lightingHeight, ColumnScan out) {
+		out.reset();
+		final int startY = Math.max(0, baseY);
+		final int endY = Math.min(256, startY + lightingHeight);
+		int up = startY;
+
+		// 第一段：跳过底部连续的不透明块；遇到空气/空段必须停止。
+		while (up < endY) {
+			if (access.isEmptySection(up)) {
+				break;
+			}
+			IBlockState examined = access.get(up);
+			out.reads++;
+			if (!examined.isOpaqueCube()) {
+				break;
+			}
+			if (isLog(examined) && (up - startY) > 5) {
+				out.obstruction = 255;
+				out.trunk = true;
+				return;
+			}
+			up++;
+		}
+
+		// 第二段：空气/水/非实心方块；整段空气可以安全跳过。
+		while (up < endY) {
+			if (access.isEmptySection(up)) {
+				int next = access.sectionTop(up);
+				if (next <= up) {
+					break;
 				}
-				this.directOpacity [x][z] = obstruction;
+				out.emptySections++;
+				up = next;
+				continue;
+			}
+			IBlockState examined = access.get(up);
+			out.reads++;
+			if (examined.isOpaqueCube()) {
+				out.obstruction = 255;
+				return;
+			}
+			// ignore water (same as the old scan)
+			if (examined.getBlock() == Blocks.WATER) {
+				examined = Blocks.AIR.getDefaultState();
+			}
+			out.obstruction += examined.getLightOpacity();
+			if (out.obstruction > 1) {
+				out.obstruction = 255;
+				return;
+			}
+			up++;
+		}
+	}
+
+	private void setLighting(World world) {
+		final boolean debug = world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES;
+		final int baseCX = base.getX() >> 4;
+		final int baseCZ = base.getZ() >> 4;
+		final Chunk[] chunkCache = new Chunk[25];
+		final ChunkColumnAccess access = new ChunkColumnAccess();
+		final ColumnScan scan = new ColumnScan();
+
+		// 旧实现的 isBlockLoaded(columnBase) 会拒绝越界 Y；这里保持一致，
+		// 否则负 baseY 会被 clamp 到 0 后扫出本不存在的遮挡。
+		if (base.getY() < 0 || base.getY() >= 256) {
+			for (int x = 0; x < width; x++) {
+				for (int z = 0; z < width; z++) {
+					this.directOpacity[x][z] = 0;
+				}
+			}
+			return;
+		}
+
+		for (int x = 0; x < width; x++) {
+			for (int z = 0; z < width; z++) {
+				final int worldX = base.getX() - distance + x;
+				final int worldZ = base.getZ() - distance + z;
+				final int chunkX = worldX >> 4;
+				final int chunkZ = worldZ >> 4;
+				final int dx = chunkX - baseCX + 2;
+				final int dz = chunkZ - baseCZ + 2;
+
+				Chunk chunk;
+				if (dx >= 0 && dx < 5 && dz >= 0 && dz < 5) {
+					final int cacheIndex = dz * 5 + dx;
+					chunk = chunkCache[cacheIndex];
+					if (chunk == null) {
+						chunk = world.getChunkProvider().getLoadedChunk(chunkX, chunkZ);
+						if (chunk != null) {
+							chunkCache[cacheIndex] = chunk;
+						}
+					}
+				} else {
+					chunk = world.getChunkProvider().getLoadedChunk(chunkX, chunkZ);
+				}
+
+				if (chunk == null) {
+					// 未加载：保持旧行为“无遮挡”。
+					this.directOpacity[x][z] = 0;
+					continue;
+				}
+
+				access.set(chunk, debug, worldX & 15, worldZ & 15);
+				scanColumn(access, base.getY(), this.lightingHeight, scan);
+				this.directOpacity[x][z] = scan.obstruction;
+				if (scan.trunk) {
+					this.trunk[x][z] = true;
+				}
+
+				ChunkGenerationProfiler.count(Counter.SKYLIGHT_COLUMNS);
+				ChunkGenerationProfiler.add(Counter.SKYLIGHT_STATE_READS, scan.reads);
+				ChunkGenerationProfiler.add(Counter.SKYLIGHT_EMPTY_SECTIONS, scan.emptySections);
 			}
 		}
-		
 	}
-	
+
 	private void initialSpread() {
 		// start with direct lighting;
+		boolean anyObstruction = false;
 		for (int x = 0; x < width; x ++) {
 			for (int z = 0; z < width; z ++) {
-				opacity [x][z] = directOpacity [x][z];
+				int direct = directOpacity [x][z];
+				opacity [x][z] = direct;
+				if (direct != 0) {
+					anyObstruction = true;
+				}
 			}
+		}
+		// A5 全亮快路径：所有列都没有遮挡时，spread 的每一格都以 opacity=0、
+		// dimmed=1 进入，任何邻居都不满足 opacity > dimmed，整轮递归是恒等变换。
+		// 这里直接跳过 width² 次调用；opacity/lightDirection 已处于构造时的全 0/CENTER。
+		if (!anyObstruction) {
+			ChunkGenerationProfiler.count(Counter.SKYLIGHT_BRIGHT_SKIPS);
+			return;
 		}
 		Spotlight spotlight = new Spotlight();
 		for (int x = 0; x < width; x ++) {
@@ -392,6 +595,7 @@ public class SkylightTracker {
 	}
 	
 	private void spread (Spotlight spotlight) {
+		ChunkGenerationProfiler.count(Counter.SKYLIGHT_SPREAD_VISITS);
 		if (spotlight.opacity() > spotlight.directOpacity()) {
 			spotlight.setOpacity(spotlight.directOpacity());
 			spotlight.setDirection(OrthogonalDirection.CENTER);
@@ -569,29 +773,67 @@ public class SkylightTracker {
 		return ((x>-1) && (x<width) && (z>-1) && (z<width));
 	}
 	
+	/**
+	 * 从 {@code startY} 向下扫到水面，遇到遮光块时只在该段第一次命中处调用 checkLight。
+	 * 空 section 对 {@code looking} 的唯一影响是把它置回 true，因此可以整段跳过。
+	 *
+	 * @return 实际调用 sink 的次数（仅用于测试/诊断）
+	 */
+	static int scanCheckLightingColumn(ColumnAccess access, int worldX, int worldZ,
+									   int startY, int waterTop, LightCheckSink sink) {
+		int checks = 0;
+		boolean looking = true;
+		int y = startY;
+		while (y > waterTop) {
+			if (access.isEmptySection(y)) {
+				ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_EMPTY_SECTIONS);
+				// 整段空气：原逻辑会逐格把 looking 置 true；直接跳到段底下一格。
+				y = ((y >> 4) << 4) - 1;
+				looking = true;
+				continue;
+			}
+			IBlockState state = access.get(y);
+			ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_STATE_READS);
+			if (state.getLightOpacity() > 10) {
+				if (looking) {
+					sink.check(worldX, y, worldZ);
+					checks++;
+				}
+				looking = false;
+			} else {
+				looking = true;
+			}
+			y--;
+		}
+		return checks;
+	}
+
 	public void checkLighting(World world) {
+		final boolean debug = world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES;
+		final ChunkColumnAccess chunkAccess = new ChunkColumnAccess();
+		final WorldColumnAccess worldAccess = new WorldColumnAccess();
+		final int waterTop = rtg.api.world.WaterLevel.current().waterSurfaceTop();
+		// WorldProfilerMixin 在 World#checkLight 入口统一计数；这里只负责给出坐标。
+		final LightCheckSink sink = (x, y, z) -> world.checkLight(new BlockPos(x, y, z));
+
 		for (int localX = 0; localX < width; localX++) {
 			for (int localZ = 0; localZ < width; localZ++) {
+				ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_COLUMNS);
 				if ((opacity[localX][localZ] ==0)||(opacity[localX][localZ] >15)) continue; // either unaffected or hopelessly dark
-				//scan to bottom
-				boolean looking = true; 
 				int y = lowest[localX][localZ] - 1;
 				if (y>=254) continue; // this tree didn't place any blocks there
-				// 偏离上游（有意）：上游此处硬编码 62，本仓库的水面高度由 WaterLevel 统一裁决
-				// （RWG 重写引入的单一真相源；地形代码里 61.5/62/63/64.5 等字面量都归它管）。
-				// 硬编码会在 seaLevel 被改配置时静默失配，故保留本仓库的写法。
-				while (y > rtg.api.world.WaterLevel.current().waterSurfaceTop()) {
-					BlockPos position = new BlockPos(base.getX()-distance + localX, y,base.getZ()-distance + localZ);
-					if (world.getBlockState(position).getLightOpacity()>10) {
-						if (looking) {
-							BlockPos oldPosition = new BlockPos(base.getX()-distance + localX, y+1,base.getZ()-distance + localZ);
-							world.checkLight(position);
-						}
-						looking = false;
-					} else {
-						looking = true;
-					}
-					y--;
+				final int worldX = base.getX()-distance + localX;
+				final int worldZ = base.getZ()-distance + localZ;
+				final Chunk chunk = world.getChunkProvider().getLoadedChunk(worldX >> 4, worldZ >> 4);
+
+				if (chunk == null || debug) {
+					// 保持旧行为：未加载区块仍由 World#getBlockState 决定是否加载/返回空气；
+					// DEBUG 世界必须走 World/Chunk 的调试特例，不能直接读 storage。
+					worldAccess.set(world, worldX, worldZ);
+					scanCheckLightingColumn(worldAccess, worldX, worldZ, y, waterTop, sink);
+				} else {
+					chunkAccess.set(chunk, false, worldX & 15, worldZ & 15);
+					scanCheckLightingColumn(chunkAccess, worldX, worldZ, y, waterTop, sink);
 				}
 			}
 		}

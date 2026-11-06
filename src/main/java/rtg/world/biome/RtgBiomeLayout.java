@@ -2,6 +2,8 @@ package rtg.world.biome;
 
 import net.minecraft.init.Biomes;
 import rtg.api.RTGAPI;
+import rtg.api.util.ChunkGenerationProfiler;
+import rtg.api.util.ChunkGenerationProfiler.Counter;
 import rtg.api.util.noise.*;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
@@ -44,7 +46,8 @@ public final class RtgBiomeLayout {
     private static final float COAST_WIDTH = 24f;
     public static final float DIAG_COAST_WIDTH = COAST_WIDTH;
     private static final double CLIMATE_SHIFT = 4000D;
-    private static final int BIOME_CACHE_MAX = 4096;
+    private static final int BIOME_CACHE_MAX =
+            Math.max(1024, Integer.getInteger("rtg.biomeCacheMax", 65536));
     private static final float RIVER_BED = 59f;
     /**
      * 地下河隧道带的宽度标尺：**RWG 原值 {@code 9}**（{@code 9/1250} 个 cell）。
@@ -860,8 +863,10 @@ public final class RtgBiomeLayout {
         final long key = cacheKey(x, z);
         final IRealisticBiome cached = biomeCache.get(key);
         if (cached != null) {
+            ChunkGenerationProfiler.count(Counter.BIOME_CACHE_HITS);
             return cached;
         }
+        ChunkGenerationProfiler.count(Counter.BIOME_CACHE_MISSES);
 
         final IRealisticBiome output = computeBiomeDataAt(x, z);
         if (output == null) {
@@ -869,6 +874,7 @@ public final class RtgBiomeLayout {
         }
 
         if (biomeCache.size() > BIOME_CACHE_MAX) {
+            ChunkGenerationProfiler.count(Counter.BIOME_CACHE_CLEARS);
             biomeCache.clear();
         }
         biomeCache.put(key, output);

@@ -66,6 +66,8 @@ public final class ChunkGenerationProfiler {
         POP_LAKES("Pop: lakes", false),
         /** 地牢生成 */
         POP_DUNGEONS("Pop: dungeons", false),
+        /** 生物群系权重循环（9×9 的群系采样/去重，不含实际装饰） */
+        POP_WEIGHTS("Pop: weights", false, true),
         /** 生物群系装饰（树木、花草等） */
         POP_DECORATION("Pop: decoration", false),
         /**
@@ -76,22 +78,80 @@ public final class ChunkGenerationProfiler {
          * 所以"某些模组的装饰处理器现在才开始跑"。一旦装饰阶段出现秒级尖峰，
          * 单靠"Pop: decoration"这一格分不清是 rtgc 自己的 {@code rDecorate} 还是别人的处理器。
          */
-        POP_DECO_PRE_EVENT("Pop: deco PreEvent", false),
+        POP_DECO_PRE_EVENT("Pop: deco PreEvent", false, true),
         /** {@code DecorateBiomeEvent.Post} 的发出耗时（同理：别人的处理器）。 */
-        POP_DECO_POST_EVENT("Pop: deco PostEvent", false),
+        POP_DECO_POST_EVENT("Pop: deco PostEvent", false, true),
+        /** 洞穴藤蔓（POP_DECORATION 之外） */
+        POP_VINES("Pop: cave vines", false),
+        /** LavaCaveLandmark 的装饰放置 */
+        POP_LANDMARK_DECO("Pop: lava landmark", false),
+        /** 延迟到邻区块已生成的海洋装饰 */
+        POP_DEFERRED_DECO("Pop: deferred ocean", false),
+        /** 装饰后修补光照（fixLightingAround） */
+        POP_FIX_LIGHTING("Pop: fix lighting", false),
         /** 动物生成 */
         POP_ANIMALS("Pop: animals", false),
         /** 雪和冰放置 */
-        POP_SNOW_ICE("Pop: snow & ice", false);
+        POP_SNOW_ICE("Pop: snow & ice", false),
+        /** 区块加载时的光照修补（不在当前 chunk 的计时 map 内，单独聚合） */
+        FIX_LIGHTING_ON_LOAD("Fix lighting on load", false);
 
         /** UI 显示名称 */
         public final String displayName;
         /** 是否是汇总阶段（其耗时 = 所属各阶段之和，不单独计次） */
         public final boolean isSummary;
+        /** 是否是某个父阶段的子阶段（不加入区块总耗时，避免与父阶段重复计算） */
+        public final boolean isSubPhase;
 
         Category(String displayName, boolean isSummary) {
+            this(displayName, isSummary, false);
+        }
+
+        Category(String displayName, boolean isSummary, boolean isSubPhase) {
             this.displayName = displayName;
             this.isSummary = isSummary;
+            this.isSubPhase = isSubPhase;
+        }
+    }
+
+    /**
+     * 事件型计数器：这些数字不适合用耗时表达（调用次数、方块写入数、缓存命中数），
+     * 单独聚合，避免把“次数”混进 Avg/Min/Max 的毫秒表。
+     */
+    public enum Counter {
+        SKYLIGHT_TRACKERS("skylight.trackers", false),
+        SKYLIGHT_COLUMNS("skylight.columns", false),
+        SKYLIGHT_STATE_READS("skylight.stateReads", false),
+        SKYLIGHT_EMPTY_SECTIONS("skylight.emptySections", false),
+        SKYLIGHT_SPREAD_VISITS("skylight.spreadVisits", false),
+        SKYLIGHT_BRIGHT_SKIPS("skylight.brightSkips", false),
+        SKYLIGHT_CHECK_COLUMNS("skylight.checkColumns", false),
+        SKYLIGHT_CHECK_STATE_READS("skylight.checkStateReads", false),
+        SKYLIGHT_CHECK_EMPTY_SECTIONS("skylight.checkEmptySections", false),
+        CHECK_LIGHT_CALLS("world.checkLightCalls", false),
+        OPAQUE_LOG_WRITES("opaqueWrites.log", false),
+        OPAQUE_LEAVES_WRITES("opaqueWrites.leaves", false),
+        OPAQUE_WATER_WRITES("opaqueWrites.water", false),
+        OPAQUE_ICE_WRITES("opaqueWrites.ice", false),
+        OPAQUE_WEB_WRITES("opaqueWrites.web", false),
+        OPAQUE_OTHER_WRITES("opaqueWrites.other", false),
+        NEW_SECTION_REBUILDS("chunk.generateSkylightMap", false),
+        BIOME_CACHE_HITS("biomeCache.hits", false),
+        BIOME_CACHE_MISSES("biomeCache.misses", false),
+        BIOME_CACHE_CLEARS("biomeCache.clears", false),
+        FIX_LIGHTING_COLUMNS("fixLighting.columns", false),
+        FIX_LIGHTING_WOOL("fixLighting.wool", false),
+        RECHECK_GAPS_CALLS("chunk.recheckGaps.calls", false),
+        RECHECK_GAPS_NS("chunk.recheckGaps", true),
+        DECO_OWN_NS("deco.own", true),
+        DECO_VANILLA_NS("deco.vanilla", true);
+
+        public final String displayName;
+        public final boolean isTime;
+
+        Counter(String displayName, boolean isTime) {
+            this.displayName = displayName;
+            this.isTime = isTime;
         }
     }
 
@@ -102,7 +162,7 @@ public final class ChunkGenerationProfiler {
     /** 每 N 个区块打印一次汇总报告，0 表示不自动打印 */
     private static volatile int logInterval = 200;
     /** 超过此阈值（纳秒）的区块被视为慢区块并单独输出 */
-    private static volatile long slowThresholdNs = 100_000_000L; // 100ms
+    private static volatile long slowThresholdNs = 20_000_000L; // 20ms
 
     // ========== 聚合统计 ==========
 
@@ -114,6 +174,16 @@ public final class ChunkGenerationProfiler {
     private static final AtomicReference<SlowChunkRecord> slowestChunk = new AtomicReference<>();
     /** 每个 Category 的聚合统计 */
     private static final ConcurrentHashMap<Category, AggregateStats> aggregateStats = new ConcurrentHashMap<>();
+    /** 事件型计数器（次数、方块写入数、缓存命中数等） */
+    private static final AtomicLong[] counterValues = new AtomicLong[Counter.values().length];
+    /** 本次会话内按装饰器名字聚合的耗时（name -> [totalNs, calls]） */
+    private static final ConcurrentHashMap<String, long[]> sessionDeco = new ConcurrentHashMap<>();
+
+    static {
+        for (int i = 0; i < counterValues.length; i++) {
+            counterValues[i] = new AtomicLong();
+        }
+    }
 
     // ========== 线程本地（每区块）数据 ==========
 
@@ -168,6 +238,55 @@ public final class ChunkGenerationProfiler {
         return slowChunks.get();
     }
 
+    // ========== 计数器 API ==========
+
+    public static void count(Counter counter) {
+        if (!enabled) return;
+        counterValues[counter.ordinal()].incrementAndGet();
+    }
+
+    public static void add(Counter counter, long delta) {
+        if (!enabled || delta == 0L) return;
+        counterValues[counter.ordinal()].addAndGet(delta);
+    }
+
+    public static long getCounter(Counter counter) {
+        return counterValues[counter.ordinal()].get();
+    }
+
+    /**
+     * 记录一个不属于当前区块 map 的外部耗时（例如区块加载时的光照修补）。
+     * 只进入 Category 聚合，不污染正在生成的区块。
+     */
+    public static void endExternal(Category cat, long startNs) {
+        if (startNs == 0L) return;
+        long elapsed = System.nanoTime() - startNs;
+        AggregateStats stats = aggregateStats.computeIfAbsent(cat, k -> new AggregateStats());
+        stats.record(elapsed);
+    }
+
+    /**
+     * 会话级装饰归因：按装饰器名字累计，供最终报告判断到底是哪棵树/哪个 deco 慢。
+     */
+    public static void recordDeco(String name, long ns) {
+        if (!enabled || ns <= 0L || name == null) return;
+        String key = name;
+        long[] slot = sessionDeco.computeIfAbsent(key, k -> new long[2]);
+        synchronized (slot) {
+            slot[0] += ns;
+            slot[1]++;
+        }
+    }
+
+    /** 当前会话内某个装饰器的累计纳秒（测试/诊断用） */
+    public static long getSessionDecoNs(String name) {
+        long[] slot = sessionDeco.get(name);
+        if (slot == null) return 0L;
+        synchronized (slot) {
+            return slot[0];
+        }
+    }
+
     // ========== 计时 API ==========
 
     /**
@@ -219,10 +338,11 @@ public final class ChunkGenerationProfiler {
         if (!enabled) return;
         EnumMap<Category, Long> data = chunkPhaseNanos.get();
 
-        // 计算本区块总耗时（排除 CHUNK_TOTAL / POP_TOTAL 这种汇总阶段，避免重复计算）
+        // 计算本区块总耗时（排除 CHUNK_TOTAL / POP_TOTAL 这种汇总阶段，
+        // 也排除 PreEvent/weights 等子阶段，避免与父阶段重复计算）
         long chunkTotal = 0L;
         for (Map.Entry<Category, Long> e : data.entrySet()) {
-            if (!e.getKey().isSummary) {
+            if (!e.getKey().isSummary && !e.getKey().isSubPhase) {
                 chunkTotal += e.getValue();
             }
         }
@@ -284,6 +404,13 @@ public final class ChunkGenerationProfiler {
         totalChunks.set(0);
         slowChunks.set(0);
         slowestChunk.set(null);
+        sessionDeco.clear();
+        for (AtomicLong value : counterValues) {
+            value.set(0L);
+        }
+        chunkPhaseNanos.get().clear();
+        currentCX.remove();
+        currentCZ.remove();
     }
 
     // ========== 内部实现 ==========
@@ -294,25 +421,39 @@ public final class ChunkGenerationProfiler {
         double totalMs = totalNs / 1_000_000.0;
         sb.append(String.format("[RTG-Profiler] SLOW chunk [%d, %d] %.2fms:\n", cx, cz, totalMs));
 
-        // 分离汇总阶段和子阶段
+        // 分离汇总阶段、父阶段明细、子阶段明细（子阶段不能计入父阶段合计）
         List<Map.Entry<Category, Long>> details = new ArrayList<>();
+        List<Map.Entry<Category, Long>> subPhases = new ArrayList<>();
         List<Map.Entry<Category, Long>> summaries = new ArrayList<>();
         for (Map.Entry<Category, Long> e : data.entrySet()) {
             if (e.getKey().isSummary) {
                 summaries.add(e);
+            } else if (e.getKey().isSubPhase) {
+                subPhases.add(e);
             } else {
                 details.add(e);
             }
         }
         details.sort(Map.Entry.<Category, Long>comparingByValue().reversed());
+        subPhases.sort(Map.Entry.<Category, Long>comparingByValue().reversed());
         summaries.sort(Map.Entry.<Category, Long>comparingByValue().reversed());
 
-        // 输出子阶段（按时长降序，百分比基于非汇总总计）
+        // 父阶段：百分比基于“非汇总、非子阶段”的总计
         for (Map.Entry<Category, Long> e : details) {
             double ms = e.getValue() / 1_000_000.0;
             double pct = totalNs > 0 ? (100.0 * e.getValue() / totalNs) : 0.0;
             sb.append(String.format("  %-25s %8.2fms (%5.1f%%)\n",
                     e.getKey().displayName, ms, pct));
+        }
+
+        // 子阶段：单独标注，避免与父阶段重复后百分比超过 100%
+        if (!subPhases.isEmpty()) {
+            sb.append("  --- (sub-phases, contained in parent) ---\n");
+            for (Map.Entry<Category, Long> e : subPhases) {
+                double ms = e.getValue() / 1_000_000.0;
+                sb.append(String.format("  %-25s %8.2fms\n",
+                        e.getKey().displayName, ms));
+            }
         }
 
         // 输出汇总阶段（显示包含关系，不计算百分比以免误导）
@@ -343,7 +484,8 @@ public final class ChunkGenerationProfiler {
         sb.append("[RTG-Profiler] Top phases (avg):");
         int printed = 0;
         for (Map.Entry<Category, AggregateStats> e : sorted) {
-            if (e.getKey().isSummary) continue; // 跳过汇总阶段
+            // 跳过汇总阶段和子阶段：子阶段包含在父阶段里，混排会挤掉真正的父阶段
+            if (e.getKey().isSummary || e.getKey().isSubPhase) continue;
             AggregateStats s = e.getValue();
             if (s.count == 0) continue;
             double avgMs = (s.totalNs / (double) s.count) / 1_000_000.0;
@@ -353,6 +495,53 @@ public final class ChunkGenerationProfiler {
         if (printed > 0) {
             Logger.info(sb.toString());
         }
+
+        String counters = buildCounterSummaryLine();
+        if (!counters.isEmpty()) {
+            Logger.info("[RTG-Profiler] Counters:" + counters);
+        }
+
+        String deco = buildSessionDecoLine(3);
+        if (!deco.isEmpty()) {
+            Logger.info("[RTG-Profiler] Top decos (session total):" + deco);
+        }
+    }
+
+    /** 构建周期性汇总用的一行计数器（只输出非零项） */
+    private static String buildCounterSummaryLine() {
+        StringBuilder sb = new StringBuilder(256);
+        for (Counter counter : Counter.values()) {
+            long value = counterValues[counter.ordinal()].get();
+            if (value == 0L) continue;
+            if (counter.isTime) {
+                sb.append(String.format(" %s=%.2fms", counter.displayName, value / 1_000_000.0));
+            } else {
+                sb.append(String.format(" %s=%d", counter.displayName, value));
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 构建会话级装饰器 Top N 的一行摘要 */
+    private static String buildSessionDecoLine(int limit) {
+        if (sessionDeco.isEmpty()) return "";
+        List<Map.Entry<String, long[]>> sorted = new ArrayList<>(sessionDeco.entrySet());
+        sorted.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+        StringBuilder sb = new StringBuilder(128);
+        int printed = 0;
+        for (Map.Entry<String, long[]> e : sorted) {
+            long[] slot = e.getValue();
+            long totalNs;
+            long calls;
+            synchronized (slot) {
+                totalNs = slot[0];
+                calls = slot[1];
+            }
+            if (calls == 0) continue;
+            sb.append(String.format(" %s=%.2fmsx%d", e.getKey(), totalNs / 1_000_000.0, calls));
+            if (++printed >= limit) break;
+        }
+        return sb.toString();
     }
 
     /** 构建汇总头部行 */
@@ -400,18 +589,26 @@ public final class ChunkGenerationProfiler {
         }
         sb.append("------------------------------------------------------------\n");
 
-        // 分离详细阶段和汇总阶段
+        // 分离父阶段、子阶段和汇总阶段；子阶段不能混进父阶段合计
         List<Map.Entry<Category, AggregateStats>> details = new ArrayList<>();
+        List<Map.Entry<Category, AggregateStats>> subPhases = new ArrayList<>();
         List<Map.Entry<Category, AggregateStats>> summaries = new ArrayList<>();
         for (Map.Entry<Category, AggregateStats> e : aggregateStats.entrySet()) {
             if (e.getKey().isSummary) {
                 summaries.add(e);
+            } else if (e.getKey().isSubPhase) {
+                subPhases.add(e);
             } else {
                 details.add(e);
             }
         }
         // 按平均耗时降序排列
         details.sort((a, b) -> {
+            double avgA = a.getValue().count > 0 ? (double) a.getValue().totalNs / a.getValue().count : 0;
+            double avgB = b.getValue().count > 0 ? (double) b.getValue().totalNs / b.getValue().count : 0;
+            return Double.compare(avgB, avgA);
+        });
+        subPhases.sort((a, b) -> {
             double avgA = a.getValue().count > 0 ? (double) a.getValue().totalNs / a.getValue().count : 0;
             double avgB = b.getValue().count > 0 ? (double) b.getValue().totalNs / b.getValue().count : 0;
             return Double.compare(avgB, avgA);
@@ -441,6 +638,26 @@ public final class ChunkGenerationProfiler {
             }
         }
 
+        // 输出子阶段（包含在父阶段内，单独列出以免重复计入合计）
+        if (!subPhases.isEmpty()) {
+            sb.append("  --- (sub-phases, contained in parent) ---\n");
+            for (Map.Entry<Category, AggregateStats> e : subPhases) {
+                AggregateStats s = e.getValue();
+                if (s.count == 0) continue;
+                double avgMs = (s.totalNs / (double) s.count) / 1_000_000.0;
+                double minMs = s.minNs / 1_000_000.0;
+                double maxMs = s.maxNs / 1_000_000.0;
+                if (includeDetail) {
+                    double totalSec = s.totalNs / 1_000_000_000.0;
+                    sb.append(String.format("  %-28s %8.2f %8.2f %8.2f %8.2f %6d\n",
+                            e.getKey().displayName, avgMs, minMs, maxMs, totalSec, s.count));
+                } else {
+                    sb.append(String.format("  %-28s %8.2f %8.2f %8.2f %6d\n",
+                            e.getKey().displayName, avgMs, minMs, maxMs, s.count));
+                }
+            }
+        }
+
         // 输出汇总阶段（外层计时）
         if (!summaries.isEmpty()) {
             sb.append("  --- (totals) ---\n");
@@ -455,6 +672,8 @@ public final class ChunkGenerationProfiler {
         }
 
         sb.append("============================================================\n");
+        appendCounterReport(sb);
+        appendSessionDecoReport(sb);
         sb.append("  Optimization hints:\n");
         sb.append("    - Landscape gen: noise computation dominates → optimize noise algorithms\n");
         sb.append("    - Surface replace: block iteration → reduce replacement complexity\n");
@@ -463,6 +682,47 @@ public final class ChunkGenerationProfiler {
         sb.append("    - Snow & ice: height lookups → cache ChunkInfo height data\n");
         sb.append("============================================================");
         return sb.toString();
+    }
+
+    /** 输出事件型计数器 */
+    private static void appendCounterReport(StringBuilder sb) {
+        sb.append("  --- (counters) ---\n");
+        boolean any = false;
+        for (Counter counter : Counter.values()) {
+            long value = counterValues[counter.ordinal()].get();
+            if (value == 0L) continue;
+            any = true;
+            if (counter.isTime) {
+                sb.append(String.format("  %-28s %10.2fms\n", counter.displayName, value / 1_000_000.0));
+            } else {
+                sb.append(String.format("  %-28s %10d\n", counter.displayName, value));
+            }
+        }
+        if (!any) {
+            sb.append("  (none)\n");
+        }
+    }
+
+    /** 输出会话级装饰器归因 */
+    private static void appendSessionDecoReport(StringBuilder sb) {
+        if (sessionDeco.isEmpty()) return;
+        List<Map.Entry<String, long[]>> sorted = new ArrayList<>(sessionDeco.entrySet());
+        sorted.sort((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0]));
+        sb.append("  --- (decoration attribution, session) ---\n");
+        int printed = 0;
+        for (Map.Entry<String, long[]> e : sorted) {
+            long[] slot = e.getValue();
+            long totalNs;
+            long calls;
+            synchronized (slot) {
+                totalNs = slot[0];
+                calls = slot[1];
+            }
+            if (calls == 0) continue;
+            sb.append(String.format("  %-28s %10.2fms x%d\n",
+                    e.getKey(), totalNs / 1_000_000.0, calls));
+            if (++printed >= 12) break;
+        }
     }
 
     // ========== 内部数据类 ==========

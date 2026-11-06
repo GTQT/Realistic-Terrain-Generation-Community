@@ -190,12 +190,14 @@ public class ChunkInfo {
         }
         slot[0] += ns;
         slot[1]++;
+        ChunkGenerationProfiler.recordDeco(name, ns);
     }
 
     /** 记 rtgc 自己的 deco 总耗时（含 {@code preGenerate} 过滤）。 */
     public static void noteOwnDecoNs(final long ns) {
         if (ChunkGenerationProfiler.isEnabled()) {
             decoOwnNs += ns;
+            ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.DECO_OWN_NS, ns);
         }
     }
 
@@ -203,6 +205,7 @@ public class ChunkInfo {
     public static void noteVanillaDecoNs(final long ns) {
         if (ChunkGenerationProfiler.isEnabled()) {
             decoVanillaNs += ns;
+            ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.DECO_VANILLA_NS, ns);
         }
     }
 

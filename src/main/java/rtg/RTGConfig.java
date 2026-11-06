@@ -562,7 +562,7 @@ public final class RTGConfig {
 
     /** 慢区块阈值（毫秒），超过此阈值的区块将单独输出耗时分解。通过 {@code -Drtg.profilerSlowThresholdMs=N} 设置。 */
     public static int profilerSlowThresholdMs() {
-        return Integer.getInteger("rtg.profilerSlowThresholdMs", 0);
+        return Integer.getInteger("rtg.profilerSlowThresholdMs", 20);
     }
 
     // ==========

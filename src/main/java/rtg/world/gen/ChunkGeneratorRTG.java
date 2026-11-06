@@ -81,8 +81,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      */
     private static final float MOUNTAIN_CHAIN_FADE_START = 0.35f;
     private static final float MOUNTAIN_CHAIN_FADE_WIDTH = 0.65f;
-    /** 装饰阶段超过该值就打印一行归因（{@code [RTG-DECOPROF]}）。 */
-    private static final long DECO_REPORT_THRESHOLD_NS = 200_000_000L;
+    /** 装饰阶段超过该值就打印一行归因（{@code [RTG-DECOPROF]}），默认 20ms，可用系统属性覆盖。 */
+    private static final long DECO_REPORT_THRESHOLD_NS =
+            Math.max(1L, Long.getLong("rtg.decoReportThresholdMs", 20L)) * 1_000_000L;
 
     /** 9×9 区块邻域中每个命中群系的装饰权重（{@code 1f / 81f}）。 */
     private static final float RTG_DECO_NEIGHBOUR_WEIGHT = 0.01234569f;
@@ -614,6 +615,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
 
         // ---- 邻域装饰权重累加 ----
+        long tPopWeights = ChunkGenerationProfiler.start(Category.POP_WEIGHTS);
         final int decoBound = biomeLoopBound();
         java.util.Arrays.fill(this.decoWeights, 0, decoBound, 0f);
         for (int bx = -4; bx <= 4; bx++) {
@@ -629,6 +631,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_WEIGHTS, tPopWeights);
 
         // rtgc 的 populate 取代了原版的 ChunkProviderServer#populate，而后者是
         // DecorateBiomeEvent.Pre/Post 的唯一发出点。此前这两个事件从未被发出，
@@ -707,12 +710,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         // ---- 洞穴藤蔓 ----
+        long tPopVines = ChunkGenerationProfiler.start(Category.POP_VINES);
         if (this.mapFeaturesEnabled) {
             RiverCaveVines.decorate(this.world, this.rand, this.rtgWorld, landscape,
                     blockPos.getX(), blockPos.getZ());
         }
+        ChunkGenerationProfiler.end(Category.POP_VINES, tPopVines);
 
         // ---- 熔岩洞地标的装饰 ----
+        long tPopLandmark = ChunkGenerationProfiler.start(Category.POP_LANDMARK_DECO);
         if (RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
             final RtgBiomeLayout landmarkLayout = RtgLayoutAccess.current();
             if (landmarkLayout != null) {
@@ -720,6 +726,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         this.rtgWorld.simplexInstance(0), blockPos.getX(), blockPos.getZ(), this.smolderingGrass);
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_LANDMARK_DECO, tPopLandmark);
 
         // ---- Pop: animals ----
         long tPopAnimals = ChunkGenerationProfiler.start(Category.POP_ANIMALS);
@@ -765,6 +772,7 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ChunkGenerationProfiler.end(Category.POP_SNOW_ICE, tPopSnow);
 
         // ---- 冰雪之后才补海洋的原版装饰 ----
+        long tDeferredOcean = ChunkGenerationProfiler.start(Category.POP_DEFERRED_DECO);
         for (int id = 0; id < decoBound; id++) {
             final float deferred = this.deferredOceanDecorations[id];
             if (deferred <= 0f) {
@@ -777,11 +785,14 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         blockPos.getX(), blockPos.getZ(), deferred);
             }
         }
+        ChunkGenerationProfiler.end(Category.POP_DEFERRED_DECO, tDeferredOcean);
 
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
         // 上游 74cf4fd「Lighting bug reduction」：填充完成后修补四个角邻区块的天光。
         // 放在 onChunkPopulate(false) 之后、与上游同一位置。
+        long tPopFixLighting = ChunkGenerationProfiler.start(Category.POP_FIX_LIGHTING);
         EventHandlerCommon.fixLightingAround(world, chunkPos);
+        ChunkGenerationProfiler.end(Category.POP_FIX_LIGHTING, tPopFixLighting);
         BlockFalling.fallInstantly = false;
 
         ChunkGenerationProfiler.end(Category.POP_TOTAL, tPopTotal);

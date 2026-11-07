@@ -11,14 +11,11 @@ import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.ChunkGenerationProfiler.Counter;
 
 /**
- * M0 的 Chunk 侧计数器：
+ * Chunk 侧计数器：
  * <ul>
- *   <li>{@code generateSkylightMap} 被调用多少次 —— 每次 setBlockState 改变 section 高度图时
- *       都可能同步重建；旧报告把它算在“延后”里，实际是同步的。</li>
- *   <li>{@code recheckGaps} 的调用次数与耗时 —— 它才是真正延后到区块 tick 的那部分。</li>
+ *   <li>{@code generateSkylightMap} 的同步重建次数；</li>
+ *   <li>{@code recheckGaps} 的调用次数与耗时（延后到区块 tick 的部分）。</li>
  * </ul>
- *
- * <p>{@code recheckGaps} 是 private 方法，按方法名注入即可。
  */
 @Mixin(Chunk.class)
 public abstract class ChunkProfilerMixin {

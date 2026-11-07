@@ -10,12 +10,10 @@ public class LateMixin implements ILateMixinLoader {
     /**
      * 注册 BOP 专用 mixin 配置。
      *
-     * <p>通用原版 mixin（{@code ChunkGetBiomeMixin}、profiler 的两个 mixin）必须走
-     * {@link EarlyMixin} 的 early loader，因为 {@code World}/{@code Chunk} 在 late
-     * 阶段已经加载，再 prepare 会抛 {@code MixinTargetAlreadyLoadedException}。
+     * <p>原版 {@code World}/{@code Chunk} 的 mixin 必须走 {@link EarlyMixin}；late 阶段
+     * 它们已经加载，再 prepare 会抛 {@code MixinTargetAlreadyLoadedException}。
      *
-     * <p>{@code mixins.rtg_late.json} 里的类直接引用 BOP 类型，BOP 没装时不能加载
-     * （否则 {@code @Mixin(biomesoplenty.…)} 解析不到类会崩）。
+     * <p>{@code mixins.rtg_late.json} 直接引用 BOP 类型，未安装 BOP 时不能加载。
      */
     @Override
     public List<String> getMixinConfigs() {

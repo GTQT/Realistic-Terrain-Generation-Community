@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * M0 的计数器/归因口径测试。重点是两件事：
+ * profiler 计数器与归因口径测试。重点是两件事：
  * <ul>
  *   <li>profiler 关闭时计数器必须完全不动（正常游玩零开销）；</li>
  *   <li>子阶段（weights / PreEvent / PostEvent）不能再次计入 chunkTotal，

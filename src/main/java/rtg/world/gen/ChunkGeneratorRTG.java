@@ -31,11 +31,8 @@ import org.dimdev.jeid.INewChunk;
 import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
-import rtg.api.util.BlockUtil;
-import rtg.api.util.ChunkGenerationProfiler;
+import rtg.api.util.*;
 import rtg.api.util.ChunkGenerationProfiler.Category;
-import rtg.api.util.ChunkInfo;
-import rtg.api.util.Logger;
 import rtg.api.util.noise.ContinentalNoise;
 import rtg.api.util.noise.RtgCellNoise;
 import rtg.api.util.noise.RtgLayoutConfig;
@@ -355,7 +352,11 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
         // ---- Chunk finalize ----
         long tFinalize = ChunkGenerationProfiler.start(Category.CHUNK_FINALIZE);
-        Chunk chunk = new Chunk(this.world, primer, cx, cz);
+        long tPart = System.nanoTime();
+        // FastChunkAssembler 按全局 id 直写 storage（等价于原版构造，快 2~3 倍）；不可用时自动回退。
+        Chunk chunk = FastChunkAssembler.build(this.world, primer, cx, cz);
+        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_CTOR_NS, System.nanoTime() - tPart);
+        tPart = System.nanoTime();
         for (int i = 0; i < 256; ++i) {
             int value = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
             this.intBiomeArray[i] = value;
@@ -366,7 +367,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             ((INewChunk) chunk).setIntBiomeArray(this.intBiomeArray.clone());
         }
         chunk.setBiomeArray(this.byteBiomeArray);
+        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_BIOMES_NS, System.nanoTime() - tPart);
+        tPart = System.nanoTime();
         chunk.generateSkylightMap();
+        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_SKYLIGHT_NS, System.nanoTime() - tPart);
         ChunkGenerationProfiler.end(Category.CHUNK_FINALIZE, tFinalize);
 
         ChunkGenerationProfiler.end(Category.CHUNK_TOTAL, tChunkGen);
@@ -633,10 +637,9 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
         ChunkGenerationProfiler.end(Category.POP_WEIGHTS, tPopWeights);
 
-        // rtgc 的 populate 取代了原版的 ChunkProviderServer#populate，而后者是
-        // DecorateBiomeEvent.Pre/Post 的唯一发出点。此前这两个事件从未被发出，
-        // 于是所有靠它们做装饰的 mod（含 BOP 的一部分植被）在本世界类型下完全不生效。
-        // 单独计时：这个事件里跑的是别的模组的装饰处理器。
+        // rtgc 的 populate 取代了原版 ChunkProviderServer#populate，这里因此成为
+        // DecorateBiomeEvent.Pre/Post 的唯一发出点。单列计时，便于和 rtgc 自己的
+        // rDecorate 区分：这个事件里跑的是其他模组的装饰处理器。
         long tPreEvent = ChunkGenerationProfiler.start(Category.POP_DECO_PRE_EVENT);
         MinecraftForge.EVENT_BUS.post(new DecorateBiomeEvent.Pre(this.world, this.rand, blockPos));
         ChunkGenerationProfiler.end(Category.POP_DECO_PRE_EVENT, tPreEvent);
@@ -649,10 +652,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final float centreWeight = centreId >= 0 && centreId < decoBound ? this.decoWeights[centreId] : 0f;
 
         if (RTG.decorationsDisable() || biome.getConfig().DISABLE_RTG_DECORATIONS.get()) {
-            if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
-                biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
-            } else {
-                biome.baseBiome().decorate(this.world, this.rand, blockPos);
+            ChunkPopulationQueue.enterDecoration();
+            try {
+                if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
+                    biome.getRiverBiome().baseBiome().decorate(this.world, this.rand, blockPos);
+                } else {
+                    biome.baseBiome().decorate(this.world, this.rand, blockPos);
+                }
+            } finally {
+                ChunkPopulationQueue.exitDecoration();
             }
         } else {
             // ---- 按权重分摊装饰 ----
@@ -672,10 +680,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     continue;
                 }
                 decoratedBiomes++;
-                if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
-                    neighbour.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
-                } else {
-                    neighbour.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
+                ChunkPopulationQueue.enterDecoration();
+                try {
+                    if (river > RTGWorld.RIVER_DECORATION_THRESHOLD) {
+                        neighbour.getRiverBiome().rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
+                    } else {
+                        neighbour.rDecorate(this.rtgWorld, this.rand, chunkPos, river, hasVillage, landscape.noise);
+                    }
+                } finally {
+                    ChunkPopulationQueue.exitDecoration();
                 }
                 // 海洋群系把"原版装饰"记下来，等冰雪 pass 之后再跑（它的 rDecorate 里那一段已被跳过）。
                 if (neighbour.defersVanillaDecorateUntilAfterIce()) {
@@ -738,33 +751,70 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ChunkGenerationProfiler.end(Category.POP_ANIMALS, tPopAnimals);
 
         // ---- Pop: snow & ice ----
+        //
+        // 性能重写（与 §16 记录的 0.33ms/chunk 对应）：
+        //  * 原实现每列调 World#getPrecipitationHeight + World#getTopSolidOrLiquidBlock，两者都从
+        //    y≈256 逐格向下扫，256 列合计约 9 万次方块读；
+        //  * 改成读本区块 generateSkylightMap() 已经填好的高度图，再从高度图往下找"可站立顶面"；
+        //    方块读改写走 Chunk（省掉 World#isValid / getChunk 的坐标换算与权限检查）；
+        //  * 雪层先试最自然的 y=顶面+1（原实现从顶面+32 往下扫，每次白扫 32 层），失败再按原顺序扫；
+        //  * 顺带修正坐标：原代码用 offsetPos（区块中心，+8,+8）遍历 16×16，整片雪/冰偏移 8 格并
+        //    溢出到邻区块（会提前触发邻区块生成），这里改回 blockPos（区块原点），与 vanilla 一致。
+        // 语义差异只在"透明但阻挡移动的方块（玻璃等）位于高度图之上"这种地形里，自然生成不会出现。
         long tPopSnow = ChunkGenerationProfiler.start(Category.POP_SNOW_ICE);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ICE)) {
             float snowTempThreshold = settings.getClampedSnowLayerTemp();
-            MutableBlockPos mutablePos = new MutableBlockPos();
+            final boolean snowLayers = settings.useSnowLayers;
+            final Chunk snowChunk = this.world.getChunk(chunkX, chunkZ);
+            final MutableBlockPos mutablePos = new MutableBlockPos();
 
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
-                    mutablePos.setPos(offsetPos.getX() + x, 0, offsetPos.getZ() + z);
-                    int freezeY = world.getPrecipitationHeight(mutablePos).getY() - 1;
-                    snowCheckPos.setPos(mutablePos.getX(), freezeY, mutablePos.getZ());
-                    if (this.world.canBlockFreezeWater(snowCheckPos)) {
-                        this.world.setBlockState(snowCheckPos, ICE, 2);
+                    final int wx = blockPos.getX() + x;
+                    final int wz = blockPos.getZ() + z;
+                    // 高度图值 = "最上层非透明方块" 的 y + 1，所以 -1 就是地表方块。
+                    final int baseY = snowChunk.getHeightValue(x, z) - 1;
+                    if (baseY < 0) {
+                        continue;
                     }
-                    if (settings.useSnowLayers) {
-                        BlockPos surfacePos = world.getTopSolidOrLiquidBlock(mutablePos);
-                        int baseY = surfacePos.getY();
-                        if (biomeProvider.getBiome(surfacePos).getTemperature(surfacePos) <= snowTempThreshold) {
-                            for (int y = baseY + 32; y >= baseY; y--) {
-                                snowCheckPos.setPos(surfacePos.getX(), y, surfacePos.getZ());
-                                if (world.getBlockState(snowCheckPos).getMaterial() == Material.AIR
-                                        && Blocks.SNOW_LAYER.canPlaceBlockAt(world, snowCheckPos)) {
-                                    this.world.setBlockState(snowCheckPos, SNOW_LAYER, 2);
-                                    break;
-                                }
+                    mutablePos.setPos(wx, baseY, wz);
+                    if (this.world.canBlockFreezeWater(mutablePos)) {
+                        this.world.setBlockState(mutablePos, ICE, 2);
+                    }
+                    if (!snowLayers) {
+                        continue;
+                    }
+                    // 等价于 World#getTopSolidOrLiquidBlock：从最上层往下找第一个阻挡移动（且不是树叶）的方块。
+                    int topY = baseY;
+                    while (topY > 0) {
+                        final Material m = snowChunk.getBlockState(x, topY, z).getMaterial();
+                        if (m.blocksMovement() && m != Material.LEAVES) {
+                            break;
+                        }
+                        topY--;
+                    }
+                    final Biome surfaceBiome = snowChunk.getBiome(mutablePos.setPos(wx, topY, wz), biomeProvider);
+                    if (surfaceBiome.getTemperature(mutablePos) > snowTempThreshold) {
+                        continue;
+                    }
+                    int placeY = -1;
+                    int y = topY + 1;
+                    if (snowChunk.getBlockState(x, y, z).getMaterial() == Material.AIR
+                            && Blocks.SNOW_LAYER.canPlaceBlockAt(world, mutablePos.setPos(wx, y, wz))) {
+                        placeY = y;
+                    } else {
+                        // 与原实现完全相同的顺序：从 topY+32 往下，第一个能放的位置。
+                        for (y = topY + 32; y >= topY + 2; y--) {
+                            if (snowChunk.getBlockState(x, y, z).getMaterial() == Material.AIR
+                                    && Blocks.SNOW_LAYER.canPlaceBlockAt(world, mutablePos.setPos(wx, y, wz))) {
+                                placeY = y;
+                                break;
                             }
                         }
+                    }
+                    if (placeY >= 0) {
+                        this.world.setBlockState(mutablePos.setPos(wx, placeY, wz), SNOW_LAYER, 2);
                     }
                 }
             }
@@ -781,8 +831,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             this.deferredOceanDecorations[id] = 0f;      // 用完即清（生成器实例会被复用）
             final IRealisticBiome oceanBiome = RtgRealisticIndex.biomeOf(id);
             if (oceanBiome != null) {
-                oceanBiome.rDecorateAfterIce(this.rtgWorld, this.rand,
-                        blockPos.getX(), blockPos.getZ(), deferred);
+                ChunkPopulationQueue.enterDecoration();
+                try {
+                    oceanBiome.rDecorateAfterIce(this.rtgWorld, this.rand,
+                            blockPos.getX(), blockPos.getZ(), deferred);
+                } finally {
+                    ChunkPopulationQueue.exitDecoration();
+                }
             }
         }
         ChunkGenerationProfiler.end(Category.POP_DEFERRED_DECO, tDeferredOcean);
@@ -801,8 +856,17 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     @Override
     public boolean generateStructures(Chunk chunkIn, int x, int z) {
-        return settings.useMonuments && this.mapFeaturesEnabled && chunkIn.getInhabitedTime() < 3600L &&
-                this.oceanMonumentGenerator.generateStructure(this.world, this.rand, new ChunkPos(x, z));
+        // Chunk#populate(IChunkGenerator) 对"已经 populate 过"的区块只会走这里，而且一次包装层
+        // 最多会对 4 个邻区块各调一次 —— 基准里这部分以前全算账外时间，这里单独记账。
+        final boolean timed = ChunkGenerationProfiler.isEnabled();
+        final long tStructures = timed ? System.nanoTime() : 0L;
+        final boolean result = settings.useMonuments && this.mapFeaturesEnabled && chunkIn.getInhabitedTime() < 3600L
+                && this.oceanMonumentGenerator.generateStructure(this.world, this.rand, new ChunkPos(x, z));
+        if (timed) {
+            ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.GENERATE_STRUCTURES_NS,
+                    System.nanoTime() - tStructures);
+        }
+        return result;
     }
 
     @Override

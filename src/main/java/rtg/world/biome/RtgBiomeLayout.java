@@ -50,19 +50,14 @@ public final class RtgBiomeLayout {
             Math.max(1024, Integer.getInteger("rtg.biomeCacheMax", 65536));
     private static final float RIVER_BED = 59f;
     /**
-     * 地下河隧道带的宽度标尺：**RWG 原值 {@code 9}**（{@code 9/1250} 个 cell）。
+     * 地下河隧道带的宽度标尺，沿用 RWG 的 {@code 9}（{@code 9/1250} 个 cell）。
      *
-     * <p>{@code RtgCellNoise.border()} 里的 {@code c} 是 {@code dNeighbour - dCandidate}
-     * （≈ 2 × 到 Voronoi 边界的距离），所以换算成方块是：半宽
-     * {@code (9 / 1250) / 2 × 1250 ≈ 4.5} 格，即一条 **约 9 格宽**的窄洞。
+     * <p>{@code RtgCellNoise.border()} 里的 {@code c} 是
+     * {@code dNeighbour - dCandidate}（约等于到 Voronoi 边界距离的两倍），换算后方块半宽
+     * 约 {@code 4.5} 格，即一条约 9 格宽的窄洞。
      *
-     * <p>rtgc 曾两次放宽它（{@code 25}、然后与河道等宽的 {@code 50 × 1250 / 1300 ≈ 48}），
-     * 目的是消除"地下河出山时水宽突变"。**那是治错了地方**：宽度突变只是表象，真正的问题是
-     * 门控把非山地也判成山、且地形没有按 RWG 的 {@code fade} 抬回山体高度，于是隧道口开在
-     * 平坦河谷正中。门控改回 RWG 的 {@code mountainChainRiverHost} 之后，洞口只出现在山体
-     * 内部；RWG 的窄洞在山口自然收成"拱形洞门"（{@code tunnelCurve} 的圆帽），不再有断层。
-     *
-     * <p>因此这里**照抄 RWG**，不再保留等宽补偿。
+     * <p>不要用加宽来消除“出山时水宽突变”：那只是表象，根因是门控和地形抬升。门控改回
+     * RWG 的 {@code mountainChainRiverHost} 后，窄洞会在山口自然收成拱形洞门。
      */
     private static final double TUNNEL_BAND_WIDTH = 9D;
     private static final float RIVER_WARP_DIVISOR = 240f;

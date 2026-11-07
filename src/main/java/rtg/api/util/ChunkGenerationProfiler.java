@@ -70,13 +70,14 @@ public final class ChunkGenerationProfiler {
         POP_WEIGHTS("Pop: weights", false, true),
         /** 生物群系装饰（树木、花草等） */
         POP_DECORATION("Pop: decoration", false),
+        /** 原版 ore 生成（{@code BiomeDecorator#generateOres}），含在 decoration 内 */
+        POP_DECO_ORES("Pop: decoration ores", false, true),
         /**
-         * {@code DecorateBiomeEvent.Pre} 的发出耗时 —— **主要是别的模组的事件处理器**。
+         * {@code DecorateBiomeEvent.Pre} 的发出耗时，主要花在其他模组的处理器上。
          *
-         * <p>为什么要单列：这两个事件是**本轮才补上发出**的（此前 rtgc 的 populate 取代了
-         * 原版的 {@code ChunkProviderServer#populate}，于是它们是全仓唯一发出点却没发），
-         * 所以"某些模组的装饰处理器现在才开始跑"。一旦装饰阶段出现秒级尖峰，
-         * 单靠"Pop: decoration"这一格分不清是 rtgc 自己的 {@code rDecorate} 还是别人的处理器。
+         * <p>rtgc 的 populate 取代了原版 {@code ChunkProviderServer#populate}，这里是该事件
+         * 的唯一发出点。单列它，才能在装饰阶段出现尖峰时区分 rtgc 自己的
+         * {@code rDecorate} 和外部处理器。
          */
         POP_DECO_PRE_EVENT("Pop: deco PreEvent", false, true),
         /** {@code DecorateBiomeEvent.Post} 的发出耗时（同理：别人的处理器）。 */
@@ -139,12 +140,85 @@ public final class ChunkGenerationProfiler {
         BIOME_CACHE_HITS("biomeCache.hits", false),
         BIOME_CACHE_MISSES("biomeCache.misses", false),
         BIOME_CACHE_CLEARS("biomeCache.clears", false),
+        BIOME_DECORATOR_CACHE_HITS("biomeDecorator.cacheHits", false),
+        BIOME_DECORATOR_CACHE_MISSES("biomeDecorator.cacheMisses", false),
         FIX_LIGHTING_COLUMNS("fixLighting.columns", false),
         FIX_LIGHTING_WOOL("fixLighting.wool", false),
+        FIX_LIGHTING_DIRECT_LIGHT("fixLighting.directCheckLight", false),
+        FIX_LIGHTING_SECTION_SKIPS("fixLighting.sectionSkips", false),
+        FIX_LIGHTING_AIR_REPEAT_SKIPS("fixLighting.airRepeatSkips", false),
+        FIX_LIGHTING_CORNER_SCANS("fixLighting.cornerScans", false),
+        FIX_LIGHTING_CORNER_SKIPS("fixLighting.cornerSkips", false),
+        POPULATION_QUEUE_ENQUEUED("populationQueue.enqueued", false),
+        POPULATION_QUEUE_DRAINED("populationQueue.drained", false),
+        POPULATION_QUEUE_FORCED("populationQueue.forced", false),
+        POPULATION_QUEUE_DROPPED("populationQueue.dropped", false),
         RECHECK_GAPS_CALLS("chunk.recheckGaps.calls", false),
         RECHECK_GAPS_NS("chunk.recheckGaps", true),
         DECO_OWN_NS("deco.own", true),
-        DECO_VANILLA_NS("deco.vanilla", true);
+        DECO_VANILLA_NS("deco.vanilla", true),
+        /**
+         * {@code ChunkProviderServer#provideChunk} 里落在 CHUNK_TOTAL/POP_TOTAL 之外的三段：
+         * 磁盘探测（{@code AnvilChunkLoader#loadChunk}）、{@code Chunk#onLoad}（含
+         * {@code ChunkEvent.Load} 的所有监听器）、以及 population 包装层
+         * {@code Chunk#populate(IChunkProvider, IChunkGenerator)} 自身的开销。
+         * 这三项用来解释 "wall - 已知阶段" 的账外时间。
+         */
+        CHUNK_DISK_PROBE_NS("chunk.diskProbe", true),
+        CHUNK_ON_LOAD_NS("chunk.onLoad", true),
+        POP_WRAPPER_NS("populate.wrapper", true),
+        POP_WRAPPER_CALLS("populate.wrapperCalls", false),
+        CHUNK_CHECK_LIGHT_NS("chunk.checkLight", true),
+        WORLDGEN_REGISTRY_NS("worldgen.registry", true),
+        GENERATE_STRUCTURES_NS("chunk.generateStructures", true),
+        FINALIZE_CTOR_NS("chunk.finalize.ctor", true),
+        FINALIZE_BIOMES_NS("chunk.finalize.biomes", true),
+        FINALIZE_SKYLIGHT_NS("chunk.finalize.skylight", true),
+        FINALIZE_SHELL_NS("chunk.finalize.shell", true),
+        FINALIZE_FILL_NS("chunk.finalize.fill", true),
+        /* 原版矿脉生成（BiomeDecorator#generateOres）的探针/写入计数，用来判断 ore 成本在
+         * "世界读写的单次开销" 还是 "谓词循环本身"。 */
+        ORE_VEINS("ore.veins", false),
+        ORE_PROBES("ore.probes", false),
+        ORE_WRITES("ore.writes", false),
+        ORE_CHUNK_CACHE_HITS("ore.chunkCacheHits", false),
+        /* DIRT/GRAVEL/DIORITE/GRANITE/ANDESITE 这类"石变种"矿脉——格雷科技不会拒绝它们，
+         * 用来算 GT 包里剩下的原版矿成本。 */
+        ORE_VEINS_STONE("ore.veinsStone", false),
+        /* 被 skipVanillaOreGen() 跳过的 genStandardOre1/2 调用次数（每区块最多 11 次）。 */
+        ORE_GEN_SKIPPED("ore.genSkipped", false),
+        /* 由 FastOreGen 接管的矿脉条数（等价实现，不是跳过）。 */
+        ORE_FAST_VEINS("ore.fastVeins", false),
+        /* 诊断：位图说不是石头、实际是石头（只有 -Drtg.fastOreGenDebug 才统计）。 */
+        ORE_MASK_MISMATCH("ore.maskMismatch", false),
+        /* 被高度图挡掉的探针数（y 在最高方块之上必为空气，原版会白探一次）。 */
+        ORE_AIR_SKIPS("ore.airSkips", false),
+        /* 球体模式：球内被检查过的格子数。 */
+        ORE_BLOB_CELLS("ore.blobCells", false),
+        /* 球体模式：格子不是天然石、因此没有替换的次数。 */
+        ORE_BLOB_NOT_STONE("ore.blobNotStone", false),
+        /* ---- Chunk#checkLight 的三段明细（-Drtg.checkLightDetail） ---- */
+        /* 处理过的列数：公开 checkLight 的 256 列 + 邻块侧向检查的 64 列。 */
+        CHECKLIGHT_COLUMNS("checkLight.columns", false),
+        CHECKLIGHT_SCAN_NS("checkLight.scan", true),
+        CHECKLIGHT_SCAN_READS("checkLight.scanReads", false),
+        CHECKLIGHT_EMISSIVE_NS("checkLight.emissive", true),
+        CHECKLIGHT_EMISSIVE_READS("checkLight.emissiveReads", false),
+        CHECKLIGHT_EMISSIVE_CALLS("checkLight.emissiveCalls", false),
+        CHECKLIGHT_WORLD_NS("checkLight.world", true),
+        CHECKLIGHT_WORLD_CALLS("checkLight.worldCalls", false),
+        CHECKLIGHT_MASK_SKIPS("checkLight.maskSkips", false),
+        CHECKLIGHT_DEDUPES("checkLight.dedupes", false),
+        /* ---- World#checkLight / checkLightFor 的内部拆解 ---- */
+        WORLD_CHECK_LIGHT_NS("world.checkLight", true),
+        WORLD_CHECK_LIGHT_SKY_NS("world.checkLight.sky", true),
+        WORLD_CHECK_LIGHT_BLOCK_NS("world.checkLight.block", true),
+        CHECKLIGHTFOR_CALLS("world.checkLightFor.calls", false),
+        CHECKLIGHTFOR_AREA_NS("world.checkLightFor.area", true),
+        CHECKLIGHTFOR_AREA_CALLS("world.checkLightFor.areaCalls", false),
+        CHECKLIGHTFOR_RAW_NS("world.checkLightFor.raw", true),
+        CHECKLIGHTFOR_SETLIGHT_CALLS("world.checkLightFor.setLightCalls", false),
+        CHECKLIGHTFOR_SETLIGHT_NS("world.checkLightFor.setLight", true);
 
         public final String displayName;
         public final boolean isTime;
@@ -252,6 +326,18 @@ public final class ChunkGenerationProfiler {
 
     public static long getCounter(Counter counter) {
         return counterValues[counter.ordinal()].get();
+    }
+
+    /** 某个阶段在本次会话中的累计纳秒（无样本时返回 0）。供基准脚本计算覆盖率。 */
+    public static long getCategoryTotalNs(Category cat) {
+        AggregateStats stats = aggregateStats.get(cat);
+        return stats == null ? 0L : stats.totalNs;
+    }
+
+    /** 某个阶段在本次会话中的调用次数。 */
+    public static long getCategoryCount(Category cat) {
+        AggregateStats stats = aggregateStats.get(cat);
+        return stats == null ? 0L : stats.count;
     }
 
     /**
@@ -494,6 +580,16 @@ public final class ChunkGenerationProfiler {
         }
         if (printed > 0) {
             Logger.info(sb.toString());
+        }
+
+        AggregateStats ores = aggregateStats.get(Category.POP_DECO_ORES);
+        if (ores != null && ores.count > 0) {
+            Logger.info(String.format(java.util.Locale.ROOT,
+                    "[RTG-Profiler] Ores (avg): total=%.2fms avg=%.2fms max=%.2fms calls=%d",
+                    ores.totalNs / 1_000_000.0,
+                    (ores.totalNs / (double) ores.count) / 1_000_000.0,
+                    ores.maxNs / 1_000_000.0,
+                    ores.count));
         }
 
         String counters = buildCounterSummaryLine();

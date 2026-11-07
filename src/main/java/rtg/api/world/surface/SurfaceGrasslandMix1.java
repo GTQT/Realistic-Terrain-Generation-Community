@@ -14,14 +14,11 @@ import java.util.Random;
 
 
 /**
- * RWG {@code rwg/surface/SurfaceGrasslandMix1.java} 的逐行移植。
+ * 与 {@link SurfaceGrassland} 的区别只有顶层块选择：非悬崖时用
+ * {@code perlin.noise2(i / width, j / width) > height} 在 {@code mixBlock} 和
+ * {@code topBlock} 之间切换，让草地与砂/石自然交错。
  *
- * <p>与 {@link SurfaceGrassland} 的差别只有一处：非悬崖时顶层方块由
- * {@code perlin.noise2(i / width, j / width) > height} 决定用 {@code mixBlock} 还是 {@code topBlock}
- * —— 即**用噪声把另一种方块混进来**。RWG 用它做"草地与砂/石的自然交错"，
- * 这正是让地表交界不生硬的那类处理。
- *
- * <p>管线适配同 {@link SurfaceGrassland}（悬崖判定改用 {@code TerrainBase.calcCliff}）。
+ * <p>悬崖判定同 {@link SurfaceGrassland}，走 {@code TerrainBase.calcCliff}。
  */
 public class SurfaceGrasslandMix1 extends SurfaceBase {
 

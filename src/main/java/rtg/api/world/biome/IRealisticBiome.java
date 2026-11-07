@@ -262,15 +262,10 @@ public interface IRealisticBiome {
         }
         ChunkInfo.noteOwnDecoNs(System.nanoTime() - tOwn);
 
-        // 树装饰（移植上游新树系统 / T5 + T6）。
-        //
-        // 上游语义（IRealisticBiome:152-166）：
-        //   allowVanillaTrees() 为真 → 交给原版 Biome.decorate 自己长树；
-        //   为假 → 关掉原版树，改由 treeBiome.getTreeDecos().generate(...) 生成 RTG 树。
-        //
-        // 本仓库补充 T6 那一半：BOP 群系的 allowVanillaTrees() 仍是 true（它的树由 BOP 自己的
-        // GenerationManager 管，不是原版 decorator），所以还要看**接管管理器**：
-        // 被接管（或已抑制 BOP 自家树）时，同样由 getTreeDecos() 出树。
+        // 树装饰：allowVanillaTrees() 为真时交给原版 Biome.decorate；
+        // 为假时由 getTreeDecos().generate(...) 生成 RTG 树。
+        // BOP 群系的树由其 GenerationManager 管理，因此还要检查 treeGenerationManager
+        // 是否已接管该群系；被接管时同样走 getTreeDecos()。
         if ((!this.allowVanillaTrees()
                 || rtg.event.EventHandlerCommon.treeGenerationManager.managingBiome(this.baseBiome()))
                 && this.getTreeDecos() != null) {
@@ -279,48 +274,41 @@ public interface IRealisticBiome {
             ChunkInfo.noteDeco("treeGenerator", System.nanoTime() - tTrees);
         }
 
-        // ⚠ 海洋群系把这一段**推迟到冰雪之后**（RWG 的 `rDecorateAfterIce`）——
-        // 见 defersVanillaDecorateUntilAfterIce() 的说明。
+        // 海洋群系把这段推迟到冰雪之后（RWG 的 rDecorateAfterIce），
+        // 见 defersVanillaDecorateUntilAfterIce()。
         if (!defersVanillaDecorateUntilAfterIce()) {
             vanillaDecorate(rtgWorld, rand, chunkPos);
         }
     }
 
     /**
-     * 原版 / BOP 的装饰本体（{@code rDecorate} 的尾段抽出来，供**延迟路径**复用）。
+     * 原版 / BOP 的装饰本体，从 {@code rDecorate} 尾段抽出，供延迟路径复用。
      *
-     * <p>抽出来的唯一理由：RWG 的海洋群系把这一步放到冰雪之后（{@code rDecorateAfterIce}），
-     * 而 {@code rDecorate} 与延迟路径必须跑**同一段**代码，不能各写一份（会漂移）。
+     * <p>海洋群系会把这一步放到冰雪之后；两条路径必须共用同一段代码，避免漂移。
      */
     default void vanillaDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos) {
         final long tVanilla = System.nanoTime();
         final BlockPos pos = new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16);
-        if (overridesHardcoded()) {
-            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), pos);
-        } else {
-            disableVanillaVegetation();
-            this.baseBiome().decorate(rtgWorld.world(), rand, pos);
+        try {
+            if (overridesHardcoded()) {
+                this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), pos);
+            } else {
+                disableVanillaVegetation();
+                this.baseBiome().decorate(rtgWorld.world(), rand, pos);
+            }
+        } finally {
+            ChunkInfo.noteVanillaDecoNs(System.nanoTime() - tVanilla);
         }
-        ChunkInfo.noteVanillaDecoNs(System.nanoTime() - tVanilla);
     }
 
     /**
-     * 是否把原版装饰推迟到**冰雪之后** —— RWG 的 {@code RealisticBiomeOcean} 专用机制。
+     * 是否把原版装饰推迟到冰雪之后（RWG 的 {@code RealisticBiomeOcean} 机制）。
      *
-     * <h2>RWG 为什么要这么做</h2>
+     * <p>海洋群系的 {@code rDecorate} 为空，装饰在 {@code rDecorateAfterIce} 中补上，
+     * 否则随后铺的冰会压掉珊瑚、海草。只有混合权重 {@code > 0.3} 的海洋群系才执行。
      *
-     * RWG 的海洋群系 {@code rDecorate} 是**空的**（RTG 不对海洋做装饰），它唯一的装饰是
-     * {@code rDecorateAfterIce}：把 {@code Biome.decorate}（原版/BOP 自己的装饰器，
-     * 在 BOP 的 {@code kelp_forest}/{@code coral_reef} 上放的就是珊瑚与海草）**推迟到
-     * RWG 自己的"水面结冰 + 铺雪层"pass 之后**再跑 —— 否则随后铺的冰会把刚放下的装饰压掉/盖住。
-     * 另外它还带一个门控：只有该海洋群系在本区块的**混合权重 > 0.3** 时才装饰
-     * （RWG {@code RealisticBiomeOcean:49}），即"只有占主导的那个海洋群系才动手"。
-     *
-     * <p>rtgc 侧只有 {@code BOPKelpForest} / {@code BOPCoralReef} 覆写为 {@code true}：
-     * RWG 里 {@code decorateBaseBiome} 为 true 的也**只有** BOP 那两个
-     * （原版海洋变体在 {@code Support.java:156-174} 里传的都是 {@code false}）。
-     * rtgc 的原版海洋群系保持原样 —— 它们的 {@code Biome.decorate} 里还带着**矿物生成**，
-     * 关掉会连矿一起没了，那是回归而不是移植。
+     * <p>rtgc 中只有 {@code BOPKelpForest}/{@code BOPCoralReef} 返回 true；原版海洋群系
+     * 保持 {@code Biome.decorate}，因为其中还包含矿物生成。
      */
     default boolean defersVanillaDecorateUntilAfterIce() {
         return false;
@@ -338,7 +326,7 @@ public interface IRealisticBiome {
         // 默认什么都不做：只有推迟了装饰的群系才需要在这里补上
     }
 
-    /** 当RTG已处理植被时，禁用原版装饰器中的对应项，避免双重生成 */
+    /** RTG 已处理对应植被时，关闭原版装饰器中的同类生成，避免重复。 */
     default void disableVanillaVegetation() {
         if (this.allowVanillaTrees()) {
             return;

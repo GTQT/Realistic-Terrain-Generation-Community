@@ -1,70 +1,46 @@
 package rtg.api.util;
 
+import biomesoplenty.api.block.BOPBlocks;
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockBush;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
-
-import biomesoplenty.api.block.BOPBlocks;
-
+import net.minecraft.world.biome.BiomeProvider;
+import net.minecraft.world.chunk.Chunk;
 
 /**
- * BOP 海洋装饰的**事后清理** —— RWG {@code RealisticBiomeBOPOcean.sanitizeColumn} 的等价物。
+ * 清理 BOP 放错位置的水下装饰。
  *
- * <h2>为什么需要它</h2>
+ * <p>BOP 按自己的海底高度和群系分布放置珊瑚/海草；换到 RWG 地形后会出现悬空、
+ * 露出水面或嵌入陆地的方块。这里在装饰完成后扫过 34×34 区域，把站不住的水下
+ * 装饰换回水。
  *
- * BOP 自己的装饰器是**按 BOP 的地形假设**放珊瑚/海草的（它自己的海底深度与群系分布）。
- * 放到 RWG 的地形上，这些判据就会失效 ⇒ 出现**悬空珊瑚、海草戳出水面、珊瑚嵌在陆地里**。
- * RWG 于是在"装饰完成"之后补一遍验算：逐列扫过去，**站不住的水下装饰直接换成水**。
- *
- * <h2>逐行对应</h2>
- *
- * <pre>
- * RWG RealisticBiomeBOPOcean:16-17   MIN_DECORATION_OFFSET = -3, MAX_DECORATION_OFFSET = 30
- * RWG :28-32   对 (chunkX-3 .. chunkX+30) x (chunkZ-3 .. chunkZ+30) 的 34x34 逐列调用
- * RWG :35-45   sanitizeColumn：y 从 1 到 62 逐格看
- * RWG :79-81   isMatchingBiome：该列群系必须是这个海洋群系
- * </pre>
- *
- * <h2>与 RWG 的两处差异（都是 1.12.2 上无法照抄的部分）</h2>
- *
- * <ol>
- *   <li><b>不重写海草柱的 metadata。</b> RWG 的 1.7.10 里海草是
- *       {@code coral1} 的 meta 8/9/10/11（底/中/顶/单节），所以它能"重排整柱"。
- *       BOP <b>1.12.2</b> 的珊瑚是 {@code BOPBlocks.coral}，其变体枚举
- *       （{@code BlockBOPCoral.CoralType}，实测 {@code javap}）只有
- *       {@code PINK / ORANGE / BLUE / GLOWING / ALGAE} —— **没有海草的变体**；
- *       1.12 的海草由 BOP 自己的生成器按它的状态机放置。
- *       照抄那套 meta 重写在这里没有对应物，硬做就是**发明**，故本类只做
- *       "站不住就删"这一半（那正是可见症状的来源）。</li>
- *   <li><b>用 {@code Block.canBlockStay(world, pos, state)} 判"站得住"</b>，
- *       而不是 RWG 手写的 {@code canBlockStay(world,x,y,z,meta) && 上面是水}。
- *       1.12 把这类判据统一成了这个钩子，BOP 的珊瑚/植物块**自己覆写了它**
- *       （实测 {@code javap biomesoplenty.common.block.BlockBOPCoral} /
- *       {@code BlockBOPPlant} 都有 {@code canBlockStay(World, BlockPos, IBlockState)}），
- *       所以这是"问 BOP 自己"而不是替它猜。</li>
- * </ol>
+ * <p>与 RWG 的差异：
+ * <ul>
+ *   <li>1.12 的 BOP 珊瑚没有海草 metadata，无法重排整柱，只做“站不住就删”；</li>
+ *   <li>站得住与否交给 {@link BlockBush#canBlockStay} 判断，不替 BOP 猜规则。</li>
+ * </ul>
  */
 public final class OceanDecorationSanitizer {
 
     private OceanDecorationSanitizer() {}
 
-    /** RWG 的扫掠范围：区块原点外扩 −3 … +30（覆盖 16×16 的装饰区加上边缘）。 */
+    /** RWG 的扫掠范围：区块原点外扩 -3..+30。 */
     private static final int MIN_OFFSET = -3;
     private static final int MAX_OFFSET = 30;
 
-    /** RWG 只看到 {@code y < 63}（海平面附近），照抄。 */
+    /** 只检查海平面附近，与 RWG 的 y < 63 一致。 */
     private static final int MAX_Y = 62;
 
     /**
-     * 扫掠并清理。
+     * 清理以区块原点外扩 -3..+30、y=1..62 的区域。
      *
-     * @param chunkX 区块原点的**方块坐标**（{@code chunkPos.x * 16}），与 RWG 的调用口径一致
+     * @param chunkX 区块原点的方块坐标（{@code chunkPos.x * 16}）
      * @param chunkZ 同上
-     * @param baseBiome 该海洋群系的 MC 群系；只有群系与它相同的列才处理
-     *              （RWG {@code isMatchingBiome}：不要动隔壁群系的东西）
+     * @param baseBiome 只处理群系等于它的列
      */
     public static void sanitize(final World world, final int chunkX, final int chunkZ, final Biome baseBiome) {
         if (world == null || baseBiome == null) {
@@ -72,45 +48,59 @@ public final class OceanDecorationSanitizer {
         }
         final IBlockState water = Blocks.WATER.getDefaultState();
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        final BiomeProvider biomeProvider = world.getBiomeProvider();
 
-        for (int x = chunkX + MIN_OFFSET; x <= chunkX + MAX_OFFSET; x++) {
-            for (int z = chunkZ + MIN_OFFSET; z <= chunkZ + MAX_OFFSET; z++) {
+        final int minX = chunkX + MIN_OFFSET;
+        final int maxX = chunkX + MAX_OFFSET;
+        final int minZ = chunkZ + MIN_OFFSET;
+        final int maxZ = chunkZ + MAX_OFFSET;
 
-                pos.setPos(x, 0, z);
-                if (world.getBiome(pos) != baseBiome) {
-                    continue;                   // RWG isMatchingBiome
+        // 扫掠范围会覆盖未加载的邻区块；先按区块判断加载状态，
+        // 避免 World#getBlockState 触发级联 generate/populate。
+        for (int cx = minX >> 4; cx <= maxX >> 4; cx++) {
+            for (int cz = minZ >> 4; cz <= maxZ >> 4; cz++) {
+                pos.setPos(cx << 4, 0, cz << 4);
+                if (!world.isBlockLoaded(pos, false)) {
+                    continue;
                 }
 
-                for (int y = 1; y <= MAX_Y; y++) {
-                    pos.setPos(x, y, z);
-                    final IBlockState state = world.getBlockState(pos);
-                    final Block block = state.getBlock();
-                    if (!isUnderwaterDecoration(block)) {
-                        continue;
-                    }
-                    // ⚠ 1.12 的 `canBlockStay(World, BlockPos, IBlockState)` **不在** `Block` 上，
-                    // 它定义在 `BlockBush`（以及覆写它的 BOP 装饰块）上 —— RWG 的 1.7.10 里
-                    // 它反而是 BOP 自己的 5 参重载。故这里先确认它确实是 BlockBush，
-                    // 不是就**不动它**（宁可不清理，也不要替别的方块猜判据）。
-                    if (!(block instanceof net.minecraft.block.BlockBush)) {
-                        continue;
-                    }
-                    if (!((net.minecraft.block.BlockBush) block).canBlockStay(world, pos, state)) {
-                        // 站不住（悬空 / 不在水里 / 基质不对）⇒ 换回水，与 RWG 一致
-                        world.setBlockState(pos, water, 2);
+                final Chunk chunk = world.getChunk(cx, cz);
+                final int startX = Math.max(minX, cx << 4);
+                final int endX = Math.min(maxX, (cx << 4) + 15);
+                final int startZ = Math.max(minZ, cz << 4);
+                final int endZ = Math.min(maxZ, (cz << 4) + 15);
+
+                for (int x = startX; x <= endX; x++) {
+                    for (int z = startZ; z <= endZ; z++) {
+                        pos.setPos(x, 0, z);
+                        if (chunk.getBiome(pos, biomeProvider) != baseBiome) {
+                            continue;
+                        }
+
+                        for (int y = 1; y <= MAX_Y; y++) {
+                            pos.setPos(x, y, z);
+                            // 区块已加载，直接读 Chunk storage，跳过 World 的坐标检查和区块查找。
+                            final IBlockState state = chunk.getBlockState(x & 15, y, z & 15);
+                            final Block block = state.getBlock();
+                            if (!isUnderwaterDecoration(block)) {
+                                continue;
+                            }
+                            // canBlockStay 定义在 BlockBush 上；非 BlockBush 不猜判据，原样保留。
+                            if (!(block instanceof BlockBush)) {
+                                continue;
+                            }
+                            if (!((BlockBush) block).canBlockStay(world, pos, state)) {
+                                // 悬空、离水或基质不对：换回水，与 RWG 一致。
+                                world.setBlockState(pos, water, 2);
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    /**
-     * 该方块是否属于"会被 BOP 放错的水下装饰"。
-     *
-     * <p>只认 BOP 的三个块：珊瑚（{@code BOPBlocks.coral}）与两个植物块
-     * （{@code plant_0} / {@code plant_1} —— 1.12 的海草若存在，属于其中之一）。
-     * 不认识的方块一律不碰：宁可不清理，也不要动到别的模组的东西。
-     */
+    /** 只清理 BOP 珊瑚和两个植物块；其他模组方块不动。 */
     private static boolean isUnderwaterDecoration(final Block block) {
         return block == BOPBlocks.coral
                 || block == BOPBlocks.plant_0

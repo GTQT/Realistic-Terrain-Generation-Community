@@ -151,16 +151,14 @@ public class ChunkInfo {
     // ==================================================================
 
     /**
-     * 为什么需要它：性能首测显示装饰占绝大头（平均 17ms，**最慢的区块 3.5 秒里 99.8% 是装饰**），
-     * 而"Pop: decoration"这一格是个黑盒 —— 它同时包含
-     * ①rtgc 自己的 {@code DecoBase.generate} 循环、②{@code Biome.decorate} 的原版植被。
-     * 更麻烦的是 ②**会按被装饰的群系各跑一遍**（{@link IRealisticBiome#rDecorate} 是
-     * 按 `decoWeights` 逐群系调用的），所以"一个区块装饰了 5 个群系"就意味着原版植被跑了 5 次。
+     * 装饰耗时归因：把 {@code Pop: decoration} 拆成 rtgc 自己的 deco 与原版
+     * {@code Biome.decorate}，并记录每个装饰器的耗时，方便直接定位是谁花了时间。
      *
-     * <p>这里把两半分开记，并记下每一半里**最慢的那几个装饰器**，于是"谁的几秒"可以直接读出来。
+     * <p>{@link IRealisticBiome#rDecorate} 会按 {@code decoWeights} 逐群系调用，
+     * 所以一个区块可能把原版植被跑多次；这里按“被装饰的群系”累计，而不是按区块。
      *
-     * <p><b>只在 {@link ChunkGenerationProfiler#isEnabled()} 为真时累计</b>：正常游玩零开销
-     * （每次调用只是一次 volatile 读），这也免得再给用户加一个启动参数。
+     * <p>只在 {@link ChunkGenerationProfiler#isEnabled()} 为真时累计；正常游玩每次调用
+     * 只是一次 volatile 读。
      */
     private static final java.util.Map<String, long[]> DECO_NS = new java.util.HashMap<>();
     private static long decoOwnNs;

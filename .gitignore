@@ -22,3 +22,6 @@ eclipse
 run
 docs
 tools
+# benchmark artifacts
+logs
+bench-logs

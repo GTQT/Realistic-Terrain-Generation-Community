@@ -15,13 +15,12 @@ import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.ChunkGenerationProfiler.Counter;
 
 /**
- * M0 的写入侧计数器：只统计“成功写入”的方块，并按方块类别分桶。
+ * World 侧计数器：统计成功的方块写入，并按方块类别分桶。
  *
- * <p>为什么必须分桶：旧报告把“树叶写入”当成主要光照开销，但原木的
- * {@code lightOpacity} 默认是 255（{@code Block#setLightOpacity} 对 fullBlock 的默认值），
- * 每根原木同样会触发 {@code World#checkLight}。只数树叶会把原木漏掉。
+ * <p>分桶是必要的：原木的 {@code lightOpacity} 默认是 255，写入同样触发
+ * {@code World#checkLight}；只统计树叶会漏掉原木。
  *
- * <p>只在 profiler 打开时计数；关闭时一次 volatile 读后返回，不影响正常游玩。
+ * <p>profiler 关闭时只读一次 volatile 标志。
  */
 @Mixin(World.class)
 public abstract class WorldProfilerMixin {

@@ -13,37 +13,18 @@ import java.util.Random;
 
 
 /**
- * RWG {@code rwg/biomes/realistic/coast/RealisticBiomeCoastDunes.java:66-106} 的逐行移植。
+ * 滨海沙丘的共享地表，对应 RWG 内联在 {@code RealisticBiomeCoastDunes} 中的逻辑。
  *
- * <h2>为什么它是"共享地表"而不是某个群系的私有物</h2>
+ * <p>RWG 没有把它抽成 surface 类，rtgc 之前只移植了地形。这里补上地表，让
+ * {@code VanillaBeach}、{@code VanillaStoneBeach}、{@code BOPGravelBeach}、
+ * {@code BOPOriginBeach} 共用同一份参考实现。
  *
- * RWG 把这份地表**内联写在群系类里**（没有提成 {@code rwg/surface/} 下的类），
- * 所以它此前**从未被移植**：rtgc 只移植了它的地形那半
- * （{@code TerrainBase.terrainCoastDunes}），地表这半留空 ——
- * 于是 4 个滨海群系各自带一份 rtgc 自造的内层地表（`VanillaBeach` / `VanillaStoneBeach` /
- * `BOPGravelBeach` / `BOPOriginBeach`，`surface-wiring-check` 报 `still-inner=4`）。
- * 本类就是把 RWG 那份逐行提出来，让那 4 个群系接上**参考实现**，而不是各自发明。
+ * <p>方块写死为 grass/sand/sandstone/dirt/cobblestone/stone，不读取群系自己的
+ * top/filler；这是 RWG 的原始行为，也让 gravel_beach / origin_beach 的地表与普通
+ * 沙滩一致。悬崖阈值为 {@code 1.3}，{@code k > 68} 的高度门槛同样沿用 RWG 字面量。
  *
- * <h2>RWG 的原文逻辑（逐行）</h2>
- *
- * <pre>
- * cliff = CliffCalculator.calc(x, y, noise)
- * cliff &gt; 1.3f   → 崖壁：depth &lt; 2 时 1/3 概率 cobblestone、其余 stone；depth &lt; 10 → stone
- * 否则 depth == 0 → k &gt; 68 ? grass : sand（并记住 sand=true）
- *      depth &lt; 5  → sand 分支：depth &lt; 4 → sand，depth == 4 → sandstone
- *                    非 sand   → dirt
- * </pre>
- *
- * <p><b>块是写死的，不取群系自己的 top/filler</b> —— RWG 原文就是写死 grass/sand/sandstone/
- * dirt/cobblestone/stone，与 {@code SurfaceGrassland} 那种"按群系传块"的做法不同。
- * 这一点**有意保留**：BOP 的 {@code gravel_beach} / {@code origin_beach} 因此在地表上
- * 与普通沙滩一致（RWG 的单一 {@code CoastDunes} 本来就不区分它们）。
- *
- * <p>{@code k > 68} 也是 RWG 的字面量，**没有**换成 {@code WaterLevel} ——
- * 与 {@code SurfaceRiverOasis} 里保留字面量高度门槛同一口径。
- *
- * <p>唯一的管线适配：悬崖判定用 {@code TerrainBase.calcCliff(x, z, noise, river)}
- * （RWG 的 {@code CliffCalculator.calc} 只有 3 参，rtgc 的地表统一走 4 参版）。
+ * <p>管线适配只有一处：悬崖判定改用 {@code TerrainBase.calcCliff(x, z, noise, river)}
+ * （RWG 的 {@code CliffCalculator.calc} 只有 3 个参数）。
  */
 public class SurfaceCoastDunes extends SurfaceBase {
 

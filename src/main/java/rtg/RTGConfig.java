@@ -61,16 +61,7 @@ public final class RTGConfig {
             config.save();
         }
 
-        // 按类型回读**所有**设置。
-        //
-        // 原实现是一个只列出少数枚举常量的 switch，且没有 default 分支，于是：
-        //   · 所有 INTEGER 设置（islandScheme / tempScheme / rainScheme /
-        //     riverSize / biomeSize）**永远**停留在硬编码默认值；
-        //   · 未列出的 DOUBLE 同样永不生效；
-        //   · 未列出的 BOOLEAN 同样永不生效；
-        //   · STRING 数组（blacklistMods）从未被读取。
-        // 表现就是：配置文件里明明写着用户设的值，代码读到的却始终是默认值
-        // （当时实测：rtgc.cfg 里 landScheme=2，代码读到的却是 1）。
+        // 按类型回读所有设置，避免漏掉某个类型后配置值不生效。
         Arrays.stream(Setting.values()).forEach(setting -> {
             final Property property = getProperty(setting);
             switch (setting.getType()) {
@@ -170,9 +161,7 @@ public final class RTGConfig {
 
     /**
      * 把 {@code geography.riverSize}（1–10，默认 4）映射为河谷阈值的缩放系数。
-     * 默认值 4 对应系数 1.0（行为不变）；值越大，被判定为河谷的范围越宽、河网越密。
-     * <p>
-     * 这是在 WP-6 中为原先**无任何调用者**的 {@code getRiverSize()} 接上的实际用途（决策 D-4）。
+     * 默认值 4 对应系数 1.0；值越大，被判定为河谷的范围越宽、河网越密。
      */
     public static float riverSizeFactor() {
         return 1f + (getRiverSize() - 4) * 0.1f;
@@ -247,6 +236,47 @@ public final class RTGConfig {
         return (Boolean) Setting.treesInNonRTGWorlds.getCurVal();
     }
 
+    // ========== 原版矿脉开关（格雷科技整合包） ==========
+    //
+    // GT 的 WorldgenModule 在 ORE_GEN_BUS 上以 HIGH 优先级拒绝 COAL/IRON/GOLD/REDSTONE/DIAMOND/
+    // LAPIS/QUARTZ/EMERALD，所以这些原版矿在 GT 包里本来就不生成；但 DIRT/GRAVEL/DIORITE/
+    // GRANITE/ANDESITE 仍会跑满 48 条矿脉的探针循环（约 0.5ms/区块）。这里在 GT 确实拒绝原版矿时
+    // 直接把整个 genStandardOre1/2 跳过。
+    //
+    // -Drtg.skipVanillaOres=true|false 可强制覆盖（基准 A/B 用）。
+    private static Boolean gregTechDisablesVanillaOres;
+
+    public static boolean skipVanillaOreGen() {
+        final String override = System.getProperty("rtg.skipVanillaOres");
+        if (override != null) {
+            return Boolean.parseBoolean(override);
+        }
+        if (!(Boolean) Setting.skipVanillaOresWhenGregTech.getCurVal()) {
+            return false;
+        }
+        return gregTechDisablesVanillaOres();
+    }
+
+    private static boolean gregTechDisablesVanillaOres() {
+        if (gregTechDisablesVanillaOres == null) {
+            boolean result = false;
+            if (net.minecraftforge.fml.common.Loader.isModLoaded("gregtech")) {
+                try {
+                    // 反射读 GT 自己的开关：整合包可能把它关掉，那时原版矿脉必须保留。
+                    final Class<?> holder = Class.forName("gregtech.common.ConfigHolder");
+                    final Object worldgen = holder.getField("worldgen").get(null);
+                    result = worldgen.getClass().getField("disableVanillaOres").getBoolean(worldgen);
+                } catch (Throwable t) {
+                    // 装了 GT 但读不到配置（版本差异）：按 GT 的默认行为处理。
+                    result = true;
+                }
+            }
+            gregTechDisablesVanillaOres = result;
+            rtg.api.util.Logger.debug("[RTGConfig] 原版矿脉跳过=%s（GT 检测）", result);
+        }
+        return gregTechDisablesVanillaOres;
+    }
+
     public static boolean shrubsBelowSurface() {
         return (Boolean) Setting.shrubsBelowSurface.getCurVal();
     }
@@ -296,7 +326,8 @@ public final class RTGConfig {
         geography(common),
         debug(common),
         surface(common),
-        trees(common);
+        trees(common),
+        worldgen(common);
 
         private final Category parent;
 
@@ -437,7 +468,19 @@ public final class RTGConfig {
 
         waterFeatureWidthMultiplier(Type.DOUBLE, Category.surface,
                 "Multiplier to average width of rivers and lakes. ",
-                1.0, 0.1, 10.0);
+                1.0, 0.1, 10.0),
+
+        // 格雷科技整合包：GT 用自己按 3×3 区块网格生成的矿脉取代原版矿物，原版矿脉装饰器的
+        // 探针循环可以整段跳过（见 RTGConfig.skipVanillaOreGen 与 BiomeDecoratorMixin）。
+        skipVanillaOresWhenGregTech(Type.BOOLEAN, Category.worldgen,
+                "Skip vanilla ore generation (BiomeDecorator#genStandardOre1/2) when GregTech is installed.\n" +
+                        "GregTech replaces vanilla ores with its own vein system and already denies COAL/IRON/GOLD/\n" +
+                        "REDSTONE/DIAMOND/LAPIS/QUARTZ/EMERALD through OreGenEvent.GenerateMinable. This switch also\n" +
+                        "skips the DIRT/GRAVEL/DIORITE/GRANITE/ANDESITE veins that GregTech leaves enabled, saving\n" +
+                        "roughly 0.5ms per chunk during world generation.\n" +
+                        "!Only takes effect while GregTech's own 'disableVanillaOres' is enabled!\n" +
+                        "!Set to FALSE to keep vanilla ore veins in GregTech packs!",
+                true);
 
         private final Type type;
         private final boolean isArray;
@@ -545,10 +588,7 @@ public final class RTGConfig {
 
     // ========== 性能分析器配置 ==========
     //
-    // 注意：这三个方法此前是**空壳**（写死 return false / 0），完全无视 JVM 参数，
-    // 导致 gradle.properties 里的 extra_jvm_args 毫无作用、ChunkGenerationProfiler
-    // 从未运行过——"世界生成卡顿"因此长期无法定位。现改为真正读取系统属性。
-    // 与 F-18（sync 未回读配置）属于同一类问题：文档声称的能力与实现不符。
+    // 直接读取系统属性；gradle.properties 的 extra_jvm_args 会原样传给 JVM。
 
     /** 是否启用区块生成性能分析。通过 JVM 参数 {@code -Drtg.enableProfiling=true} 启用。 */
     public static boolean enableProfiling() {

@@ -21,14 +21,12 @@ import java.util.Collections;
 
 
 /**
- * 原版稀树草原的 RWG 外壳。地形照抄 RWG {@code savanna/RealisticBiomeSavanna}：
- * {@code TerrainGrasslandFlats}。
+ * 原版稀树草原的 RWG 外壳，地形使用 {@code TerrainGrasslandFlats}。
  *
- * <p>地表按 **RTG+ {@code RealisticBiomeVanillaSavanna}** 的写法：
- * {@code SurfaceGrasslandMix1(grass, dirt, grass, stone, cobble, 13f, .27f)}
- * —— mix 块是**草**（可由 {@code SURFACE_MIX_BLOCK} 覆盖），不是 rwg2 的沙。
- * rwg2 传 {@code Blocks.sand}，会在草原上撒出一片片散点沙斑；RTG+ 用草，视觉上就是纯草。
- * 两份上游此处不一致，本项目按用户决定采用 RTG+。
+ * <p>地表采用 RTG+ 的写法：
+ * {@code SurfaceGrasslandMix1(grass, dirt, grass, stone, cobble, 13f, .27f)}，
+ * mix 块是草（可由 {@code SURFACE_MIX_BLOCK} 覆盖）。rwg2 在此传沙，会在草原上留下
+ * 散点沙斑；本项目按用户决定采用 RTG+ 的纯草版本。
  *
  * <p>装饰本轮改为 RWG {@code RealisticBiomeSavanna.rDecorate} 的**逐行移植**
  * （{@link DecoRtgDecorator} 里就是原方法体，{@code strength = 1f}）。原来的

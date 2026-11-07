@@ -10,19 +10,25 @@ import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.ChunkGenerationProfiler.Counter;
 
+/**
+ * 树木放置前的天光可行性跟踪器：从树基向上扫描遮挡，判断哪些位置仍能接到天光。
+ *
+ * <p>所有数组都以树基为中心，索引是相对坐标；扫描必须先确定树基附近真正能透光的
+ * 高度，再向外扩散。A5′ 的块存储直读路径见 {@link #scanColumn}。
+ */
 public class SkylightTracker {
 	
 	private final int distance;
 	private final int width;
-	private final int [] [] directOpacity; // the light from straight up
-	private final int [] [] opacity; // best available light
-	private final int [] [] lowest; // lowest affected block
-	private final OrthogonalDirection [] [] lightDirection;// from which direction the best light came
+	private final int [] [] directOpacity; // 正上方直接遮挡
+	private final int [] [] opacity; // 当前可用的最亮光照
+	private final int [] [] lowest; // 受影响的最低方块
+	private final OrthogonalDirection [] [] lightDirection; // 最亮光照来自哪个方向
 
-	private final boolean [] [] relighting; // tracks what's already being relit so we don't make multiple attempts
-	private final OrthogonalDirection [] [] backTrack;// use to record what was relit on an attempted place
+	private final boolean [] [] relighting; // 正在重新计算的位置，避免重复尝试
+	private final OrthogonalDirection [] [] backTrack; // 一次放置尝试中已经重算过的位置
 	
-	private final boolean [] [] trunk;  // indicating where dark blocks go to the ground and light cannot pass underneath.
+	private final boolean [] [] trunk; // 树干：暗块一直落到地面，光无法从下方穿过
 	private final BlockPos base;
 
 	int tolerableObstruction = 5;
@@ -338,7 +344,7 @@ public class SkylightTracker {
 	}
 	
 	// ==================================================================
-	// A5': direct chunk-storage column scan
+	// A5′：直接读 chunk section 的列扫描
 	// ==================================================================
 
 	interface ColumnAccess {
@@ -444,8 +450,8 @@ public class SkylightTracker {
 	 * 扫描一列 baseY..baseY+lightingHeight-1。语义与旧的逐格 world.getBlockState 完全一致，
 	 * 唯一差别是第二段可以用 {@link ExtendedBlockStorage#isEmpty()} 整段跳过。
 	 *
-	 * <p><b>第一段不能在空段处跳过</b>：它只处理底部的连续不透明块，遇到第一个非不透明块就结束。
-	 * 如果跳段，会把空段上方的原木/实心块也算进来，改变 trunk 与 obstruction。
+	 * <p>第一段不能在空段处跳过：它只处理底部的连续不透明块，遇到第一个非不透明块就结束。
+	 * 跳段会把空段上方的原木/实心块也算进来，改变 trunk 与 obstruction。
 	 *
 	 * <p>注意 {@code baseY} 是树基位置，旧实现从 {@code base.up(up)} 开始扫描；
 	 * 这里必须保持绝对 Y，否则会把扫描范围错移到世界底部。

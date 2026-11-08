@@ -586,25 +586,6 @@ public final class RTGConfig {
         return getInt("PERFORMANCE.landscape_cache_size", 128);
     }
 
-    // ========== 性能分析器配置 ==========
-    //
-    // 直接读取系统属性；gradle.properties 的 extra_jvm_args 会原样传给 JVM。
-
-    /** 是否启用区块生成性能分析。通过 JVM 参数 {@code -Drtg.enableProfiling=true} 启用。 */
-    public static boolean enableProfiling() {
-        return Boolean.getBoolean("rtg.enableProfiling");
-    }
-
-    /** 性能分析器每 N 个区块打印一次汇总报告，0 禁用自动打印。通过 {@code -Drtg.profilerLogInterval=N} 设置。 */
-    public static int profilerLogInterval() {
-        return Integer.getInteger("rtg.profilerLogInterval", 0);
-    }
-
-    /** 慢区块阈值（毫秒），超过此阈值的区块将单独输出耗时分解。通过 {@code -Drtg.profilerSlowThresholdMs=N} 设置。 */
-    public static int profilerSlowThresholdMs() {
-        return Integer.getInteger("rtg.profilerSlowThresholdMs", 20);
-    }
-
     // ==========
 
     @SuppressWarnings("unused")

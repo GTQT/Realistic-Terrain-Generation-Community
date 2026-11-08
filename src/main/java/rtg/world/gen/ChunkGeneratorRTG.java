@@ -31,8 +31,10 @@ import org.dimdev.jeid.INewChunk;
 import rtg.RTG;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
-import rtg.api.util.*;
-import rtg.api.util.ChunkGenerationProfiler.Category;
+import rtg.api.util.BlockUtil;
+import rtg.api.util.ChunkInfo;
+import rtg.api.util.ChunkPopulationQueue;
+import rtg.api.util.Logger;
 import rtg.api.util.noise.ContinentalNoise;
 import rtg.api.util.noise.RtgCellNoise;
 import rtg.api.util.noise.RtgLayoutConfig;
@@ -78,10 +80,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
      */
     private static final float MOUNTAIN_CHAIN_FADE_START = 0.35f;
     private static final float MOUNTAIN_CHAIN_FADE_WIDTH = 0.65f;
-    /** 装饰阶段超过该值就打印一行归因（{@code [RTG-DECOPROF]}），默认 20ms，可用系统属性覆盖。 */
-    private static final long DECO_REPORT_THRESHOLD_NS =
-            Math.max(1L, Long.getLong("rtg.decoReportThresholdMs", 20L)) * 1_000_000L;
-
     /** 9×9 区块邻域中每个命中群系的装饰权重（{@code 1f / 81f}）。 */
     private static final float RTG_DECO_NEIGHBOUR_WEIGHT = 0.01234569f;
 
@@ -246,8 +244,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     @Override
     public Chunk generateChunk(final int cx, final int cz) {
-        ChunkGenerationProfiler.beginChunk(cx, cz);
-        long tChunkGen = ChunkGenerationProfiler.start(Category.CHUNK_TOTAL);
 
         final ChunkPos chunkPos = new ChunkPos(cx, cz);
         final BlockPos blockPos = new BlockPos(cx * 16, 0, cz * 16);
@@ -256,14 +252,10 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final ChunkPrimer primer = new ChunkPrimer();
 
         // ---- Landscape ----
-        long tLandscape = ChunkGenerationProfiler.start(Category.LANDSCAPE);
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
-        ChunkGenerationProfiler.end(Category.LANDSCAPE, tLandscape);
 
         // ---- Terrain fill ----
-        long tTerrain = ChunkGenerationProfiler.start(Category.TERRAIN_FILL);
         generateTerrain(primer, landscape.noise);
-        ChunkGenerationProfiler.end(Category.TERRAIN_FILL, tTerrain);
 
         final float[] mapGenColumn = this.smallRender[SMALL_RENDER_CENTER_INDEX];
         for (int activeIndex = 0; activeIndex < this.activeBiomeCount; activeIndex++) {
@@ -292,18 +284,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         // ---- Surface replace ----
         // RWG 没有「地表渗透 / Surface Bleed」：地表群系就是 landscape.biome[]（randBiome 的产物），
         // 与区块群系数组同源，不再按邻域采样改写。
-        long tReplace = ChunkGenerationProfiler.start(Category.SURFACE_REPLACE);
         replaceBiomeBlocks(cx, cz, primer, landscape.biome, this.baseBiomesList, landscape.noise, landscape.river);
-        ChunkGenerationProfiler.end(Category.SURFACE_REPLACE, tReplace);
 
         // ---- Underground river tunnels & junction chambers (WP-3) ----
-        long tTunnels = ChunkGenerationProfiler.start(Category.RIVER_TUNNELS);
         UndergroundRiver.carve(primer, cx, cz, landscape);
-        ChunkGenerationProfiler.end(Category.RIVER_TUNNELS, tTunnels);
 
         // ---- Caves ----
         if (this.settings.useCaves) {
-            long tCaves = ChunkGenerationProfiler.start(Category.CAVES);
             if (this.caveGenerator instanceof WorleyCavesGenerator) {
                 // 把本区块逐列的地表群系一起传进去：Worley 的破土补顶要按 RTG 的地表材质补，
                 // 而不是按 MC 群系的 topBlock 补（两者在石山/台地这类群系上并不一致）。
@@ -313,24 +300,19 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 // 被第三方洞穴模组接管（或未启用 Worley）：走通用入口
                 this.caveGenerator.generate(this.world, cx, cz, primer);
             }
-            ChunkGenerationProfiler.end(Category.CAVES, tCaves);
         }
         // ---- Ravines ----
         if (this.settings.useRavines) {
-            long tRavines = ChunkGenerationProfiler.start(Category.RAVINES);
             this.ravineGenerator.generate(this.world, cx, cz, primer);
-            ChunkGenerationProfiler.end(Category.RAVINES, tRavines);
         }
         // ---- Structures ----
         if (this.mapFeaturesEnabled) {
-            long tStructures = ChunkGenerationProfiler.start(Category.STRUCTURES_GEN);
             if (settings.useMineShafts) this.mineshaftGenerator.generate(this.world, cx, cz, primer);
             if (settings.useStrongholds) this.strongholdGenerator.generate(this.world, cx, cz, primer);
             if (settings.useVillages) this.villageGenerator.generate(this.world, cx, cz, primer);
             if (settings.useTemples) this.scatteredFeatureGenerator.generate(this.world, cx, cz, primer);
             if (settings.useMonuments) this.oceanMonumentGenerator.generate(this.world, cx, cz, primer);
             if (settings.useMansions) this.woodlandMansionGenerator.generate(this.world, cx, cz, primer);
-            ChunkGenerationProfiler.end(Category.STRUCTURES_GEN, tStructures);
         }
 
         // ---- 岩浆房 ----
@@ -351,12 +333,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         }
 
         // ---- Chunk finalize ----
-        long tFinalize = ChunkGenerationProfiler.start(Category.CHUNK_FINALIZE);
-        long tPart = System.nanoTime();
         // FastChunkAssembler 按全局 id 直写 storage（等价于原版构造，快 2~3 倍）；不可用时自动回退。
         Chunk chunk = FastChunkAssembler.build(this.world, primer, cx, cz);
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_CTOR_NS, System.nanoTime() - tPart);
-        tPart = System.nanoTime();
         for (int i = 0; i < 256; ++i) {
             int value = Biome.getIdForBiome(this.baseBiomesList[this.xyinverted[i]]);
             this.intBiomeArray[i] = value;
@@ -367,13 +345,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             ((INewChunk) chunk).setIntBiomeArray(this.intBiomeArray.clone());
         }
         chunk.setBiomeArray(this.byteBiomeArray);
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_BIOMES_NS, System.nanoTime() - tPart);
-        tPart = System.nanoTime();
         chunk.generateSkylightMap();
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.FINALIZE_SKYLIGHT_NS, System.nanoTime() - tPart);
-        ChunkGenerationProfiler.end(Category.CHUNK_FINALIZE, tFinalize);
 
-        ChunkGenerationProfiler.end(Category.CHUNK_TOTAL, tChunkGen);
         return chunk;
     }
 
@@ -519,7 +492,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
 
     @Override
     public void populate(int chunkX, int chunkZ) {
-        long tPopTotal = ChunkGenerationProfiler.start(Category.POP_TOTAL);
         BlockFalling.fallInstantly = true;
         final BiomeProvider biomeProvider = this.world.getBiomeProvider();
         final ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
@@ -543,7 +515,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         ForgeEventFactory.onChunkPopulate(true, this, this.world, this.rand, chunkX, chunkZ, false);
 
         // ---- Pop: structures ----
-        long tPopStruct = ChunkGenerationProfiler.start(Category.POP_STRUCTURES);
         if (this.mapFeaturesEnabled) {
             byte flags = 0;
             if (settings.useMineShafts) flags |= 1;
@@ -559,10 +530,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
             if ((flags & 16) != 0) oceanMonumentGenerator.generateStructure(world, rand, chunkPos);
             if ((flags & 32) != 0) woodlandMansionGenerator.generateStructure(world, rand, chunkPos);
         }
-        ChunkGenerationProfiler.end(Category.POP_STRUCTURES, tPopStruct);
 
         // ---- Pop: lakes ----
-        long tPopLakes = ChunkGenerationProfiler.start(Category.POP_LAKES);
         if (settings.useWaterLakes && settings.waterLakeChance > 0 && !hasVillage) {
             long nextChance = rand.nextLong();
             int surfaceChance = settings.getSurfaceWaterLakeChance(biome.waterLakeMult());
@@ -596,10 +565,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_LAKES, tPopLakes);
 
         // ---- Pop: dungeons ----
-        long tPopDungeons = ChunkGenerationProfiler.start(Category.POP_DUNGEONS);
         if (settings.useDungeons && TerrainGen.populate(this, world, rand, chunkX, chunkZ,
                 hasVillage, PopulateChunkEvent.Populate.EventType.DUNGEON)) {
             for (int i = 0; i < settings.dungeonChance; i++) {
@@ -607,10 +574,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         offsetPos.add(rand.nextInt(16), rand.nextInt(256), rand.nextInt(16)));
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_DUNGEONS, tPopDungeons);
 
         // ---- Pop: decoration ----
-        long tPopDeco = ChunkGenerationProfiler.start(Category.POP_DECORATION);
         mpos.setPos(blockPos.getX() + 16, 0, blockPos.getZ() + 16);
         // 装饰期的河强：用 rtgc 的「1 = 河心」约定。
         final RtgBiomeLayout decoLayout = RtgLayoutAccess.current();
@@ -619,7 +584,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         final ChunkLandscape landscape = getLandscape(biomeProvider, chunkPos);
 
         // ---- 邻域装饰权重累加 ----
-        long tPopWeights = ChunkGenerationProfiler.start(Category.POP_WEIGHTS);
         final int decoBound = biomeLoopBound();
         java.util.Arrays.fill(this.decoWeights, 0, decoBound, 0f);
         for (int bx = -4; bx <= 4; bx++) {
@@ -635,17 +599,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_WEIGHTS, tPopWeights);
 
         // rtgc 的 populate 取代了原版 ChunkProviderServer#populate，这里因此成为
         // DecorateBiomeEvent.Pre/Post 的唯一发出点。单列计时，便于和 rtgc 自己的
         // rDecorate 区分：这个事件里跑的是其他模组的装饰处理器。
-        long tPreEvent = ChunkGenerationProfiler.start(Category.POP_DECO_PRE_EVENT);
         MinecraftForge.EVENT_BUS.post(new DecorateBiomeEvent.Pre(this.world, this.rand, blockPos));
-        ChunkGenerationProfiler.end(Category.POP_DECO_PRE_EVENT, tPreEvent);
 
         ChunkInfo.resetInvocations();
-        ChunkInfo.resetDecoProfile();
 
         int decoratedBiomes = 0;
         final int centreId = RtgRealisticIndex.idFor(biome);
@@ -711,27 +671,15 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                     String.format(java.util.Locale.ROOT, "%.4f", centreWeight));
         }
 
-        long tPostEvent = ChunkGenerationProfiler.start(Category.POP_DECO_POST_EVENT);
         MinecraftForge.EVENT_BUS.post(new DecorateBiomeEvent.Post(this.world, this.rand, blockPos));
-        ChunkGenerationProfiler.end(Category.POP_DECO_POST_EVENT, tPostEvent);
-        ChunkGenerationProfiler.end(Category.POP_DECORATION, tPopDeco);
-
-        if (RTG.decoDebug() || (ChunkGenerationProfiler.isEnabled()
-                && (System.nanoTime() - tPopDeco) > DECO_REPORT_THRESHOLD_NS)) {
-            Logger.info("[RTG-DECOPROF] chunk({},{}) {}ms {}",
-                    chunkX, chunkZ, (System.nanoTime() - tPopDeco) / 1_000_000L, ChunkInfo.decoReport());
-        }
 
         // ---- 洞穴藤蔓 ----
-        long tPopVines = ChunkGenerationProfiler.start(Category.POP_VINES);
         if (this.mapFeaturesEnabled) {
             RiverCaveVines.decorate(this.world, this.rand, this.rtgWorld, landscape,
                     blockPos.getX(), blockPos.getZ());
         }
-        ChunkGenerationProfiler.end(Category.POP_VINES, tPopVines);
 
         // ---- 熔岩洞地标的装饰 ----
-        long tPopLandmark = ChunkGenerationProfiler.start(Category.POP_LANDMARK_DECO);
         if (RtgLayoutConfig.averageLandmarksPerTypeAndContinent > 0f) {
             final RtgBiomeLayout landmarkLayout = RtgLayoutAccess.current();
             if (landmarkLayout != null) {
@@ -739,16 +687,13 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                         this.rtgWorld.simplexInstance(0), blockPos.getX(), blockPos.getZ(), this.smolderingGrass);
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_LANDMARK_DECO, tPopLandmark);
 
         // ---- Pop: animals ----
-        long tPopAnimals = ChunkGenerationProfiler.start(Category.POP_ANIMALS);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ANIMALS)) {
             WorldEntitySpawner.performWorldGenSpawning(this.world, biome.baseBiome(),
                     blockPos.getX() + 8, blockPos.getZ() + 8, 16, 16, this.rand);
         }
-        ChunkGenerationProfiler.end(Category.POP_ANIMALS, tPopAnimals);
 
         // ---- Pop: snow & ice ----
         //
@@ -761,7 +706,6 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
         //  * 顺带修正坐标：原代码用 offsetPos（区块中心，+8,+8）遍历 16×16，整片雪/冰偏移 8 格并
         //    溢出到邻区块（会提前触发邻区块生成），这里改回 blockPos（区块原点），与 vanilla 一致。
         // 语义差异只在"透明但阻挡移动的方块（玻璃等）位于高度图之上"这种地形里，自然生成不会出现。
-        long tPopSnow = ChunkGenerationProfiler.start(Category.POP_SNOW_ICE);
         if (TerrainGen.populate(this, this.world, this.rand, chunkX, chunkZ, hasVillage,
                 PopulateChunkEvent.Populate.EventType.ICE)) {
             float snowTempThreshold = settings.getClampedSnowLayerTemp();
@@ -819,10 +763,8 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_SNOW_ICE, tPopSnow);
 
         // ---- 冰雪之后才补海洋的原版装饰 ----
-        long tDeferredOcean = ChunkGenerationProfiler.start(Category.POP_DEFERRED_DECO);
         for (int id = 0; id < decoBound; id++) {
             final float deferred = this.deferredOceanDecorations[id];
             if (deferred <= 0f) {
@@ -840,33 +782,21 @@ public class ChunkGeneratorRTG implements IChunkGenerator {
                 }
             }
         }
-        ChunkGenerationProfiler.end(Category.POP_DEFERRED_DECO, tDeferredOcean);
 
         ForgeEventFactory.onChunkPopulate(false, this, this.world, this.rand, chunkX, chunkZ, hasVillage);
         // 上游 74cf4fd「Lighting bug reduction」：填充完成后修补四个角邻区块的天光。
         // 放在 onChunkPopulate(false) 之后、与上游同一位置。
-        long tPopFixLighting = ChunkGenerationProfiler.start(Category.POP_FIX_LIGHTING);
         EventHandlerCommon.fixLightingAround(world, chunkPos);
-        ChunkGenerationProfiler.end(Category.POP_FIX_LIGHTING, tPopFixLighting);
         BlockFalling.fallInstantly = false;
 
-        ChunkGenerationProfiler.end(Category.POP_TOTAL, tPopTotal);
-        ChunkGenerationProfiler.endChunk(chunkX, chunkZ);
     }
 
     @Override
     public boolean generateStructures(Chunk chunkIn, int x, int z) {
-        // Chunk#populate(IChunkGenerator) 对"已经 populate 过"的区块只会走这里，而且一次包装层
-        // 最多会对 4 个邻区块各调一次 —— 基准里这部分以前全算账外时间，这里单独记账。
-        final boolean timed = ChunkGenerationProfiler.isEnabled();
-        final long tStructures = timed ? System.nanoTime() : 0L;
-        final boolean result = settings.useMonuments && this.mapFeaturesEnabled && chunkIn.getInhabitedTime() < 3600L
+        // Chunk#populate(IChunkGenerator) 对"已经 populate 过"的区块只会走这里，
+        // 而且一次包装层最多会对 4 个邻区块各调一次。
+        return settings.useMonuments && this.mapFeaturesEnabled && chunkIn.getInhabitedTime() < 3600L
                 && this.oceanMonumentGenerator.generateStructure(this.world, this.rand, new ChunkPos(x, z));
-        if (timed) {
-            ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.GENERATE_STRUCTURES_NS,
-                    System.nanoTime() - tStructures);
-        }
-        return result;
     }
 
     @Override

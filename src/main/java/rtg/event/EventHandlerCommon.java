@@ -20,9 +20,10 @@ import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import rtg.RTGConfig;
 import rtg.api.RTGAPI;
-import rtg.api.util.*;
-import rtg.api.util.ChunkGenerationProfiler.Category;
-import rtg.api.util.ChunkGenerationProfiler.Counter;
+import rtg.api.util.ChunkInfo;
+import rtg.api.util.ChunkTracker;
+import rtg.api.util.Logger;
+import rtg.api.util.UtilityClass;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
 import rtg.api.world.gen.feature.tree.rtg.RTGSaplingManager;
@@ -51,10 +52,6 @@ public final class EventHandlerCommon
         MinecraftForge.TERRAIN_GEN_BUS.register(EventHandlerCommon.class);
         // 上游 74cf4fd「Lighting bug reduction」加：区块载入事件需要 EVENT_BUS。
         MinecraftForge.EVENT_BUS.register(EventHandlerCommon.class);
-        // 无头 500 区块基准：只有显式 -Drtg.benchmark=true 时才注册，正常游戏零开销。
-        if (Boolean.getBoolean("rtg.benchmark")) {
-            MinecraftForge.EVENT_BUS.register(rtg.debug.BenchmarkProbe.class);
-        }
     }
 
     // ==================== 树木接管（上游新树系统 / T6） ====================
@@ -214,7 +211,6 @@ public final class EventHandlerCommon
         if (!isRTGWorld(loadEvent.getWorld())) return;
         if (alreadyFixing) return;
         alreadyFixing = true;
-        long fixStart = ChunkGenerationProfiler.start(Category.FIX_LIGHTING_ON_LOAD);
         try {
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
@@ -222,8 +218,6 @@ public final class EventHandlerCommon
                 }
             }
         } finally {
-            // onLoad 不在当前区块的计时 map 内，只进 Category 聚合，避免污染正在生成的区块。
-            ChunkGenerationProfiler.endExternal(Category.FIX_LIGHTING_ON_LOAD, fixStart);
             alreadyFixing = false;
         }
     }
@@ -240,7 +234,6 @@ public final class EventHandlerCommon
 
     private static void fixLighting(Chunk chunk, int x, int z) {
 
-        ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_COLUMNS);
         ExtendedBlockStorage[] sections = chunk.getBlockStorageArray();
         IBlockState top = getFixLightingState(sections, x, 255, z);
         if (top.getBlock() != Blocks.AIR) return;
@@ -248,12 +241,6 @@ public final class EventHandlerCommon
         FixLightingStats stats = new FixLightingStats();
         scanFixLightingColumn(new ChunkFixLightingColumn(sections, x, z), x, z,
                 new ChunkFixLightingSink(chunk), stats);
-        if (stats.sectionSkips > 0) {
-            ChunkGenerationProfiler.add(Counter.FIX_LIGHTING_SECTION_SKIPS, stats.sectionSkips);
-        }
-        if (stats.repeatSkips > 0) {
-            ChunkGenerationProfiler.add(Counter.FIX_LIGHTING_AIR_REPEAT_SKIPS, stats.repeatSkips);
-        }
     }
 
     /**
@@ -351,11 +338,9 @@ public final class EventHandlerCommon
         public void fix(int x, int y, int z) {
             BlockPos pos = chunk.getPos().getBlock(x, y, z);
             if (FIX_LIGHTING_USE_WOOL) {
-                ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_WOOL);
                 chunk.getWorld().setBlockState(pos, Blocks.WOOL.getDefaultState(), 3);
                 chunk.getWorld().setBlockToAir(pos);
             } else {
-                ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_DIRECT_LIGHT);
                 chunk.getWorld().checkLight(pos);
             }
         }
@@ -394,10 +379,8 @@ public final class EventHandlerCommon
         if (!targeted.isPopulated()) return;
         ChunkPos targetPos = new ChunkPos(chunkX, chunkZ);
         if (!lightChecked.addIfNeeded(world, targetPos)) {
-            ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_CORNER_SKIPS);
             return;
         }
-        ChunkGenerationProfiler.count(Counter.FIX_LIGHTING_CORNER_SCANS);
         fixLighting(world, targetPos);
     }
 

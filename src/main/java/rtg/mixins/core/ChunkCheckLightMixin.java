@@ -14,18 +14,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import rtg.api.util.ChunkGenerationProfiler;
-import rtg.api.util.ChunkGenerationProfiler.Counter;
 
 /**
- * {@code Chunk#checkLight} 的耗时归因与等价加速。
+ * {@code Chunk#checkLight} 的等价加速。
  *
  * <p>它是 {@code Chunk#populate(IChunkGenerator)} 里、在 {@code IChunkGenerator#populate} 之前
  * 执行的一段"账外时间"：先用每列 4.5 万次 {@code getBlockLightOpacity} 找地表以下的空气，
  * 对每个空气格调一次 {@code World#checkLight}，再从海平面往下把整列扫一遍找发光方块
  * （原版给熔岩补光用），最后还要让 4 个邻区块各重算 16 列。
  *
- * <p>这里做了三件互不影响、且内容等价的事：
+ * <p>这里做了两件互不影响、且内容等价的事：
  * <ul>
  *   <li><b>起点</b>（{@code -Drtg.checkLightHeightStart}）：从列 {@code heightMap - 1} 开始扫，
  *       而不是从最上面非空段的顶部。高度图以上全是 {@code lightOpacity == 0} 的方块，
@@ -34,15 +32,13 @@ import rtg.api.util.ChunkGenerationProfiler.Counter;
  *       熔岩之类发光方块补一次 {@code checkLight}，但原版会把整列（约 60 格）的每个方块都
  *       {@code getBlockState(...).getLightValue(...)} 一次。这里按段查一次调色板：段里没有
  *       发光状态就整段跳过。查调色板的成本约 5µs/区块，省下的是约 1.6 万次方块读。</li>
- *   <li><b>明细计数</b>（{@code -Drtg.checkLightDetail}）：把列扫描、{@code World#checkLight}、
- *       发光扫描三段拆开计时，报告里能直接看到钱花在哪。</li>
  * </ul>
  *
  * <p>侧向检查（{@code Chunk#checkLightSide} → 私有 {@code checkLight(x, z)}）走的是另一条路径，
  * 那里没有"整个区块"的上下文，因此不启用发光段跳过（mask 只在公开 {@code checkLight()} 期间有效）。
  */
 @Mixin(Chunk.class)
-public abstract class ChunkCheckLightProfilerMixin {
+public abstract class ChunkCheckLightMixin {
 
     /** 是否启用本类的等价加速实现；{@code -Drtg.fastCheckLight=false} 退回原版方法体。 */
     private static final boolean FAST = !"false".equalsIgnoreCase(System.getProperty("rtg.fastCheckLight", "true"));
@@ -54,10 +50,6 @@ public abstract class ChunkCheckLightProfilerMixin {
     private static final boolean DEDUPE = !"false".equalsIgnoreCase(System.getProperty("rtg.checkLightDedupe", "true"));
     /** 去重时是否连"天光"那一半也跳过（实验开关：天光在这条路径上大多是空转）。 */
     private static final boolean SKIP_SKY = !"false".equalsIgnoreCase(System.getProperty("rtg.checkLightSkipSky", "true"));
-    /** 是否统计三段明细（关掉可以少 4 次 nanoTime/列）。 */
-    private static final boolean DETAIL = !"false".equalsIgnoreCase(System.getProperty("rtg.checkLightDetail", "true"));
-
-    private static final ThreadLocal<Long> RTGC_CHECK_LIGHT_START = new ThreadLocal<>();
 
     @Shadow
     private int x;
@@ -81,21 +73,11 @@ public abstract class ChunkCheckLightProfilerMixin {
             this.rtgc$emissiveMask = this.rtgc$computeEmissiveMask();
             this.rtgc$emissiveMaskKnown = true;
         }
-        if (ChunkGenerationProfiler.isEnabled()) {
-            RTGC_CHECK_LIGHT_START.set(System.nanoTime());
-        }
     }
 
     @Inject(method = "checkLight", at = @At("RETURN"))
     private void rtgc$endCheckLight(final CallbackInfo ci) {
         this.rtgc$emissiveMaskKnown = false;
-
-        final Long start = RTGC_CHECK_LIGHT_START.get();
-        if (start == null) {
-            return;
-        }
-        RTGC_CHECK_LIGHT_START.remove();
-        ChunkGenerationProfiler.add(Counter.CHUNK_CHECK_LIGHT_NS, System.nanoTime() - start);
     }
 
     /**
@@ -108,7 +90,6 @@ public abstract class ChunkCheckLightProfilerMixin {
             return;
         }
 
-        final boolean prof = DETAIL && ChunkGenerationProfiler.isEnabled();
         final int posX = (this.x << 4) + x;
         final int posZ = (this.z << 4) + z;
         final int seaLevel = this.world.getSeaLevel();
@@ -125,18 +106,13 @@ public abstract class ChunkCheckLightProfilerMixin {
         }
 
         final MutableBlockPos pos = new MutableBlockPos(posX, 0, posZ);
-        final long scanStart = prof ? System.nanoTime() : 0L;
 
-        int scanReads = 0;
-        int worldCalls = 0;
-        long worldNs = 0L;
         boolean flag = false;
         boolean flag1 = false;
         int y = startY;
 
         while (y > seaLevel || (y > 0 && !flag1)) {
             pos.setPos(posX, y, posZ);
-            ++scanReads;
             final int k = ((Chunk) (Object) this).getBlockLightOpacity(pos);
 
             if (k == 255 && y < seaLevel) {
@@ -146,12 +122,7 @@ public abstract class ChunkCheckLightProfilerMixin {
             if (!flag && k > 0) {
                 flag = true;
             } else if (flag && k == 0) {
-                final long callStart = System.nanoTime();
-                final boolean ok = this.world.checkLight(pos);
-                worldNs += System.nanoTime() - callStart;
-                ++worldCalls;
-                if (!ok) {
-                    this.rtgc$report(prof, scanStart, scanReads, 0, 0, 0, worldNs, worldCalls, 0, 0);
+                if (!this.world.checkLight(pos)) {
                     cir.setReturnValue(Boolean.FALSE);
                     return;
                 }
@@ -161,27 +132,19 @@ public abstract class ChunkCheckLightProfilerMixin {
 
         // 与原版一致：第二遍从第一遍最后处理过的那一列 y 开始（pos 此刻正好停在那里）。
         final int lastY = pos.getY();
-        final long emissiveStart = prof ? System.nanoTime() : 0L;
-        final long scanNs = prof ? emissiveStart - scanStart : 0L;
 
         final boolean maskKnown = this.rtgc$emissiveMaskKnown;
         final int mask = this.rtgc$emissiveMask;
-        int emissiveReads = 0;
-        int emissiveCalls = 0;
-        int maskSkips = 0;
-        int dedupeSkips = 0;
 
         for (int ly = lastY; ly > 0; --ly) {
             if (maskKnown) {
                 final int section = ly >> 4;
                 if ((mask & (1 << section)) == 0) {
-                    ++maskSkips;
                     ly = section << 4; // 再 --ly 落到下一段顶部
                     continue;
                 }
             }
             pos.setPos(posX, ly, posZ);
-            ++emissiveReads;
             final int emit = ((Chunk) (Object) this).getBlockState(pos).getLightValue(this.world, pos);
             if (emit > 0) {
                 // 熔岩湖里同一片湖的每个方块都会走到这里。第一次 world.checkLight 已经把整片区域
@@ -189,44 +152,16 @@ public abstract class ChunkCheckLightProfilerMixin {
                 // ⇒ checkLightFor(BLOCK) 两分支都不进，等于空转。这里只把"天光"那一半补上，
                 // 保证洞穴开口处仍会被修正（实测天光开销远小于方块光 BFS）。
                 if (DEDUPE && ((Chunk) (Object) this).getLightFor(EnumSkyBlock.BLOCK, pos) >= emit) {
-                    ++dedupeSkips;
                     if (!SKIP_SKY) {
                         this.world.checkLightFor(EnumSkyBlock.SKY, pos);
                     }
                     continue;
                 }
-                final long callStart = System.nanoTime();
                 this.world.checkLight(pos);
-                worldNs += System.nanoTime() - callStart;
-                ++worldCalls;
-                ++emissiveCalls;
             }
         }
 
-        this.rtgc$report(prof, scanStart, scanReads, scanNs, emissiveReads, emissiveCalls, worldNs, worldCalls, maskSkips, dedupeSkips);
-        if (prof) {
-            ChunkGenerationProfiler.add(Counter.CHECKLIGHT_EMISSIVE_NS, System.nanoTime() - emissiveStart);
-        }
         cir.setReturnValue(Boolean.TRUE);
-    }
-
-    @Unique
-    private void rtgc$report(final boolean prof, final long scanStart, final int scanReads, final long scanNs,
-                             final int emissiveReads, final int emissiveCalls, final long worldNs,
-                             final int worldCalls, final int maskSkips, final int dedupeSkips) {
-        ChunkGenerationProfiler.count(Counter.CHECKLIGHT_COLUMNS);
-        if (!prof) {
-            return;
-        }
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_SCAN_NS,
-            scanNs != 0L ? scanNs : System.nanoTime() - scanStart);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_SCAN_READS, scanReads);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_EMISSIVE_READS, emissiveReads);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_EMISSIVE_CALLS, emissiveCalls);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_WORLD_NS, worldNs);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_WORLD_CALLS, worldCalls);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_MASK_SKIPS, maskSkips);
-        ChunkGenerationProfiler.add(Counter.CHECKLIGHT_DEDUPES, dedupeSkips);
     }
 
     /**

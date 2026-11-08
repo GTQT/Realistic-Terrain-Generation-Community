@@ -12,7 +12,6 @@ import net.minecraft.world.chunk.BlockStateContainer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IBlockStatePalette;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
-import rtg.api.util.ChunkGenerationProfiler;
 import rtg.api.util.FastOreContext;
 import rtg.mixins.core.BlockStateContainerAccess;
 import rtg.mixins.core.ChunkStorageAccess;
@@ -73,11 +72,6 @@ public final class FastOreGen {
     /** 与 {@link #cacheChunk} 配套的段数组与高度图，省掉每次探针的接口强转。 */
     private static ExtendedBlockStorage[] storages;
     private static int[] heightMap;
-    /** 本次矿脉里被高度图挡掉的探针数（矿脉结束时一次性并入计数器，避免逐探针 CAS）。 */
-    private static long airSkips;
-    /** 诊断：球体模式本次矿脉检查过的格子数、其中不是天然石的格子数。 */
-    private static long blobCells;
-    private static long blobNotStone;
     private static final Section[] SECTIONS = new Section[16];
 
     static {
@@ -117,8 +111,6 @@ public final class FastOreGen {
         if (BLOBS && isStoneVariant(oreState)) {
             return generateBlob(world, rand, position, oreState, numberOfBlocks);
         }
-        ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.ORE_FAST_VEINS);
-        airSkips = 0L;
 
         final float f = rand.nextFloat() * (float) Math.PI;
         final double d0 = (double) ((float) (position.getX() + 8) + MathHelper.sin(f) * (float) numberOfBlocks / 8.0F);
@@ -159,7 +151,7 @@ public final class FastOreGen {
                                 final double d14 = ((double) j2 + 0.5D - d8) / halfX;
 
                                 if (d13sq + d14 * d14 < 1.0D) {
-                                    tryReplace(world, l1, i2, j2, oreState, false);
+                                    tryReplace(world, l1, i2, j2, oreState);
                                 }
                             }
                         }
@@ -168,7 +160,6 @@ public final class FastOreGen {
             }
         }
 
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.ORE_AIR_SKIPS, airSkips);
         return true;
     }
 
@@ -191,11 +182,6 @@ public final class FastOreGen {
      */
     private static boolean generateBlob(World world, Random rand, BlockPos position,
                                         IBlockState oreState, int numberOfBlocks) {
-        ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.ORE_FAST_VEINS);
-        airSkips = 0L;
-        blobCells = 0L;
-        blobNotStone = 0L;
-
         final float f = rand.nextFloat() * (float) Math.PI;
         final double d4 = (double) (position.getY() + rand.nextInt(3) - 2);
         final double d5 = (double) (position.getY() + rand.nextInt(3) - 2);
@@ -222,22 +208,16 @@ public final class FastOreGen {
                 }
                 for (int dz = -radius; dz <= radius; ++dz) {
                     if (dxySq + (float) (dz * dz) <= radiusSq) {
-                        tryReplace(world, cx + shiftX + dx, cy + dy, cz + shiftZ + dz, oreState, true);
+                        tryReplace(world, cx + shiftX + dx, cy + dy, cz + shiftZ + dz, oreState);
                     }
                 }
             }
         }
 
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.ORE_AIR_SKIPS, airSkips);
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.ORE_BLOB_CELLS, blobCells);
-        ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.ORE_BLOB_NOT_STONE, blobNotStone);
         return true;
     }
 
-    private static void tryReplace(World world, int x, int y, int z, IBlockState oreState, boolean blob) {
-        if (blob) {
-            blobCells++;
-        }
+    private static void tryReplace(World world, int x, int y, int z, IBlockState oreState) {
         if (y < 0 || y > 255) {
             return;
         }
@@ -259,7 +239,6 @@ public final class FastOreGen {
         // 高度图之上必是空气（高度图记录的是最高不透明方块的上方一格），
         // 原版在这里照样要走一次完整的方块查表再判定失败，这里直接跳过，结果完全相同。
         if (y >= heightMap[((z & 15) << 4) | (x & 15)]) {
-            airSkips++;
             return;
         }
 
@@ -276,10 +255,7 @@ public final class FastOreGen {
             // registry palette（单段超过 256 种状态）：退回逐格查表，仍是 Chunk 直读。
             final IBlockState state = section.get(x & 15, y & 15, z & 15);
             if (isNaturalStone(state)) {
-                FastOreContext.noteWrite();
                 chunk.setBlockState(new BlockPos(x, y, z), oreState);
-            } else if (blob) {
-                blobNotStone++;
             }
             return;
         }
@@ -287,9 +263,6 @@ public final class FastOreGen {
         final int index = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
         final int rawId = storage.getAt(index);
         if (!cached.stone[rawId]) {
-            if (blob) {
-                blobNotStone++;
-            }
             if (DEBUG) {
                 final IBlockState actual = section.get(x & 15, y & 15, z & 15);
                 if (isNaturalStone(actual)) {
@@ -331,7 +304,6 @@ public final class FastOreGen {
         }
 
         storage.setAt(index, oreId);
-        FastOreContext.noteWrite();
         chunk.markDirty();
         // 下落方块（沙砾）在 canHandle 里已被排除，这里不需要补排程。
     }

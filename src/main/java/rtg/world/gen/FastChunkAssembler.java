@@ -61,19 +61,9 @@ public final class FastChunkAssembler {
             return new Chunk(world, primer, cx, cz);
         }
 
-        long tShell = System.nanoTime();
         Chunk chunk = new Chunk(world, cx, cz);
-        if (rtg.api.util.ChunkGenerationProfiler.isEnabled()) {
-            rtg.api.util.ChunkGenerationProfiler.add(
-                    rtg.api.util.ChunkGenerationProfiler.Counter.FINALIZE_SHELL_NS, System.nanoTime() - tShell);
-        }
-        long tFill = System.nanoTime();
         try {
             fill(chunk, primer, world.provider.hasSkyLight());
-            if (rtg.api.util.ChunkGenerationProfiler.isEnabled()) {
-                rtg.api.util.ChunkGenerationProfiler.add(
-                        rtg.api.util.ChunkGenerationProfiler.Counter.FINALIZE_FILL_NS, System.nanoTime() - tFill);
-            }
             if (VERIFY) {
                 verify(chunk, primer, world, cx, cz);
             }

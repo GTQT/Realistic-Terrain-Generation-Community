@@ -249,18 +249,12 @@ public interface IRealisticBiome {
     default void rDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos, final float river, final boolean hasVillage, final float[] noise) {
         ChunkInfo info = new ChunkInfo(chunkPos, rtgWorld, noise);
 
-        // 归因计时（只在 profiler 打开时累计；见 ChunkInfo 的装饰耗时说明）
-        ChunkInfo.noteDecoratedBiome(String.valueOf(this.baseBiomeResLoc()));
-        final long tOwn = System.nanoTime();
         for (DecoBase deco : this.getDecos()) {
             if (deco.preGenerate(river)) {
                 ChunkInfo.noteInvocation();      // D4 诊断：记录"实际被调用了几个 deco"
-                final long tDeco = System.nanoTime();
                 deco.generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
-                ChunkInfo.noteDeco(deco.getClass().getSimpleName(), System.nanoTime() - tDeco);
             }
         }
-        ChunkInfo.noteOwnDecoNs(System.nanoTime() - tOwn);
 
         // 树装饰：allowVanillaTrees() 为真时交给原版 Biome.decorate；
         // 为假时由 getTreeDecos().generate(...) 生成 RTG 树。
@@ -269,9 +263,7 @@ public interface IRealisticBiome {
         if ((!this.allowVanillaTrees()
                 || rtg.event.EventHandlerCommon.treeGenerationManager.managingBiome(this.baseBiome()))
                 && this.getTreeDecos() != null) {
-            final long tTrees = System.nanoTime();
             this.getTreeDecos().generate(this, rtgWorld, rand, chunkPos, river, hasVillage, info);
-            ChunkInfo.noteDeco("treeGenerator", System.nanoTime() - tTrees);
         }
 
         // 海洋群系把这段推迟到冰雪之后（RWG 的 rDecorateAfterIce），
@@ -287,17 +279,12 @@ public interface IRealisticBiome {
      * <p>海洋群系会把这一步放到冰雪之后；两条路径必须共用同一段代码，避免漂移。
      */
     default void vanillaDecorate(final RTGWorld rtgWorld, final Random rand, final ChunkPos chunkPos) {
-        final long tVanilla = System.nanoTime();
         final BlockPos pos = new BlockPos(chunkPos.x * 16, 0, chunkPos.z * 16);
-        try {
-            if (overridesHardcoded()) {
-                this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), pos);
-            } else {
-                disableVanillaVegetation();
-                this.baseBiome().decorate(rtgWorld.world(), rand, pos);
-            }
-        } finally {
-            ChunkInfo.noteVanillaDecoNs(System.nanoTime() - tVanilla);
+        if (overridesHardcoded()) {
+            this.baseBiome().decorator.decorate(rtgWorld.world(), rand, baseBiome(), pos);
+        } else {
+            disableVanillaVegetation();
+            this.baseBiome().decorate(rtgWorld.world(), rand, pos);
         }
     }
 

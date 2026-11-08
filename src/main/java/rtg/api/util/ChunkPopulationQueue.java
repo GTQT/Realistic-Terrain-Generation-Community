@@ -83,7 +83,6 @@ public final class ChunkPopulationQueue {
         ArrayDeque<Chunk> queue = QUEUE.get();
         if (!queue.contains(chunk)) {
             queue.add(chunk);
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.POPULATION_QUEUE_ENQUEUED);
         }
     }
 
@@ -104,15 +103,12 @@ public final class ChunkPopulationQueue {
                 // 该区块是在装饰期间生成的，+x/+z 可能还没加载；
                 // 用 protected populate(generator) 强制完成，避免永久未装饰。
                 // 它读取到的新区块由 provideChunk 继续入队。
-                ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.POPULATION_QUEUE_FORCED);
                 ((ChunkPopulateAccess) chunk).rtgc$populate(generator);
                 GameRegistry.generateWorld(chunk.x, chunk.z, world, generator, provider);
             }
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.POPULATION_QUEUE_DRAINED);
         }
 
         if (!queue.isEmpty()) {
-            ChunkGenerationProfiler.add(ChunkGenerationProfiler.Counter.POPULATION_QUEUE_DROPPED, queue.size());
             Logger.warn("RTG population queue exceeded {} chunks; dropping {} pending chunks",
                     MAX_DRAIN, queue.size());
             queue.clear();

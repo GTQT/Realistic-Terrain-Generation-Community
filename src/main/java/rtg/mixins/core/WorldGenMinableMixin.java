@@ -22,25 +22,6 @@ import rtg.api.util.FastOreContext;
 @Mixin(WorldGenMinable.class)
 public abstract class WorldGenMinableMixin {
 
-    @Inject(method = "generate", at = @At("HEAD"))
-    private void rtgc$countOreVein(World world, java.util.Random rand, BlockPos pos,
-                                   CallbackInfoReturnable<Boolean> cir) {
-        if (!FastOreContext.isActive()) {
-            return;
-        }
-        FastOreContext.noteVein();
-        // 石变种（泥土/沙砾/天然花岗岩）单独计数：格雷科技不会拒绝它们，
-        // 是 GT 整合包里唯一剩下的原版矿成本（docs §18）。
-        final net.minecraft.block.Block oreBlock =
-                ((WorldGenMinable) (Object) this).oreBlock.getBlock();
-        if (oreBlock == net.minecraft.init.Blocks.DIRT
-                || oreBlock == net.minecraft.init.Blocks.GRAVEL
-                || oreBlock == net.minecraft.init.Blocks.STONE) {
-            rtg.api.util.ChunkGenerationProfiler.count(
-                    rtg.api.util.ChunkGenerationProfiler.Counter.ORE_VEINS_STONE);
-        }
-    }
-
     /**
      * 接管原版矿脉：形状/随机数完全照抄，只把逐块 {@code World} 读写换成段存储直读写。
      * 见 {@link rtg.world.gen.FastOreGen}。非原版谓词（模组自定义矿石）不走这里。

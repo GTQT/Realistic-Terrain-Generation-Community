@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>这里刻意不碰真实 Chunk/World：测试只验证三条优化没有改变扫描语义：
  * 空 section 整段跳过、同一空气格只检查一次、跳过空段后 lastAir 仍落在段底。
- * 真正的 setBlockState/checkLight 行为由游戏内 profiler 数据验证。
+ * 真正的 setBlockState/checkLight 行为由游戏内测试验证。
  */
 class EventHandlerCommonFixLightingTest {
 

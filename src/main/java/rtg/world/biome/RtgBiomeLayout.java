@@ -2,8 +2,6 @@ package rtg.world.biome;
 
 import net.minecraft.init.Biomes;
 import rtg.api.RTGAPI;
-import rtg.api.util.ChunkGenerationProfiler;
-import rtg.api.util.ChunkGenerationProfiler.Counter;
 import rtg.api.util.noise.*;
 import rtg.api.world.RTGWorld;
 import rtg.api.world.biome.IRealisticBiome;
@@ -858,10 +856,8 @@ public final class RtgBiomeLayout {
         final long key = cacheKey(x, z);
         final IRealisticBiome cached = biomeCache.get(key);
         if (cached != null) {
-            ChunkGenerationProfiler.count(Counter.BIOME_CACHE_HITS);
             return cached;
         }
-        ChunkGenerationProfiler.count(Counter.BIOME_CACHE_MISSES);
 
         final IRealisticBiome output = computeBiomeDataAt(x, z);
         if (output == null) {
@@ -869,7 +865,6 @@ public final class RtgBiomeLayout {
         }
 
         if (biomeCache.size() > BIOME_CACHE_MAX) {
-            ChunkGenerationProfiler.count(Counter.BIOME_CACHE_CLEARS);
             biomeCache.clear();
         }
         biomeCache.put(key, output);

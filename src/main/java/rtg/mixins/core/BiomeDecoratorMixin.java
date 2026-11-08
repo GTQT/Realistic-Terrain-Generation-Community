@@ -12,8 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import rtg.RTGConfig;
-import rtg.api.util.ChunkGenerationProfiler;
-import rtg.api.util.ChunkGenerationProfiler.Category;
 import rtg.api.util.FastDecoContext;
 import rtg.api.util.FastOreContext;
 
@@ -50,9 +48,6 @@ public abstract class BiomeDecoratorMixin {
     @Unique
     private boolean rtgc$cacheReady;
 
-    @Unique
-    private final ThreadLocal<Long> rtgc$oreStart = new ThreadLocal<>();
-
     @Inject(method = "decorate", at = @At("HEAD"))
     private void rtgc$clearFastOre(World worldIn, Random random, Biome biome,
                                    BlockPos pos, CallbackInfo ci) {
@@ -74,17 +69,10 @@ public abstract class BiomeDecoratorMixin {
     @Inject(method = "generateOres", at = @At("HEAD"))
     private void rtgc$beginOre(World worldIn, Random random, CallbackInfo ci) {
         FastOreContext.enter();
-        this.rtgc$oreStart.set(ChunkGenerationProfiler.start(Category.POP_DECO_ORES));
     }
 
     @Inject(method = "generateOres", at = @At("RETURN"))
     private void rtgc$endOre(World worldIn, Random random, CallbackInfo ci) {
-        Long start = this.rtgc$oreStart.get();
-        if (start != null) {
-            ChunkGenerationProfiler.end(Category.POP_DECO_ORES, start);
-            this.rtgc$oreStart.remove();
-        }
-        FastOreContext.flushStats();
         FastOreContext.exit();
     }
 
@@ -93,16 +81,12 @@ public abstract class BiomeDecoratorMixin {
                                             BlockPos pos, CallbackInfo ci) {
 
         if (this.decorating || !this.rtgc$cacheReady || this.chunkProviderSettings == null) {
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.BIOME_DECORATOR_CACHE_MISSES);
             return;
         }
         String options = worldIn.getWorldInfo().getGeneratorOptions();
         if (options == null || !options.equals(this.rtgc$cachedOptions)) {
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.BIOME_DECORATOR_CACHE_MISSES);
             return;
         }
-
-        ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.BIOME_DECORATOR_CACHE_HITS);
 
         this.chunkPos = pos;
         this.decorating = true;
@@ -137,7 +121,6 @@ public abstract class BiomeDecoratorMixin {
                                        net.minecraft.world.gen.feature.WorldGenerator generator,
                                        int minHeight, int maxHeight, CallbackInfo ci) {
         if (RTGConfig.skipVanillaOreGen() && rtgc$isVanillaOreGenerator(generator)) {
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.ORE_GEN_SKIPPED);
             ci.cancel();
         }
     }
@@ -147,7 +130,6 @@ public abstract class BiomeDecoratorMixin {
                                        net.minecraft.world.gen.feature.WorldGenerator generator,
                                        int centerHeight, int spread, CallbackInfo ci) {
         if (RTGConfig.skipVanillaOreGen() && rtgc$isVanillaOreGenerator(generator)) {
-            ChunkGenerationProfiler.count(ChunkGenerationProfiler.Counter.ORE_GEN_SKIPPED);
             ci.cancel();
         }
     }

@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
- * 暴露 {@code World#getRawLight}（1.12 里是 private）给 {@link WorldLightProfilerMixin} 计时用。
+ * 暴露 {@code World#getRawLight}（1.12 里是 private）给 {@link WorldLightMixin} 的快速路径用。
  * 它每次要做 6 次邻居光照读 + 一次方块发光值查询，是 {@code checkLightFor} 里除 BFS 之外最重的一步。
  */
 @Mixin(World.class)

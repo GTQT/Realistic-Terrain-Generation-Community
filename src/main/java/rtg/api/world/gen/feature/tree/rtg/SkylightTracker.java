@@ -7,8 +7,6 @@ import net.minecraft.world.World;
 import net.minecraft.world.WorldType;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
-import rtg.api.util.ChunkGenerationProfiler;
-import rtg.api.util.ChunkGenerationProfiler.Counter;
 
 /**
  * 树木放置前的天光可行性跟踪器：从树基向上扫描遮挡，判断哪些位置仍能接到天光。
@@ -59,7 +57,6 @@ public class SkylightTracker {
 				lowest [x][z] = 255;
 			}
 		}
-		ChunkGenerationProfiler.count(Counter.SKYLIGHT_TRACKERS);
 		setLighting(world);
 		initialSpread();
 	}
@@ -565,9 +562,6 @@ public class SkylightTracker {
 					this.trunk[x][z] = true;
 				}
 
-				ChunkGenerationProfiler.count(Counter.SKYLIGHT_COLUMNS);
-				ChunkGenerationProfiler.add(Counter.SKYLIGHT_STATE_READS, scan.reads);
-				ChunkGenerationProfiler.add(Counter.SKYLIGHT_EMPTY_SECTIONS, scan.emptySections);
 			}
 		}
 	}
@@ -588,7 +582,6 @@ public class SkylightTracker {
 		// dimmed=1 进入，任何邻居都不满足 opacity > dimmed，整轮递归是恒等变换。
 		// 这里直接跳过 width² 次调用；opacity/lightDirection 已处于构造时的全 0/CENTER。
 		if (!anyObstruction) {
-			ChunkGenerationProfiler.count(Counter.SKYLIGHT_BRIGHT_SKIPS);
 			return;
 		}
 		Spotlight spotlight = new Spotlight();
@@ -601,7 +594,6 @@ public class SkylightTracker {
 	}
 	
 	private void spread (Spotlight spotlight) {
-		ChunkGenerationProfiler.count(Counter.SKYLIGHT_SPREAD_VISITS);
 		if (spotlight.opacity() > spotlight.directOpacity()) {
 			spotlight.setOpacity(spotlight.directOpacity());
 			spotlight.setDirection(OrthogonalDirection.CENTER);
@@ -792,14 +784,12 @@ public class SkylightTracker {
 		int y = startY;
 		while (y > waterTop) {
 			if (access.isEmptySection(y)) {
-				ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_EMPTY_SECTIONS);
 				// 整段空气：原逻辑会逐格把 looking 置 true；直接跳到段底下一格。
 				y = ((y >> 4) << 4) - 1;
 				looking = true;
 				continue;
 			}
 			IBlockState state = access.get(y);
-			ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_STATE_READS);
 			if (state.getLightOpacity() > 10) {
 				if (looking) {
 					sink.check(worldX, y, worldZ);
@@ -819,12 +809,11 @@ public class SkylightTracker {
 		final ChunkColumnAccess chunkAccess = new ChunkColumnAccess();
 		final WorldColumnAccess worldAccess = new WorldColumnAccess();
 		final int waterTop = rtg.api.world.WaterLevel.current().waterSurfaceTop();
-		// WorldProfilerMixin 在 World#checkLight 入口统一计数；这里只负责给出坐标。
+		// 逐坐标触发 World#checkLight；这里只负责给出坐标。
 		final LightCheckSink sink = (x, y, z) -> world.checkLight(new BlockPos(x, y, z));
 
 		for (int localX = 0; localX < width; localX++) {
 			for (int localZ = 0; localZ < width; localZ++) {
-				ChunkGenerationProfiler.count(Counter.SKYLIGHT_CHECK_COLUMNS);
 				if ((opacity[localX][localZ] ==0)||(opacity[localX][localZ] >15)) continue; // either unaffected or hopelessly dark
 				int y = lowest[localX][localZ] - 1;
 				if (y>=254) continue; // this tree didn't place any blocks there
